@@ -35,6 +35,11 @@ type Terminal struct {
 	scrollHead int
 	scrollSize int
 	
+	// Screen history for MUD-style scrolling
+	screenHistory [][][]Cell // Array of complete screens
+	screenHistoryHead int
+	maxScreenHistory int
+	
 	// Current text attributes
 	fg         int
 	bg         int
@@ -79,6 +84,10 @@ func NewTerminal(width, height int) *Terminal {
 		fg:         7, // Default white
 		bg:         0, // Default black
 		logger:     logger,
+		
+		// Screen history for MUD scrolling
+		screenHistory: make([][][]Cell, 100), // Store 100 complete screens
+		maxScreenHistory: 100,
 	}
 	
 	// Initialize buffer with default cells
@@ -144,6 +153,16 @@ func (t *Terminal) Resize(width, height int) {
 // Write processes incoming data and updates the terminal buffer
 func (t *Terminal) Write(data []byte) {
 	t.logger.Printf("Terminal received %d bytes: %q", len(data), string(data))
+	
+	// Log raw input to separate file for debugging
+	rawLogFile, err := os.OpenFile("raw_input.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		rawLogFile.WriteString(fmt.Sprintf("=== %s ===\n", time.Now().Format("15:04:05.000")))
+		rawLogFile.WriteString(fmt.Sprintf("Raw bytes (%d): %q\n", len(data), string(data)))
+		rawLogFile.WriteString(fmt.Sprintf("Hex: %x\n", data))
+		rawLogFile.WriteString("---\n")
+		rawLogFile.Close()
+	}
 	
 	// Convert to string to handle UTF-8 properly, then process rune by rune
 	text := string(data)
@@ -322,6 +341,101 @@ func (t *Terminal) GetCells() [][]Cell {
 	return t.buffer
 }
 
+// GetAllCells returns scrollback + current buffer for scrolling
+func (t *Terminal) GetAllCells() [][]Cell {
+	var allCells [][]Cell
+	scrollbackLines := 0
+	
+	// Add scrollback content (oldest first) - only lines with visible content
+	for i := 0; i < t.scrollSize; i++ {
+		scrollIdx := (t.scrollHead + i) % t.scrollSize
+		if t.scrollback[scrollIdx] != nil && len(t.scrollback[scrollIdx]) > 0 {
+			// Check if this line has any visible content (be more lenient)
+			hasContent := false
+			nonSpaceCount := 0
+			for _, cell := range t.scrollback[scrollIdx] {
+				if cell.Char != 0 && cell.Char != ' ' {
+					nonSpaceCount++
+					if nonSpaceCount >= 1 { // At least 1 non-space character
+						hasContent = true
+						break
+					}
+				}
+			}
+			if hasContent {
+				// Make a copy to avoid reference issues
+				lineCopy := make([]Cell, len(t.scrollback[scrollIdx]))
+				copy(lineCopy, t.scrollback[scrollIdx])
+				allCells = append(allCells, lineCopy)
+				scrollbackLines++
+			}
+		}
+	}
+	
+	// Add current screen buffer
+	allCells = append(allCells, t.buffer...)
+	
+	t.logger.Printf("GetAllCells: %d scrollback lines + %d buffer lines = %d total", 
+		scrollbackLines, len(t.buffer), len(allCells))
+	
+	return allCells
+}
+
+// saveCurrentScreen saves the current screen to history before clearing
+func (t *Terminal) saveCurrentScreen() {
+	// Only save if there's actual content
+	hasContent := false
+	for _, line := range t.buffer {
+		for _, cell := range line {
+			if cell.Char > 32 && cell.Char != 127 {
+				hasContent = true
+				break
+			}
+		}
+		if hasContent {
+			break
+		}
+	}
+	
+	if hasContent {
+		// Create a deep copy of the current screen
+		screenCopy := make([][]Cell, len(t.buffer))
+		for i, line := range t.buffer {
+			screenCopy[i] = make([]Cell, len(line))
+			copy(screenCopy[i], line)
+		}
+		
+		// Store in circular buffer
+		t.screenHistory[t.screenHistoryHead] = screenCopy
+		t.screenHistoryHead = (t.screenHistoryHead + 1) % t.maxScreenHistory
+		
+		t.logger.Printf("Saved complete screen to history (head: %d)", t.screenHistoryHead)
+	}
+}
+
+// GetScreenHistory returns all saved screens for scrolling
+func (t *Terminal) GetScreenHistory() [][][]Cell {
+	var screens [][][]Cell
+	
+	// Collect all non-nil screens from history
+	for i := 0; i < t.maxScreenHistory; i++ {
+		idx := (t.screenHistoryHead + i) % t.maxScreenHistory
+		if t.screenHistory[idx] != nil {
+			screens = append(screens, t.screenHistory[idx])
+		}
+	}
+	
+	// Add current screen at the end
+	currentScreen := make([][]Cell, len(t.buffer))
+	for i, line := range t.buffer {
+		currentScreen[i] = make([]Cell, len(line))
+		copy(currentScreen[i], line)
+	}
+	screens = append(screens, currentScreen)
+	
+	return screens
+}
+
 // IsDirty returns whether the terminal has been updated since last check
 func (t *Terminal) IsDirty() bool {
 	return t.dirty
@@ -467,6 +581,7 @@ func (t *Terminal) handleCSI(seq string) {
 		case 1: // Clear from beginning of screen to cursor
 			t.clearToCursor()
 		case 2: // Clear entire screen
+			t.saveCurrentScreen() // Save before clearing
 			t.clear()
 		}
 		

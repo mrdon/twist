@@ -25,10 +25,12 @@ type Model struct {
 	list          list.Model
 	terminalView  viewport.Model
 	textInput     textinput.Model
+	menuBar       MenuBar
 	
 	// Connection state
 	connected     bool
 	serverAddress string
+	firstConnection bool  // Track if this is the first connection
 	
 	// Input handling
 	inputMode     InputMode
@@ -136,12 +138,10 @@ func New() Model {
 	
 	// Initialize viewport for terminal content
 	vp := viewport.New(80, 24)
-	vp.Style = lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("62"))
+	// Remove border to show all content
 
-	// Initialize terminal buffer - TUI owns this
-	term := terminal.NewTerminal(80, 24)
+	// Initialize terminal buffer - TUI owns this (50 lines + scrollback)
+	term := terminal.NewTerminal(80, 50)
 	
 	// Initialize proxy with the terminal as a writer
 	proxyInstance := proxy.New(term)
@@ -151,8 +151,10 @@ func New() Model {
 		list:          l,
 		terminalView:  vp,
 		textInput:     ti,
+		menuBar:       NewMenuBar(logger),
 		connected:     false,
 		serverAddress: "twgs.geekm0nkey.com:23",
+		firstConnection: true,  // Initialize as first connection
 		inputMode:     InputModeMenu,
 		terminal:      term,
 		chatLines:     []string{"Chat messages will appear here"},
@@ -184,32 +186,49 @@ func (m Model) Init() tea.Cmd {
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	
+	// Debug all messages
+	m.logger.Printf("Update() called with message type: %T", msg)
+
+	// Always update menu bar first (it handles Alt key filtering)
+	var menuBarHandled bool
+	var cmd tea.Cmd
+	m.logger.Printf("Calling MenuBar.Update() with message: %T", msg)
+	m.menuBar, cmd, menuBarHandled = m.menuBar.Update(msg)
+	m.logger.Printf("MenuBar returned handled=%t", menuBarHandled)
+	cmds = append(cmds, cmd)
+	
+	// If menu bar handled the message, don't process it further
+	if menuBarHandled {
+		return m, tea.Batch(cmds...)
+	}
 
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
 		
-		// Calculate panel dimensions
-		leftWidth := (msg.Width - 84) / 2 // 84 = 80 + 4 for middle panel
-		contentHeight := msg.Height - 4   // Account for chat panel
-		
-		// Resize components
-		m.list.SetSize(leftWidth-4, contentHeight-4)
+		// Let Bubble Tea handle component sizing automatically
+		// Only set the terminal to standard 80 columns
 		m.terminalView.Width = 80
-		m.terminalView.Height = contentHeight - 4
+		m.terminalView.Height = msg.Height
 		
-		// Resize terminal buffer
-		m.terminal.Resize(80, contentHeight-4)
+		// Resize terminal buffer to match viewport
+		m.terminal.Resize(80, msg.Height)
 
 	case tea.KeyMsg:
+		// Debug log current mode and key
+		m.logger.Printf("KeyMsg received - Mode: %d, Key: %q", m.inputMode, msg.String())
 		// Handle different input modes
 		switch m.inputMode {
 		case InputModeMenu:
+			m.logger.Printf("Handling menu input")
 			return m.handleMenuInput(msg)
 		case InputModeAddress:
+			m.logger.Printf("Handling address input")
 			return m.handleAddressInput(msg)
 		case InputModeTerminal:
+			m.logger.Printf("Handling terminal input")
 			return m.handleTerminalInput(msg)
 		}
 
@@ -226,6 +245,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			connText := fmt.Sprintf("Connected to %s\r\n", msg.Address)
 			m.terminal.Write([]byte(connText))
 			m.inputMode = InputModeTerminal
+			
+			// Ensure viewport starts at bottom for new connections
+			m.terminalView.GotoBottom()
+			m.logger.Printf("Set viewport to bottom on initial connection")
 		}
 
 	case DisconnectMsg:
@@ -233,6 +256,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connected = false
 		m.terminal.Write([]byte("Disconnected\r\n"))
 		m.inputMode = InputModeMenu
+		m.firstConnection = true  // Reset for next connection
 
 	case OutputMsg:
 		// This case is no longer used with the streaming pipeline
@@ -249,10 +273,128 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		
 	case TerminalUpdateMsg:
 		m.logger.Printf("Processing TerminalUpdateMsg - updating viewport")
-		// Update terminal viewport content
-		terminalLines := m.convertTerminalCellsToLipgloss(80, m.terminalView.Height)
-		content := strings.Join(terminalLines, "\n")
+		// Update terminal viewport content - include scrollback + current buffer for scrolling
+		cells := m.terminal.GetAllCells()
+		
+		// Debug the raw terminal buffer for the last few lines
+		if len(cells) >= 3 {
+			lastCellLine := len(cells) - 1
+			for lineIdx := lastCellLine - 2; lineIdx <= lastCellLine; lineIdx++ {
+				if lineIdx >= 0 && lineIdx < len(cells) {
+					rawLine := ""
+					for _, cell := range cells[lineIdx] {
+						if cell.Char != 0 {
+							rawLine += string(cell.Char)
+						}
+					}
+					m.logger.Printf("Raw cells for line %d: %q", lineIdx, strings.TrimRight(rawLine, " "))
+				}
+			}
+		}
+		
+		// Convert all cells to styled lines - don't limit by height since we want all content
+		allTerminalLines := m.convertAllTerminalCellsToLipgloss(cells, 80)
+		m.logger.Printf("Converted %d lines from terminal cells", len(allTerminalLines))
+		
+		// Safety check - ensure we have content
+		if len(allTerminalLines) == 0 {
+			allTerminalLines = []string{"No terminal content available"}
+			m.logger.Printf("Warning: Empty terminal content, using placeholder")
+		}
+		
+		// Calculate valid scroll bounds after content update
+		// For N total lines and H viewport height:
+		// - Lines are indexed 0 to N-1
+		// - At offset 0, we see lines 0 to H-1  
+		// - At max offset, we should see lines (N-H) to N-1
+		// - So maxOffset = N - H, but ensure it's not negative
+		maxOffset := len(allTerminalLines) - m.terminalView.Height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		m.logger.Printf("Content updated - TotalLines: %d, ViewportHeight: %d, MaxOffset: %d", 
+			len(allTerminalLines), m.terminalView.Height, maxOffset)
+		
+		// Always show all content - let the terminal buffer handle the memory management
+		// The terminal buffer already has its own scrollback limit (1000 lines in buffer.go)
+		content := strings.Join(allTerminalLines, "\n")
 		m.terminalView.SetContent(content)
+		
+		// Auto-scroll to bottom of content
+		m.terminalView.GotoBottom()
+		m.logger.Printf("Set terminal content: %d total lines, offset: %d", 
+			len(allTerminalLines), m.terminalView.YOffset)
+		
+		// Debug viewport bounds to check for off-by-one errors
+		newOffset := m.terminalView.YOffset
+		visibleStart := newOffset
+		visibleEnd := newOffset + m.terminalView.Height - 1
+		actualMaxOffset := len(allTerminalLines) - m.terminalView.Height
+		m.logger.Printf("Auto-scrolled to bottom: YOffset=%d, ViewportHeight=%d, TotalLines=%d", 
+			newOffset, m.terminalView.Height, len(allTerminalLines))
+		m.logger.Printf("Expected MaxOffset=%d, Actual YOffset after GotoBottom=%d", actualMaxOffset, newOffset)
+		m.logger.Printf("Visible range: lines %d-%d of %d total (should see line %d)", 
+			visibleStart, visibleEnd, len(allTerminalLines)-1, len(allTerminalLines)-1)
+		
+		// Debug first few lines content to verify they're there
+		if len(allTerminalLines) >= 3 {
+			for i := 0; i < 3; i++ {
+				line := allTerminalLines[i]
+				if len(line) > 80 { line = line[:80] + "..." }
+				m.logger.Printf("Line %d: %q", i, line)
+			}
+		}
+		
+		// Debug: Check what the viewport actually thinks it's displaying
+		viewportContent := m.terminalView.View()
+		viewportLines := strings.Split(viewportContent, "\n")
+		m.logger.Printf("Viewport reports %d lines in View(), last line: %q", 
+			len(viewportLines), 
+			func() string {
+				if len(viewportLines) > 0 {
+					lastLine := viewportLines[len(viewportLines)-1]
+					if len(lastLine) > 100 { return lastLine[:100] + "..." }
+					return lastLine
+				}
+				return "NO_LINES"
+			}())
+		
+		// Log the last few lines to see what should be visible
+		if len(allTerminalLines) >= 3 {
+			lastLine := len(allTerminalLines) - 1
+			truncate := func(s string, maxLen int) string {
+				if len(s) > maxLen { return s[:maxLen] }
+				return s
+			}
+			m.logger.Printf("Last 3 lines: [%d]=%q (len=%d), [%d]=%q (len=%d), [%d]=%q (len=%d)", 
+				lastLine-2, truncate(allTerminalLines[lastLine-2], 50), len(allTerminalLines[lastLine-2]),
+				lastLine-1, truncate(allTerminalLines[lastLine-1], 50), len(allTerminalLines[lastLine-1]),
+				lastLine, truncate(allTerminalLines[lastLine], 50), len(allTerminalLines[lastLine]))
+			
+			// Check for pause prompt in ALL lines (last 10 to be thorough)
+			pauseFound := false
+			searchStart := len(allTerminalLines) - 10
+			if searchStart < 0 { searchStart = 0 }
+			
+			for i := searchStart; i < len(allTerminalLines); i++ {
+				line := allTerminalLines[i]
+				// Remove ANSI codes for easier searching
+				cleanLine := strings.ReplaceAll(line, "\x1b", "ESC")
+				if strings.Contains(cleanLine, "Pause") || strings.Contains(cleanLine, "Press") || strings.Contains(cleanLine, "continue") {
+					m.logger.Printf("*** PAUSE FOUND in line %d: FULL LINE: %q", i, line)
+					pauseFound = true
+				}
+				// Also log dotted lines
+				if strings.Contains(cleanLine, "·") || strings.Contains(cleanLine, "...") {
+					maxLen := 50
+					if len(cleanLine) < maxLen { maxLen = len(cleanLine) }
+					m.logger.Printf("*** DOTS FOUND in line %d: %q", i, cleanLine[:maxLen])
+				}
+			}
+			if !pauseFound {
+				m.logger.Printf("*** PAUSE NOT FOUND in last 10 lines (total: %d)", len(allTerminalLines))
+			}
+		}
 		
 		// Continue listening for more updates
 		cmds = append(cmds, m.listenForTerminalUpdates())
@@ -262,8 +404,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, tickCmd())
 	}
 
-	// Update components based on input mode
-	var cmd tea.Cmd
+	// Update underlying components for non-key messages
 	switch m.inputMode {
 	case InputModeMenu:
 		m.list, cmd = m.list.Update(msg)
@@ -307,16 +448,22 @@ func (m Model) handleMenuInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleAddressInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	m.logger.Printf("Address input - Key: %q, Current value: %q", msg.String(), m.textInput.Value())
+	
 	switch msg.String() {
 	case "enter":
 		address := m.textInput.Value()
+		m.logger.Printf("Enter pressed - address: %q", address)
 		if address != "" {
 			m.serverAddress = address
 			m.inputMode = InputModeMenu
 			m.textInput.Blur()
 			return m, func() tea.Msg { return ConnectMsg{Address: address} }
+		} else {
+			m.logger.Printf("Address is empty, not connecting")
 		}
 	case "esc":
+		m.logger.Printf("Esc pressed, returning to menu")
 		m.inputMode = InputModeMenu
 		m.textInput.Blur()
 	}
@@ -324,11 +471,96 @@ func (m Model) handleAddressInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleTerminalInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Debug logging for all key presses
+	m.logger.Printf("Terminal input - Key: %q, Type: %d, Alt: %t", 
+		msg.String(), msg.Type, msg.Alt)
+	
 	switch msg.String() {
 	case "ctrl+c":
 		return m, tea.Quit
 	case "esc":
 		m.inputMode = InputModeMenu
+	case "shift+pgup":
+		m.logger.Printf("Shift+PgUp detected - scrolling up 10 lines")
+		m.terminalView.LineUp(10)
+		return m, nil
+	case "shift+pgdown":
+		m.logger.Printf("Shift+PgDown detected - scrolling down 10 lines")
+		m.terminalView.LineDown(10)
+		return m, nil
+	case "shift+up":
+		m.logger.Printf("Shift+Up detected - scrolling up 1 line")
+		totalLines := m.terminalView.TotalLineCount()
+		currentOffset := m.terminalView.YOffset
+		m.logger.Printf("Before scroll - YOffset: %d, YPosition: %d, TotalLines: %d, ViewportHeight: %d", 
+			currentOffset, m.terminalView.YPosition, totalLines, m.terminalView.Height)
+		
+		// Only scroll up if not already at top
+		if currentOffset > 0 {
+			m.terminalView.LineUp(1)
+		} else {
+			m.logger.Printf("Already at top, cannot scroll up further")
+		}
+		
+		newOffset := m.terminalView.YOffset
+		m.logger.Printf("After scroll - YOffset: %d, YPosition: %d", newOffset, m.terminalView.YPosition)
+		
+		// Debug: If we think we're at the top, show what line is actually visible
+		if newOffset == 0 {
+			m.logger.Printf("At YOffset=0 - should be showing first line of content")
+			// Check what the viewport is actually displaying
+			viewportContent := m.terminalView.View()
+			viewportLines := strings.Split(viewportContent, "\n")
+			if len(viewportLines) > 0 {
+				firstDisplayed := viewportLines[0]
+				if len(firstDisplayed) > 80 { firstDisplayed = firstDisplayed[:80] + "..." }
+				m.logger.Printf("VIEWPORT SHOWS as first line: %q", firstDisplayed)
+			}
+		}
+		return m, nil
+	case "shift+down":
+		m.logger.Printf("Shift+Down detected - scrolling down 1 line")
+		totalLines := m.terminalView.TotalLineCount()
+		currentOffset := m.terminalView.YOffset
+		maxOffset := totalLines - m.terminalView.Height
+		if maxOffset < 0 {
+			maxOffset = 0
+		}
+		m.logger.Printf("Before scroll - YOffset: %d, YPosition: %d, TotalLines: %d, ViewportHeight: %d, MaxOffset: %d", 
+			currentOffset, m.terminalView.YPosition, totalLines, m.terminalView.Height, maxOffset)
+		
+		// Only scroll down if not already at bottom
+		if currentOffset < maxOffset {
+			m.terminalView.LineDown(1)
+		} else {
+			m.logger.Printf("Already at bottom, cannot scroll down further")
+		}
+		m.logger.Printf("After scroll - YOffset: %d, YPosition: %d", m.terminalView.YOffset, m.terminalView.YPosition)
+		return m, nil
+	case "pgup":
+		m.logger.Printf("PgUp without shift - sending to proxy")
+		if m.connected {
+			m.proxy.SendInput("\x1b[5~")
+		}
+		return m, nil
+	case "pgdown":
+		m.logger.Printf("PgDown without shift - sending to proxy")
+		if m.connected {
+			m.proxy.SendInput("\x1b[6~")
+		}
+		return m, nil
+	case "up":
+		m.logger.Printf("Up without shift - sending to proxy")
+		if m.connected {
+			m.proxy.SendInput("\x1b[A")
+		}
+		return m, nil
+	case "down":
+		m.logger.Printf("Down without shift - sending to proxy")
+		if m.connected {
+			m.proxy.SendInput("\x1b[B")
+		}
+		return m, nil
 	case "enter":
 		// Send carriage return + line feed for telnet
 		if m.connected {
@@ -381,19 +613,18 @@ func (m Model) listenForErrors() tea.Cmd {
 	}
 }
 
-// convertTerminalCellsToLipgloss converts terminal buffer cells to lipgloss styled lines
-func (m Model) convertTerminalCellsToLipgloss(width, height int) []string {
-	cells := m.terminal.GetCells()
+// convertAllTerminalCellsToLipgloss converts ALL terminal buffer cells to lipgloss styled lines
+func (m Model) convertAllTerminalCellsToLipgloss(cells [][]terminal.Cell, width int) []string {
 	var styledLines []string
 	
-	for y := 0; y < height && y < len(cells); y++ {
+	for y := 0; y < len(cells); y++ {
 		var lineBuilder strings.Builder
 		
-		// Group consecutive cells with same styling
+		// Group consecutive characters with same styling to avoid excessive ANSI codes
 		currentStyle := lipgloss.NewStyle()
 		var currentText strings.Builder
 		
-		for x := 0; x < width && x < len(cells[y]); x++ {
+		for x := 0; x < len(cells[y]); x++ {
 			cell := cells[y][x]
 			
 			// Create style for this cell
@@ -408,12 +639,16 @@ func (m Model) convertTerminalCellsToLipgloss(width, height int) []string {
 				cellStyle = cellStyle.Underline(true)
 			}
 			
-			// If style changed, render accumulated text and start new group
-			if !stylesEqual(currentStyle, cellStyle) {
-				if currentText.Len() > 0 {
-					lineBuilder.WriteString(currentStyle.Render(currentText.String()))
-					currentText.Reset()
-				}
+			// Check if style changed or we have accumulated enough
+			styleChanged := (x == 0) || !stylesEqual(currentStyle, cellStyle)
+			
+			if styleChanged && currentText.Len() > 0 {
+				// Render accumulated text with previous style
+				lineBuilder.WriteString(currentStyle.Render(currentText.String()))
+				currentText.Reset()
+			}
+			
+			if styleChanged {
 				currentStyle = cellStyle
 			}
 			
@@ -433,19 +668,17 @@ func (m Model) convertTerminalCellsToLipgloss(width, height int) []string {
 		styledLines = append(styledLines, strings.TrimRight(lineBuilder.String(), " "))
 	}
 	
-	// Pad to height
-	for len(styledLines) < height {
-		styledLines = append(styledLines, "")
-	}
-	
+	// Don't pad - return all actual content
 	return styledLines
 }
 
 // stylesEqual compares two lipgloss styles for equality (simplified)
 func stylesEqual(a, b lipgloss.Style) bool {
-	// This is a simplified comparison - lipgloss doesn't expose style internals easily
-	// For now, we'll group characters individually to ensure proper styling
-	return false
+	// Simple comparison by comparing rendered output of a test character
+	// This is not perfect but works for our use case
+	testA := a.Render("X")
+	testB := b.Render("X")
+	return testA == testB
 }
 
 // ansiToLipglossColor converts ANSI color codes to lipgloss colors

@@ -144,8 +144,12 @@ func (p *Pipeline) batchProcessor() {
 			p.logger.Printf("Telnet processed %d bytes -> %d clean bytes", len(rawData), len(cleanData))
 			
 			if len(cleanData) > 0 {
-				// Custom CP437 to UTF-8 conversion for block characters
-				decoded := p.convertCP437ToUTF8(cleanData)
+				// Use standard CP437 to UTF-8 conversion
+				decoded, err := p.decoder.Bytes(cleanData)
+				if err != nil {
+					p.logger.Printf("CP437 decode error: %v, falling back to raw data", err)
+					decoded = cleanData
+				}
 				
 				p.logger.Printf("Sending %d converted bytes to terminal: %q", len(decoded), string(decoded))
 				p.terminalWriter.Write(decoded)
@@ -254,37 +258,6 @@ func (p *Pipeline) GetTerminalWriter() TerminalWriter {
 	return p.terminalWriter
 }
 
-// convertCP437ToUTF8 converts CP437 characters to proper UTF-8 block characters
-func (p *Pipeline) convertCP437ToUTF8(data []byte) []byte {
-	var result []byte
-	for _, b := range data {
-		switch b {
-		// Common CP437 block characters to Unicode
-		case 0xDB: // █ full block
-			result = append(result, []byte("█")...)
-		case 0xDC: // ▄ lower half block  
-			result = append(result, []byte("▄")...)
-		case 0xDF: // ▀ upper half block
-			result = append(result, []byte("▀")...)
-		case 0xB0: // ░ light shade
-			result = append(result, []byte("░")...)
-		case 0xB1: // ▒ medium shade
-			result = append(result, []byte("▒")...)
-		case 0xB2: // ▓ dark shade
-			result = append(result, []byte("▓")...)
-		case 0xFE: // ■ black square
-			result = append(result, []byte("■")...)
-		case 0xF9: // • bullet
-			result = append(result, []byte("•")...)
-		case 0xFA: // · middle dot
-			result = append(result, []byte("·")...)
-		default:
-			// For other characters, keep as-is (ASCII and other UTF-8)
-			result = append(result, b)
-		}
-	}
-	return result
-}
 
 // GetMetrics returns pipeline performance metrics
 func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {

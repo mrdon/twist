@@ -32,78 +32,80 @@ func (m Model) View() string {
 		return "Initializing..."
 	}
 
-	// Calculate panel dimensions - middle panel fixed at 80 chars
-	middleWidth := 84 // 80 content + 4 for borders/padding
-	remainingWidth := m.width - middleWidth
-	leftWidth := remainingWidth / 2
-	rightWidth := remainingWidth - leftWidth
-	contentHeight := m.height - 4 // Reserve space for chat panel
+	// Debug the actual terminal dimensions
+	if m.logger != nil {
+		m.logger.Printf("VIEW DEBUG - Terminal dimensions: width=%d, height=%d", m.width, m.height)
+	}
+
+	// Let Bubble Tea handle all layout calculations
+	if m.logger != nil {
+		m.logger.Printf("VIEW DEBUG - Terminal dimensions: width=%d, height=%d", m.width, m.height)
+	}
 
 	// Render panels based on current mode
 	var leftPanel, middlePanel, rightPanel string
 
-	// Left panel - always shows menu or info
+	// Left panel - always shows menu or info (with border)  
 	if m.inputMode == InputModeMenu {
-		leftPanel = panelStyle.
-			Width(leftWidth-2).
-			Height(contentHeight-2).
-			Render(m.list.View())
+		leftPanel = panelStyle.Render(m.list.View())
 	} else {
-		leftPanel = panelStyle.
-			Width(leftWidth-2).
-			Height(contentHeight-2).
-			Render(m.renderTraderInfo())
+		leftPanel = panelStyle.Render(m.renderTraderInfo())
 	}
 
 	// Middle panel - shows terminal, connection prompt, or address input
 	switch m.inputMode {
 	case InputModeAddress:
-		middlePanel = panelStyle.
-			Width(middleWidth-2).
-			Height(contentHeight-2).
+		middlePanel = lipgloss.NewStyle().
+			Width(80).
+			Padding(1).
 			Render(m.renderConnectionPrompt())
 	case InputModeTerminal:
 		if m.connected {
-			middlePanel = panelStyle.
-				Width(middleWidth-2).
-				Height(contentHeight-2).
+			// No border for terminal content, but with padding and fixed width
+			middlePanel = lipgloss.NewStyle().
+				Width(80).
+				Padding(1).
 				Render(m.terminalView.View())
 		} else {
-			middlePanel = panelStyle.
-				Width(middleWidth-2).
-				Height(contentHeight-2).
+			middlePanel = lipgloss.NewStyle().
+				Width(80).
+				Padding(1).
 				Render("Not connected")
 		}
 	default:
-		middlePanel = panelStyle.
-			Width(middleWidth-2).
-			Height(contentHeight-2).
+		middlePanel = lipgloss.NewStyle().
+			Width(80).
+			Padding(1).
 			Render(titleStyle.Render("Terminal") + "\n\nPress Enter on 'Connect to Server' to begin")
 	}
 
-	// Right panel - sector info
-	rightPanel = panelStyle.
-		Width(rightWidth-2).
-		Height(contentHeight-2).
-		Render(m.renderSectorInfo())
+	// Right panel - sector info (with border)
+	rightPanel = panelStyle.Render(m.renderSectorInfo())
 
-	// Create top row
-	topRow := lipgloss.JoinHorizontal(
+	// Create menu bar
+	menuBar := m.menuBar.View()
+	
+	// Create main content row
+	mainRow := lipgloss.JoinHorizontal(
 		lipgloss.Top,
 		leftPanel,
 		middlePanel,
 		rightPanel,
 	)
+	
+	// Combine menu bar and main content
+	view := lipgloss.JoinVertical(lipgloss.Left, menuBar, mainRow)
 
-	// Create chat panel
-	chatPanel := m.renderChatPanel(m.width-4, 2)
-	chatRow := chatPanelStyle.
-		Width(m.width-2).
-		Height(4).
-		Render(chatPanel)
-
-	// Combine panels
-	view := lipgloss.JoinVertical(lipgloss.Left, topRow, chatRow)
+	// Debug final view dimensions
+	if m.logger != nil {
+		viewLines := strings.Split(view, "\n")
+		m.logger.Printf("VIEW DEBUG - Final view has %d lines, expected terminal height was %d", 
+			len(viewLines), m.height)
+		if len(viewLines) > 0 {
+			m.logger.Printf("VIEW DEBUG - First line length: %d, last line length: %d", 
+				len(viewLines[0]), len(viewLines[len(viewLines)-1]))
+		}
+	}
 
 	return view
 }

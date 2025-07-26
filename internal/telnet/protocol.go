@@ -28,6 +28,10 @@ const (
 type Handler struct {
 	writer func([]byte) error
 	logger *log.Logger
+	
+	// SAUCE detection state
+	sauceBuffer  []byte
+	sauceTarget  []byte
 }
 
 // NewHandler creates a new telnet protocol handler
@@ -43,6 +47,7 @@ func NewHandler(writer func([]byte) error) *Handler {
 	return &Handler{
 		writer: writer,
 		logger: logger,
+		sauceTarget: []byte{0x1A, 'S', 'A', 'U', 'C', 'E', '0', '0'},
 	}
 }
 
@@ -123,8 +128,48 @@ func (h *Handler) ProcessData(data []byte) []byte {
 		}
 	}
 	
+	// Filter out SAUCE records (ANSI art metadata)
+	result = h.filterSAUCE(result)
+	
 	if len(result) > 0 {
 		h.logger.Printf("Filtered data: %q", string(result))
+	}
+	
+	return result
+}
+
+// filterSAUCE removes SAUCE records (ANSI art metadata) from streaming data
+func (h *Handler) filterSAUCE(data []byte) []byte {
+	var result []byte
+	
+	for _, b := range data {
+		// Add byte to SAUCE buffer
+		h.sauceBuffer = append(h.sauceBuffer, b)
+		
+		// Check if we're building toward SAUCE header
+		if len(h.sauceBuffer) <= len(h.sauceTarget) {
+			// Still potentially matching SAUCE header
+			if h.sauceBuffer[len(h.sauceBuffer)-1] == h.sauceTarget[len(h.sauceBuffer)-1] {
+				// Byte matches, continue building
+				if len(h.sauceBuffer) == len(h.sauceTarget) {
+					// Complete SAUCE header detected - drop everything in buffer
+					h.logger.Printf("Complete SAUCE header detected, dropping %d bytes", len(h.sauceBuffer))
+					h.sauceBuffer = nil
+					// From here on, drop all remaining data (SAUCE record continues)
+					return result
+				}
+				// Partial match, don't output yet
+				continue
+			} else {
+				// No match, output buffered data and reset
+				result = append(result, h.sauceBuffer...)
+				h.sauceBuffer = nil
+			}
+		} else {
+			// We're past SAUCE header length and still buffering = drop data
+			// (We're in a SAUCE record, drop everything)
+			continue
+		}
 	}
 	
 	return result
