@@ -9,6 +9,7 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/telnet"
+	"twist/internal/database"
 )
 
 // Pipeline provides high-performance streaming from network to terminal buffer
@@ -20,6 +21,7 @@ type Pipeline struct {
 	telnetHandler  *telnet.Handler
 	terminalWriter TerminalWriter
 	decoder        *encoding.Decoder
+	sectorParser   *SectorParser
 	
 	// Batching
 	batchBuffer   []byte
@@ -46,7 +48,7 @@ type TerminalWriter interface {
 }
 
 // NewPipeline creates an optimized streaming pipeline
-func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error) *Pipeline {
+func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database) *Pipeline {
 	// Set up debug logging
 	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -59,6 +61,7 @@ func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error) *Pipe
 		rawDataChan:    make(chan []byte, 100), // Buffered for burst handling
 		terminalWriter: terminalWriter,
 		decoder:        charmap.CodePage437.NewDecoder(),
+		sectorParser:   NewSectorParser(db),
 		batchBuffer:    make([]byte, 0, 4096),
 		batchSize:      1,     // Process immediately - no batching
 		batchTimeout:   0,     // No timeout needed
@@ -150,6 +153,9 @@ func (p *Pipeline) batchProcessor() {
 					p.logger.Printf("CP437 decode error: %v, falling back to raw data", err)
 					decoded = cleanData
 				}
+				
+				// Parse the decoded text for sector information
+				p.sectorParser.ProcessData(decoded)
 				
 				p.logger.Printf("Sending %d converted bytes to terminal: %q", len(decoded), string(decoded))
 				p.terminalWriter.Write(decoded)

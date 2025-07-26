@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	"twist/internal/streaming"
+	"twist/internal/database"
 )
 
 type Proxy struct {
@@ -49,6 +50,16 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 		logger:     logger,
 	}
 	
+	// Initialize database
+	db := database.NewDatabase()
+	// Create or open database (TODO: make configurable)
+	if err := db.CreateDatabase("twist.db"); err != nil {
+		logger.Printf("Failed to create database, trying to open: %v", err)
+		if err := db.OpenDatabase("twist.db"); err != nil {
+			logger.Fatalf("Failed to open database: %v", err)
+		}
+	}
+	
 	// Initialize streaming pipeline
 	p.pipeline = streaming.NewPipeline(terminalWriter, func(data []byte) error {
 		if p.conn != nil {
@@ -56,7 +67,7 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 			return err
 		}
 		return fmt.Errorf("not connected")
-	})
+	}, db)
 	
 	return p
 }
