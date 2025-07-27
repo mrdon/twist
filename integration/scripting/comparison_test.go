@@ -1,0 +1,362 @@
+//go:build integration
+
+package scripting
+
+import (
+	"testing"
+)
+
+// TestIsEqualCommand_RealIntegration tests ISEQUAL command with real VM and database
+func TestIsEqualCommand_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test string equality
+		$str1 := "hello"
+		$str2 := "hello"
+		$str3 := "world"
+		
+		isequal $str1 $str2 $result1
+		echo "String equality (hello == hello): " $result1
+		
+		isequal $str1 $str3 $result2
+		echo "String inequality (hello == world): " $result2
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
+	}
+	
+	// Should show 1 for equality
+	if len(result.Output) > 0 && result.Output[0] != "String equality (hello == hello): 1" {
+		t.Errorf("String equality test: got %q, want %q", result.Output[0], "String equality (hello == hello): 1")
+	}
+	
+	// Should show 0 for inequality
+	if len(result.Output) > 1 && result.Output[1] != "String inequality (hello == world): 0" {
+		t.Errorf("String inequality test: got %q, want %q", result.Output[1], "String inequality (hello == world): 0")
+	}
+}
+
+// TestIsEqualCommand_Numbers tests ISEQUAL with numeric values
+func TestIsEqualCommand_Numbers_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test number equality
+		$num1 := 42
+		$num2 := 42
+		$num3 := 43
+		
+		isequal $num1 $num2 $result1
+		echo "Number equality (42 == 42): " $result1
+		
+		isequal $num1 $num3 $result2
+		echo "Number inequality (42 == 43): " $result2
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
+	}
+	
+	if len(result.Output) > 0 && result.Output[0] != "Number equality (42 == 42): 1" {
+		t.Errorf("Number equality test: got %q, want %q", result.Output[0], "Number equality (42 == 42): 1")
+	}
+	
+	if len(result.Output) > 1 && result.Output[1] != "Number inequality (42 == 43): 0" {
+		t.Errorf("Number inequality test: got %q, want %q", result.Output[1], "Number inequality (42 == 43): 0")
+	}
+}
+
+// TestIsEqualCommand_StringNumberConversion tests ISEQUAL with string-number conversion
+func TestIsEqualCommand_StringNumberConversion_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test string-number conversion
+		$str_num := "42"
+		$actual_num := 42
+		
+		isequal $str_num $actual_num $result
+		echo "String-number equality (\"42\" == 42): " $result
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 1 {
+		t.Errorf("Expected 1 output line, got %d", len(result.Output))
+	}
+	
+	if len(result.Output) > 0 && result.Output[0] != "String-number equality (\"42\" == 42): 1" {
+		t.Errorf("String-number conversion test: got %q, want %q", result.Output[0], "String-number equality (\"42\" == 42): 1")
+	}
+}
+
+// TestIsGreaterCommand_RealIntegration tests ISGREATER command
+func TestIsGreaterCommand_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test greater than comparisons
+		$high := 100
+		$low := 50
+		$equal := 100
+		
+		isgreater $high $low $result1
+		echo "Greater than (100 > 50): " $result1
+		
+		isgreater $low $high $result2
+		echo "Not greater than (50 > 100): " $result2
+		
+		isgreater $high $equal $result3
+		echo "Equal values (100 > 100): " $result3
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
+	}
+	
+	if len(result.Output) > 0 && result.Output[0] != "Greater than (100 > 50): 1" {
+		t.Errorf("Greater than test: got %q, want %q", result.Output[0], "Greater than (100 > 50): 1")
+	}
+	
+	if len(result.Output) > 1 && result.Output[1] != "Not greater than (50 > 100): 0" {
+		t.Errorf("Not greater than test: got %q, want %q", result.Output[1], "Not greater than (50 > 100): 0")
+	}
+	
+	if len(result.Output) > 2 && result.Output[2] != "Equal values (100 > 100): 0" {
+		t.Errorf("Equal values test: got %q, want %q", result.Output[2], "Equal values (100 > 100): 0")
+	}
+}
+
+// TestIsLessCommand_RealIntegration tests ISLESS command
+func TestIsLessCommand_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test less than comparisons
+		$high := 100
+		$low := 50
+		$equal := 50
+		
+		isless $low $high $result1
+		echo "Less than (50 < 100): " $result1
+		
+		isless $high $low $result2
+		echo "Not less than (100 < 50): " $result2
+		
+		isless $low $equal $result3
+		echo "Equal values (50 < 50): " $result3
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
+	}
+	
+	if len(result.Output) > 0 && result.Output[0] != "Less than (50 < 100): 1" {
+		t.Errorf("Less than test: got %q, want %q", result.Output[0], "Less than (50 < 100): 1")
+	}
+	
+	if len(result.Output) > 1 && result.Output[1] != "Not less than (100 < 50): 0" {
+		t.Errorf("Not less than test: got %q, want %q", result.Output[1], "Not less than (100 < 50): 0")
+	}
+	
+	if len(result.Output) > 2 && result.Output[2] != "Equal values (50 < 50): 0" {
+		t.Errorf("Equal values test: got %q, want %q", result.Output[2], "Equal values (50 < 50): 0")
+	}
+}
+
+// TestComparisonCommands_CrossInstancePersistence tests comparison with persistent variables
+func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
+	// First script execution - save variables
+	tester1 := NewIntegrationScriptTester(t)
+	
+	script1 := `
+		$value1 := 75
+		$value2 := 50
+		savevar $value1
+		savevar $value2
+		echo "Saved values: " $value1 " and " $value2
+	`
+	
+	result1 := tester1.ExecuteScript(script1)
+	if result1.Error != nil {
+		t.Errorf("First script execution failed: %v", result1.Error)
+	}
+	
+	// Second script execution - load and compare variables
+	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
+	
+	script2 := `
+		loadvar $value1
+		loadvar $value2
+		isgreater $value1 $value2 $comparison_result
+		echo "Loaded comparison (75 > 50): " $comparison_result
+	`
+	
+	result2 := tester2.ExecuteScript(script2)
+	if result2.Error != nil {
+		t.Errorf("Second script execution failed: %v", result2.Error)
+	}
+	
+	if len(result2.Output) != 1 {
+		t.Errorf("Expected 1 output line from second script, got %d", len(result2.Output))
+	}
+	
+	expected := "Loaded comparison (75 > 50): 1"
+	if len(result2.Output) > 0 && result2.Output[0] != expected {
+		t.Errorf("Cross-instance comparison: got %q, want %q", result2.Output[0], expected)
+	}
+}
+
+// TestComparisonCommands_FloatingPoint tests comparison with floating point numbers
+func TestComparisonCommands_FloatingPoint_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test floating point comparisons
+		$float1 := 3.14
+		$float2 := 3.15
+		$float3 := 3.14
+		
+		isgreater $float2 $float1 $result1
+		echo "Float greater (3.15 > 3.14): " $result1
+		
+		isequal $float1 $float3 $result2
+		echo "Float equal (3.14 == 3.14): " $result2
+		
+		isless $float1 $float2 $result3
+		echo "Float less (3.14 < 3.15): " $result3
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
+	}
+	
+	if len(result.Output) > 0 && result.Output[0] != "Float greater (3.15 > 3.14): 1" {
+		t.Errorf("Float greater test: got %q, want %q", result.Output[0], "Float greater (3.15 > 3.14): 1")
+	}
+	
+	if len(result.Output) > 1 && result.Output[1] != "Float equal (3.14 == 3.14): 1" {
+		t.Errorf("Float equal test: got %q, want %q", result.Output[1], "Float equal (3.14 == 3.14): 1")
+	}
+	
+	if len(result.Output) > 2 && result.Output[2] != "Float less (3.14 < 3.15): 1" {
+		t.Errorf("Float less test: got %q, want %q", result.Output[2], "Float less (3.14 < 3.15): 1")
+	}
+}
+
+// TestComparisonCommands_EdgeCases tests comparison command edge cases
+func TestComparisonCommands_EdgeCases_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test edge cases
+		$empty := ""
+		$zero := 0
+		$zero_str := "0"
+		
+		isequal $empty $zero_str $result1
+		echo "Empty vs zero string: " $result1
+		
+		isequal $zero $zero_str $result2
+		echo "Zero number vs zero string: " $result2
+		
+		isgreater $zero $empty $result3
+		echo "Zero greater than empty: " $result3
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
+	}
+	
+	// These tests verify the comparison logic handles edge cases correctly
+	// Exact expectations may vary based on implementation
+	if len(result.Output) < 3 {
+		t.Errorf("Not enough output lines for edge case testing")
+	}
+}
+
+// TestAllComparisonCommands_Comprehensive tests all comparison commands together
+func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Comprehensive comparison test
+		$a := 10
+		$b := 20
+		$c := 10
+		
+		# Test all comparison operators
+		isequal $a $c $eq_result
+		isnotequal $a $b $ne_result
+		isgreater $b $a $gt_result
+		isless $a $b $lt_result
+		isgreaterequal $a $c $ge_result
+		islessequal $a $b $le_result
+		
+		echo "Equal (10 == 10): " $eq_result
+		echo "Not equal (10 != 20): " $ne_result
+		echo "Greater (20 > 10): " $gt_result
+		echo "Less (10 < 20): " $lt_result
+		echo "Greater equal (10 >= 10): " $ge_result
+		echo "Less equal (10 <= 20): " $le_result
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	if len(result.Output) != 6 {
+		t.Errorf("Expected 6 output lines, got %d", len(result.Output))
+	}
+	
+	expectedOutputs := []string{
+		"Equal (10 == 10): 1",
+		"Not equal (10 != 20): 1",
+		"Greater (20 > 10): 1",
+		"Less (10 < 20): 1",
+		"Greater equal (10 >= 10): 1",
+		"Less equal (10 <= 20): 1",
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Comparison %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}

@@ -25,10 +25,17 @@ type Database interface {
 	GetDatabaseOpen() bool
 	GetSectors() int
 	
+	// Script variable operations
+	SaveScriptVariable(name string, value interface{}) error
+	LoadScriptVariable(name string) (interface{}, error)
+	
 	// Modern additions
 	BeginTransaction() error
 	CommitTransaction() error
 	RollbackTransaction() error
+	
+	// Internal access for advanced operations
+	GetDB() *sql.DB
 }
 
 // SQLiteDatabase implements Database interface using SQLite
@@ -311,6 +318,10 @@ func (d *SQLiteDatabase) GetSectors() int {
 	return d.sectors
 }
 
+func (d *SQLiteDatabase) GetDB() *sql.DB {
+	return d.db
+}
+
 // Transaction methods
 func (d *SQLiteDatabase) BeginTransaction() error {
 	if d.tx != nil {
@@ -425,5 +436,87 @@ func (d *SQLiteDatabase) logSectorData(index int, sector TSector) {
 	for i, sectorVar := range sector.Vars {
 		d.dataLogger.Printf("SECTOR_VAR_SAVED: Sector=%d, Index=%d, VarName='%s', Value='%s'",
 			index, i, sectorVar.VarName, sectorVar.Value)
+	}
+}
+
+// SaveScriptVariable saves a script variable to persistent storage
+func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+
+	// Determine value type and storage format
+	var varType int
+	var stringValue string
+	var numberValue float64
+
+	switch v := value.(type) {
+	case string:
+		varType = 0 // StringType
+		stringValue = v
+		numberValue = 0
+	case float64:
+		varType = 1 // NumberType  
+		stringValue = ""
+		numberValue = v
+	case int:
+		varType = 1 // NumberType
+		stringValue = ""
+		numberValue = float64(v)
+	default:
+		// For complex types, store as string representation
+		varType = 0
+		stringValue = fmt.Sprintf("%v", v)
+		numberValue = 0
+	}
+
+	query := `
+	INSERT OR REPLACE INTO script_vars (var_name, var_type, string_value, number_value, updated_at)
+	VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP);`
+
+	_, err := d.db.Exec(query, name, varType, stringValue, numberValue)
+	if err != nil {
+		return fmt.Errorf("failed to save script variable %s: %w", name, err)
+	}
+
+	d.logger.Printf("SCRIPT_VAR_SAVED: Name='%s', Type=%d, StringValue='%s', NumberValue=%f",
+		name, varType, stringValue, numberValue)
+
+	return nil
+}
+
+// LoadScriptVariable loads a script variable from persistent storage
+func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
+	if !d.dbOpen {
+		return nil, fmt.Errorf("database not open")
+	}
+
+	query := `
+	SELECT var_type, string_value, number_value
+	FROM script_vars 
+	WHERE var_name = ?;`
+
+	var varType int
+	var stringValue string
+	var numberValue float64
+
+	err := d.db.QueryRow(query, name).Scan(&varType, &stringValue, &numberValue)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Variable doesn't exist, return nil/empty value
+			return "", nil
+		}
+		return nil, fmt.Errorf("failed to load script variable %s: %w", name, err)
+	}
+
+	// Return appropriate type based on stored type
+	switch varType {
+	case 0: // StringType
+		return stringValue, nil
+	case 1: // NumberType
+		return numberValue, nil
+	default:
+		// Default to string for unknown types
+		return stringValue, nil
 	}
 }

@@ -105,6 +105,70 @@ func (d *SQLiteDatabase) createSchema() error {
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
 	
+	// Script variables table (global persistent variables)
+	scriptVarsTable := `
+	CREATE TABLE IF NOT EXISTS script_vars (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		var_name TEXT NOT NULL UNIQUE,
+		var_type INTEGER DEFAULT 0,
+		string_value TEXT DEFAULT '',
+		number_value REAL DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
+	
+	// Script variables table with array support (per-script variables)
+	scriptVariablesTable := `
+	CREATE TABLE IF NOT EXISTS script_variables (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		script_id TEXT NOT NULL,
+		var_name TEXT NOT NULL,
+		var_type INTEGER NOT NULL,
+		var_value TEXT,
+		array_size INTEGER DEFAULT 0,
+		parent_var_id INTEGER,
+		index_path TEXT,  -- JSON array of index values
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
+		FOREIGN KEY (parent_var_id) REFERENCES script_variables(id)
+	);`
+	
+	// Scripts table (active script management)
+	scriptsTable := `
+	CREATE TABLE IF NOT EXISTS scripts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		script_id TEXT NOT NULL UNIQUE,
+		name TEXT NOT NULL,
+		filename TEXT NOT NULL,
+		version INTEGER DEFAULT 6,
+		is_running BOOLEAN DEFAULT TRUE,
+		is_system BOOLEAN DEFAULT FALSE,
+		loaded_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		stopped_at DATETIME,
+		include_scripts TEXT DEFAULT '', -- JSON array of included script names
+		description TEXT DEFAULT ''
+	);`
+	
+	// Script triggers table (Pascal TWX compatible trigger persistence)
+	scriptTriggersTable := `
+	CREATE TABLE IF NOT EXISTS script_triggers (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		script_id TEXT NOT NULL,
+		trigger_id TEXT NOT NULL,
+		trigger_type INTEGER NOT NULL, -- 1=TextLine, 2=Text, 3=TextOut, 4=Delay, 5=Event, etc.
+		pattern TEXT NOT NULL,
+		label_name TEXT NOT NULL,
+		response TEXT DEFAULT '',
+		lifecycle INTEGER DEFAULT -1, -- -1=permanent, >0=limited uses
+		is_active BOOLEAN DEFAULT TRUE,
+		script_param TEXT DEFAULT '', -- Additional trigger parameters
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
+		UNIQUE(script_id, trigger_id)
+	);`
+	
 	// Create indexes for performance
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_sectors_constellation ON sectors(constellation);`,
@@ -115,10 +179,20 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector_index);`,
 		`CREATE INDEX IF NOT EXISTS idx_sector_vars_sector ON sector_vars(sector_index);`,
 		`CREATE INDEX IF NOT EXISTS idx_sector_vars_name ON sector_vars(var_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_vars_name ON script_vars(var_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_variables_script ON script_variables(script_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_variables_name ON script_variables(var_name);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_variables_parent ON script_variables(parent_var_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_scripts_id ON scripts(script_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_scripts_running ON scripts(is_running);`,
+		`CREATE INDEX IF NOT EXISTS idx_scripts_name ON scripts(name);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_triggers_script ON script_triggers(script_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_triggers_id ON script_triggers(trigger_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_triggers_active ON script_triggers(is_active);`,
 	}
 	
 	// Execute all DDL statements
-	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable}
+	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable}
 	statements = append(statements, indexes...)
 	
 	for _, stmt := range statements {

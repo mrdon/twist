@@ -10,6 +10,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/telnet"
 	"twist/internal/database"
+	"twist/internal/streaming/parser"
 )
 
 // Pipeline provides high-performance streaming from network to terminal buffer
@@ -21,7 +22,7 @@ type Pipeline struct {
 	telnetHandler  *telnet.Handler
 	terminalWriter TerminalWriter
 	decoder        *encoding.Decoder
-	sectorParser   *SectorParser
+	sectorParser   *parser.SectorParser
 	
 	// Batching
 	batchBuffer   []byte
@@ -61,7 +62,7 @@ func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db da
 		rawDataChan:    make(chan []byte, 100), // Buffered for burst handling
 		terminalWriter: terminalWriter,
 		decoder:        charmap.CodePage437.NewDecoder(),
-		sectorParser:   NewSectorParser(db),
+		sectorParser:   parser.NewSectorParser(db),
 		batchBuffer:    make([]byte, 0, 4096),
 		batchSize:      1,     // Process immediately - no batching
 		batchTimeout:   0,     // No timeout needed

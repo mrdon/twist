@@ -50,6 +50,52 @@ test:
 	@echo "Running tests..."
 	@go test -v ./...
 
+# Run scripting engine tests only
+test-scripting:
+	@echo "Running scripting engine tests..."
+	@go test -v ./internal/scripting/... ./internal/scripting/vm/commands/...
+
+# Run tests with coverage
+test-coverage-scripting:
+	@echo "Running scripting tests with coverage..."
+	@go test -v -coverprofile=coverage-scripting.out ./internal/scripting/... ./internal/scripting/vm/commands/...
+	@go tool cover -html=coverage-scripting.out -o coverage-scripting.html
+	@echo "Scripting coverage report generated: coverage-scripting.html"
+
+# Run specific test by name
+test-run:
+	@echo "Usage: make test-run TEST=TestName"
+	@if [ -z "$(TEST)" ]; then echo "Please specify TEST=TestName"; exit 1; fi
+	@go test -v -run $(TEST) ./internal/scripting/...
+
+# Benchmark scripting performance  
+bench-scripting:
+	@echo "Running scripting benchmarks..."
+	@go test -bench=. -benchmem ./internal/scripting/...
+
+# Build test harness
+build-test-harness:
+	@echo "Building test harness..."
+	@mkdir -p $(BUILD_DIR)
+	@go build -o $(BUILD_DIR)/test_harness ./cmd/test_harness
+	@echo "Test harness built: $(BUILD_DIR)/test_harness"
+
+# Run script tests with harness
+test-scripts: build-test-harness
+	@echo "Running script tests..."
+	@./$(BUILD_DIR)/test_harness -basic
+
+# Test all TWX scripts  
+test-all-scripts: build-test-harness
+	@echo "Testing all TWX scripts..."
+	@./$(BUILD_DIR)/test_harness -all
+
+# Test single script
+test-script: build-test-harness
+	@echo "Usage: make test-script SCRIPT=path/to/script.twx"
+	@if [ -z "$(SCRIPT)" ]; then echo "Please specify SCRIPT=path/to/file"; exit 1; fi
+	@./$(BUILD_DIR)/test_harness $(SCRIPT)
+
 # Run tests with coverage
 test-coverage:
 	@echo "Running tests with coverage..."
@@ -108,4 +154,12 @@ help:
 	@echo "  check         - Run fmt, vet, and test"
 	@echo "  build-debug   - Build with debug flags"
 	@echo "  build-all     - Build for multiple platforms"
+	@echo "  build-test-harness - Build the script test harness"  
+	@echo "  test-scripts  - Run basic script tests"
+	@echo "  test-all-scripts - Test all TWX scripts in twx-scripts/"
+	@echo "  test-script   - Test single script (use SCRIPT=path)"
+	@echo "  test-scripting - Run scripting engine unit tests"
+	@echo "  test-coverage-scripting - Run scripting tests with coverage"
+	@echo "  test-run      - Run specific test (use TEST=TestName)"
+	@echo "  bench-scripting - Run scripting benchmarks"
 	@echo "  help          - Show this help message"
