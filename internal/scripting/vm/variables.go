@@ -53,14 +53,15 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 	// Determine what comes first - bracket or dot
 	if openBracket == -1 && dotIndex == -1 {
 		// Simple variable with no indexing or properties
-		return cleanName, nil, nil
+		// Convert to uppercase for system constant lookup
+		return strings.ToUpper(cleanName), nil, nil
 	}
 	
 	var nameAfterBrackets string
 	
 	if openBracket != -1 && (dotIndex == -1 || openBracket < dotIndex) {
 		// Brackets come first or are the only thing
-		baseName = cleanName[:openBracket]
+		baseName = strings.ToUpper(cleanName[:openBracket])
 		remaining := cleanName[openBracket:]
 		
 		// Extract all [index] pairs
@@ -85,7 +86,7 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 		if baseName == "" {
 			// No brackets were processed, split at first dot
 			parts := strings.SplitN(nameAfterBrackets, ".", 2)
-			baseName = parts[0]
+			baseName = strings.ToUpper(parts[0])
 			nameAfterBrackets = "." + parts[1]
 		}
 		
@@ -96,7 +97,7 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 		}
 	} else if baseName == "" {
 		// No brackets and no dots
-		baseName = nameAfterBrackets
+		baseName = strings.ToUpper(nameAfterBrackets)
 	}
 	
 	return baseName, indexes, properties
@@ -112,7 +113,8 @@ func (vm *VariableManager) parseVariableNameOld(name string) (string, []string) 
 func (vm *VariableManager) Get(name string) *types.Value {
 	baseName, indexes, properties := vm.parseVariableName(name)
 	
-	// Get or create the base variable
+	
+	// Get or create the base variable (check user variables first, then system constants)
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		// Try to load from database first (for individual array elements)
@@ -129,7 +131,24 @@ func (vm *VariableManager) Get(name string) *types.Value {
 			}
 		}
 		
-		// Auto-vivification: create new variable if not found in database
+		// Check if this is a system constant (only if no user variable exists)
+		if vm.gameInterface != nil {
+			if systemConstants := vm.gameInterface.GetSystemConstants(); systemConstants != nil {
+				if constantValue, exists := systemConstants.GetConstant(baseName); exists {
+					// Handle array indexing on constants if needed (like LIBPARM[0])
+					if len(indexes) > 0 {
+						return vm.resolveConstantIndexing(constantValue, indexes)
+					}
+					// Handle property access on constants if needed (like SECTOR.WARPS)
+					if len(properties) > 0 {
+						return vm.resolveConstantProperties(baseName, properties)
+					}
+					return constantValue
+				}
+			}
+		}
+		
+		// Auto-vivification: create new variable if not found anywhere
 		baseVar = types.NewVarParam(baseName, types.VarParamVariable)
 		vm.variables[baseName] = baseVar
 	}
@@ -627,4 +646,32 @@ func (vm *VariableManager) setObjectProperty(varParam *types.VarParam, propertie
 		newVar.SetValue(vm.valueToString(value))
 		current.Vars[finalProp] = newVar
 	}
+}
+
+// resolveConstantIndexing handles array indexing on system constants (like LIBPARM[0])
+func (vm *VariableManager) resolveConstantIndexing(constantValue *types.Value, indexes []string) *types.Value {
+	// For now, return empty string for indexed constants we don't specifically handle
+	// This can be extended for specific constants that support indexing
+	return &types.Value{Type: types.StringType, String: ""}
+}
+
+// resolveConstantProperties handles property access on system constants (like SECTOR.WARPS)
+func (vm *VariableManager) resolveConstantProperties(baseName string, properties []string) *types.Value {
+	// Check if this is a dotted constant name (like SECTOR.WARPS)
+	if vm.gameInterface != nil {
+		if systemConstants := vm.gameInterface.GetSystemConstants(); systemConstants != nil {
+			// Construct the full constant name
+			fullConstantName := baseName
+			for _, prop := range properties {
+				fullConstantName += "." + strings.ToUpper(prop)
+			}
+			
+			if constantValue, exists := systemConstants.GetConstant(fullConstantName); exists {
+				return constantValue
+			}
+		}
+	}
+	
+	// Property not found, return empty string
+	return &types.Value{Type: types.StringType, String: ""}
 }

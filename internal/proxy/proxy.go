@@ -11,6 +11,7 @@ import (
 
 	"twist/internal/streaming"
 	"twist/internal/database"
+	"twist/internal/scripting"
 )
 
 type Proxy struct {
@@ -30,6 +31,10 @@ type Proxy struct {
 	
 	// Streaming pipeline
 	pipeline   *streaming.Pipeline
+	
+	// Script manager
+	scriptManager *scripting.ScriptManager
+	db            database.Database
 }
 
 func New(terminalWriter streaming.TerminalWriter) *Proxy {
@@ -42,14 +47,6 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 	logger := log.New(logFile, "[PROXY] ", log.LstdFlags|log.Lshortfile)
 	logger.Println("Proxy initialized")
 	
-	p := &Proxy{
-		outputChan: make(chan string, 100),
-		inputChan:  make(chan string, 100),
-		errorChan:  make(chan error, 10),
-		connected:  false,
-		logger:     logger,
-	}
-	
 	// Initialize database
 	db := database.NewDatabase()
 	// Create or open database (TODO: make configurable)
@@ -58,6 +55,20 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 		if err := db.OpenDatabase("twist.db"); err != nil {
 			logger.Fatalf("Failed to open database: %v", err)
 		}
+	}
+	
+	// Initialize script manager
+	scriptManager := scripting.NewScriptManager(db)
+	logger.Println("Script manager initialized")
+	
+	p := &Proxy{
+		outputChan:    make(chan string, 100),
+		inputChan:     make(chan string, 100),
+		errorChan:     make(chan error, 10),
+		connected:     false,
+		logger:        logger,
+		scriptManager: scriptManager,
+		db:            db,
 	}
 	
 	// Initialize streaming pipeline
@@ -128,6 +139,13 @@ func (p *Proxy) Disconnect() error {
 	}
 
 	p.connected = false
+	
+	// Stop all scripts
+	if p.scriptManager != nil {
+		if err := p.scriptManager.Stop(); err != nil {
+			p.logger.Printf("Error stopping scripts: %v", err)
+		}
+	}
 	
 	// Stop the streaming pipeline
 	if p.pipeline != nil {
@@ -223,5 +241,33 @@ func (p *Proxy) handleOutput() {
 	}
 	
 	p.logger.Println("Output handler exiting")
+}
+
+// GetScriptManager returns the script manager for external access
+func (p *Proxy) GetScriptManager() *scripting.ScriptManager {
+	return p.scriptManager
+}
+
+// LoadScript loads a script from file
+func (p *Proxy) LoadScript(filename string) error {
+	p.logger.Printf("Loading script: %s", filename)
+	return p.scriptManager.LoadAndRunScript(filename)
+}
+
+// ExecuteScriptCommand executes a single script command
+func (p *Proxy) ExecuteScriptCommand(command string) error {
+	p.logger.Printf("Executing script command: %s", command)
+	return p.scriptManager.ExecuteCommand(command)
+}
+
+// GetScriptStatus returns script engine status
+func (p *Proxy) GetScriptStatus() map[string]interface{} {
+	return p.scriptManager.GetStatus()
+}
+
+// StopAllScripts stops all running scripts
+func (p *Proxy) StopAllScripts() error {
+	p.logger.Println("Stopping all scripts")
+	return p.scriptManager.Stop()
 }
 

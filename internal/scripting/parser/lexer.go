@@ -45,6 +45,7 @@ const (
 	TokenGreaterEq // >=
 	TokenAnd       // AND
 	TokenOr        // OR
+	TokenXor       // XOR
 	TokenNot       // NOT
 	TokenPlus      // +
 	TokenMinus     // -
@@ -226,8 +227,14 @@ func (l *Lexer) readVariable() string {
 // readLabel reads a label (starting with :)
 func (l *Lexer) readLabel() string {
 	var result strings.Builder
-	result.WriteRune(l.ch) // include the :
+	result.WriteRune(l.ch) // include the first :
 	l.nextChar()
+	
+	// Check if there's a second : (TWX labels start with ::)
+	if l.ch == ':' {
+		result.WriteRune(l.ch) // include the second :
+		l.nextChar()
+	}
 	
 	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_') {
 		result.WriteRune(l.ch)
@@ -276,6 +283,8 @@ func getKeywordType(word string) TokenType {
 		return TokenAnd
 	case "OR":
 		return TokenOr
+	case "XOR":
+		return TokenXor
 	case "NOT":
 		return TokenNot
 	case "MOD":

@@ -494,7 +494,7 @@ func TestComplexControlFlow_RealIntegration(t *testing.T) {
 		:calculate_factorial
 		setVar $counter $factorial_input
 		:factorial_loop
-		branch $counter factorial_done
+		branch ($counter <> 0) factorial_done
 		multiply $factorial_result $counter
 		subtract $counter 1
 		goto factorial_loop
@@ -522,6 +522,460 @@ func TestComplexControlFlow_RealIntegration(t *testing.T) {
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Complex control flow output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// ======= NEW PHASE 2 TESTS: Macro Preprocessor Integration =======
+
+// TestMacroPreprocessor_SimpleIf tests basic IF/END macro expansion
+func TestMacroPreprocessor_SimpleIf_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $test_value 42
+		
+		if ($test_value = 42)
+			echo "Condition is true"
+			setVar $result "success"
+		end
+		
+		echo "After if block"
+		echo "Result: " $result
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("Simple IF macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Condition is true",
+		"After if block",
+		"Result: success",
+	}
+
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Simple IF output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_IfElse tests IF/ELSE/END macro expansion
+func TestMacroPreprocessor_IfElse_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $test_value 10
+		
+		if ($test_value > 20)
+			echo "Value is greater than 20"
+			setVar $result "greater"
+		else
+			echo "Value is 20 or less"
+			setVar $result "less_or_equal"
+		end
+		
+		echo "Final result: " $result
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("IF/ELSE macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Value is 20 or less",
+		"Final result: less_or_equal",
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("IF/ELSE output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_IfElseIf tests IF/ELSEIF/ELSE/END macro expansion
+func TestMacroPreprocessor_IfElseIf_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $grade 85
+		
+		if ($grade >= 90)
+			echo "Grade: A"
+			setVar $letter "A"
+		elseif ($grade >= 80)
+			echo "Grade: B"
+			setVar $letter "B"
+		elseif ($grade >= 70)
+			echo "Grade: C"
+			setVar $letter "C"
+		else
+			echo "Grade: F"
+			setVar $letter "F"
+		end
+		
+		echo "Letter grade: " $letter
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("IF/ELSEIF/ELSE macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Grade: B",
+		"Letter grade: B",
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("IF/ELSEIF/ELSE output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_SimpleWhile tests basic WHILE/END macro expansion
+func TestMacroPreprocessor_SimpleWhile_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $counter 1
+		setVar $sum 0
+		
+		while ($counter <= 5)
+			echo "Counter: " $counter
+			add $sum $counter
+			add $counter 1
+		end
+		
+		echo "Sum: " $sum
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("WHILE macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Counter: 1",
+		"Counter: 2", 
+		"Counter: 3",
+		"Counter: 4",
+		"Counter: 5",
+		"Sum: 15",
+	}
+
+	if len(result.Output) != 6 {
+		t.Errorf("Expected 6 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("WHILE output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_NestedIfWhile tests nested control structures
+func TestMacroPreprocessor_NestedIfWhile_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $outer 1
+		
+		while ($outer <= 3)
+			echo "Outer loop: " $outer
+			setVar $inner 1
+			
+			while ($inner <= 2)
+				if ($inner = 1)
+					echo "  Inner first iteration"
+				else
+					echo "  Inner second iteration"
+				end
+				add $inner 1
+			end
+			
+			add $outer 1
+		end
+		
+		echo "Nested loops complete"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("Nested IF/WHILE macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Outer loop: 1",
+		"  Inner first iteration",
+		"  Inner second iteration",
+		"Outer loop: 2",
+		"  Inner first iteration", 
+		"  Inner second iteration",
+		"Outer loop: 3",
+		"  Inner first iteration",
+		"  Inner second iteration",
+		"Nested loops complete",
+	}
+
+	if len(result.Output) != 10 {
+		t.Errorf("Expected 10 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Nested control output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_ComplexExpressions tests control flow with complex expressions (from Phase 1)
+func TestMacroPreprocessor_ComplexExpressions_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $port 2
+		setVar $location "Command"
+		setVar $turns 50
+		
+		# Test complex TWX expressions that were implemented in Phase 1
+		if (($port = 2) or ($port = 3)) and ($location <> "Combat")
+			echo "Valid port and location"
+			
+			if ($turns > 0) and ($turns < 100)
+				echo "Turns in valid range"
+				setVar $status "ready"
+			else
+				echo "Invalid turn count"
+				setVar $status "error"
+			end
+		else
+			echo "Invalid port or location"
+			setVar $status "invalid"
+		end
+		
+		echo "Final status: " $status
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("Complex expressions macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Valid port and location",
+		"Turns in valid range",
+		"Final status: ready",
+	}
+
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Complex expression output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestMacroPreprocessor_StringConcatenation tests string concatenation in control flow
+func TestMacroPreprocessor_StringConcatenation_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $shipId 123
+		setVar $count 5
+		
+		if ($count > 0)
+			setVar $message ("Ship " & $shipId & " has " & $count & " items")
+			echo $message
+		else
+			echo "No items found"
+		end
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("String concatenation macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Ship 123 has 5 items",
+	}
+
+	if len(result.Output) != 1 {
+		t.Errorf("Expected 1 output line, got %d: %v", len(result.Output), result.Output)
+	}
+
+	if len(result.Output) > 0 && result.Output[0] != expectedOutputs[0] {
+		t.Errorf("String concatenation output: got %q, want %q", result.Output[0], expectedOutputs[0])
+	}
+}
+
+// TestMacroPreprocessor_ErrorHandling tests error cases in macro preprocessing
+func TestMacroPreprocessor_ErrorHandling_RealIntegration(t *testing.T) {
+	tests := []struct {
+		name        string
+		script      string
+		shouldError bool
+		errorMsg    string
+	}{
+		{
+			name: "IF without END",
+			script: `
+				if ($value = 1)
+					echo "test"
+				# Missing END
+			`,
+			shouldError: true,
+			errorMsg:    "IF/WHILE .. END structure mismatch",
+		},
+		{
+			name: "ELSE without IF", 
+			script: `
+				echo "before"
+				else
+					echo "should error"
+				end
+			`,
+			shouldError: true,
+			errorMsg:    "ELSE without IF",
+		},
+		{
+			name: "ELSEIF without IF",
+			script: `
+				echo "before"
+				elseif ($test = 1)
+					echo "should error"
+				end
+			`,
+			shouldError: true,
+			errorMsg:    "ELSEIF without IF",
+		},
+		{
+			name: "END without IF",
+			script: `
+				echo "before"
+				end
+			`,
+			shouldError: true,
+			errorMsg:    "END without IF",
+		},
+		{
+			name: "ELSE with WHILE",
+			script: `
+				while ($counter < 5)
+					echo "in loop"
+				else
+					echo "should error"
+				end
+			`,
+			shouldError: true,
+			errorMsg:    "cannot use ELSE with WHILE",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tester := NewIntegrationScriptTester(t)
+			result := tester.ExecuteScript(tt.script)
+			
+			if tt.shouldError {
+				if result.Error == nil {
+					t.Errorf("Expected error containing %q, but script succeeded", tt.errorMsg)
+				} else if !strings.Contains(result.Error.Error(), tt.errorMsg) {
+					t.Errorf("Expected error containing %q, got %v", tt.errorMsg, result.Error)
+				}
+			} else {
+				if result.Error != nil {
+					t.Errorf("Expected success, got error: %v", result.Error)
+				}
+			}
+		})
+	}
+}
+
+// TestMacroPreprocessor_SST_Pattern tests a pattern from the 1_SST.ts script
+func TestMacroPreprocessor_SST_Pattern_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	// This mimics the pattern found in the 1_SST.ts script
+	script := `
+		# Simulate the 1_SST.ts script pattern
+		setVar $location "Command"
+		
+		if ($location <> "Command")
+			echo "This script must be run from the game command menu"
+			# halt would be here in real script
+		end
+		
+		setVar $shipNumber1 42
+		echo "Ship ID: " $shipNumber1
+		
+		setVar $sectorNumber1 100
+		setVar $portExists 1
+		
+		if ($portExists = 1)
+			echo "Port found in sector " $sectorNumber1
+			
+			setVar $credits 1000
+			if ($credits >= 500)
+				echo "Sufficient credits for trading"
+				setVar $canTrade 1
+			else
+				echo "Insufficient credits"
+				setVar $canTrade 0
+			end
+		else
+			echo "No port in this sector"
+			setVar $canTrade 0
+		end
+		
+		if ($canTrade = 1)
+			echo "Initiating trade sequence"
+		else
+			echo "Cannot trade at this time"
+		end
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("SST pattern macro script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Ship ID: 42",
+		"Port found in sector 100",
+		"Sufficient credits for trading",
+		"Initiating trade sequence",
+	}
+
+	if len(result.Output) != 4 {
+		t.Errorf("Expected 4 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("SST pattern output %d: got %q, want %q", i+1, result.Output[i], expected)
 		}
 	}
 }

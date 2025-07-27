@@ -368,10 +368,8 @@ func setPortVariables(vm types.VMInterface, varName string, sector *types.Sector
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: 0})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 0})
 	} else {
-		// Port exists - set all port variables
-		// For now, use placeholder values that match expected structure
-		// In a full implementation, these would come from the database port data
-		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: 1}) // Default class
+		// Port exists - set all port variables using actual sector data
+		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: float64(sector.PortClass)})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 1})
 		vm.SetVariable(varName+".PORT.BUILDTIME", &types.Value{Type: types.NumberType, Number: 0})
 		

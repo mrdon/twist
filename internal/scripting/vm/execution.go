@@ -775,6 +775,16 @@ func (ee *ExecutionEngine) evaluateBinaryExpression(node *parser.ASTNode) (*type
 		return ee.evaluateNumericOperation(left, right, operator)
 	}
 
+	// & operator always does string concatenation in TWX
+	if operator == "&" {
+		leftStr := left.ToString()
+		rightStr := right.ToString()
+		return &types.Value{
+			Type:   types.StringType,
+			String: leftStr + rightStr,
+		}, nil
+	}
+
 	// Handle string comparison/concatenation
 	if left.Type == types.StringType || right.Type == types.StringType {
 		return ee.evaluateStringOperation(left, right, operator)
@@ -909,7 +919,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			Type:        types.NumberType,
 			Number: result,
 		}, nil
-	case "and":
+	case "and", "AND":
 		result := 0.0
 		if leftNum != 0 && rightNum != 0 {
 			result = 1.0
@@ -918,9 +928,20 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			Type:        types.NumberType,
 			Number: result,
 		}, nil
-	case "or":
+	case "or", "OR":
 		result := 0.0
 		if leftNum != 0 || rightNum != 0 {
+			result = 1.0
+		}
+		return &types.Value{
+			Type:        types.NumberType,
+			Number: result,
+		}, nil
+	case "xor", "XOR":
+		result := 0.0
+		leftTruthy := leftNum != 0
+		rightTruthy := rightNum != 0
+		if (leftTruthy && !rightTruthy) || (!leftTruthy && rightTruthy) {
 			result = 1.0
 		}
 		return &types.Value{

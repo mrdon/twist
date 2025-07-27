@@ -373,23 +373,34 @@ func (e *Engine) parseScript(source string) (*parser.ASTNode, error) {
 
 // parseScriptWithBasePath parses script source code into an AST with a specific base path for includes
 func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNode, error) {
-	// Create lexer
-	lexer := parser.NewLexer(strings.NewReader(source))
+	// Step 1: Preprocess script to expand IF/ELSE/END and WHILE/END macros
+	lines := strings.Split(source, "\n")
+	preprocessor := parser.NewPreprocessor()
+	processedLines, err := preprocessor.ProcessScript(lines)
+	if err != nil {
+		return nil, fmt.Errorf("preprocessing error: %v", err)
+	}
 	
-	// Tokenize
+	// Rejoin the processed lines
+	processedSource := strings.Join(processedLines, "\n")
+	
+	// Step 2: Create lexer
+	lexer := parser.NewLexer(strings.NewReader(processedSource))
+	
+	// Step 3: Tokenize
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("lexer error: %v", err)
 	}
 	
-	// Parse
+	// Step 4: Parse
 	parser := parser.NewParser(tokens)
 	ast, err := parser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("parser error: %v", err)
 	}
 	
-	// Process includes
+	// Step 5: Process includes
 	includeProcessor := include.NewIncludeProcessor(basePath)
 	processedAST, err := includeProcessor.ProcessIncludes(ast)
 	if err != nil {

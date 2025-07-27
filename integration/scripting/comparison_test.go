@@ -360,3 +360,357 @@ func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 		}
 	}
 }
+
+// TestInfixOperators_NotEqual tests the <> operator in expressions
+func TestInfixOperators_NotEqual_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test <> operator in expressions
+		setVar $a 10
+		setVar $b 20
+		setVar $c 10
+		
+		# Test numeric not equal
+		if ($a <> $b)
+			echo "10 <> 20: true"
+		else
+			echo "10 <> 20: false"
+		end
+		
+		# Test numeric equal (should be false)
+		if ($a <> $c)
+			echo "10 <> 10: true"
+		else
+			echo "10 <> 10: false"
+		end
+		
+		# Test string not equal
+		setVar $str1 "hello"
+		setVar $str2 "world"
+		if ($str1 <> $str2)
+			echo "hello <> world: true"
+		else
+			echo "hello <> world: false"
+		end
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"10 <> 20: true",
+		"10 <> 10: false",
+		"hello <> world: true",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestInfixOperators_LogicalAND tests the AND operator in expressions
+func TestInfixOperators_LogicalAND_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test AND operator in expressions
+		setVar $true_val 1
+		setVar $false_val 0
+		
+		# Test true AND true
+		if ($true_val AND $true_val)
+			echo "1 AND 1: true"
+		else
+			echo "1 AND 1: false"
+		end
+		
+		# Test true AND false
+		if ($true_val AND $false_val)
+			echo "1 AND 0: true"
+		else
+			echo "1 AND 0: false"
+		end
+		
+		# Test false AND false
+		if ($false_val AND $false_val)
+			echo "0 AND 0: true"
+		else
+			echo "0 AND 0: false"
+		end
+		
+		# Test complex expression
+		setVar $a 5
+		setVar $b 10
+		if (($a > 3) AND ($b < 15))
+			echo "Complex AND: true"
+		else
+			echo "Complex AND: false"
+		end
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"1 AND 1: true",
+		"1 AND 0: false",
+		"0 AND 0: false",
+		"Complex AND: true",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestInfixOperators_LogicalOR tests the OR operator in expressions
+func TestInfixOperators_LogicalOR_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test OR operator in expressions
+		setVar $true_val 1
+		setVar $false_val 0
+		
+		# Test true OR true
+		if ($true_val OR $true_val)
+			echo "1 OR 1: true"
+		else
+			echo "1 OR 1: false"
+		end
+		
+		# Test true OR false
+		if ($true_val OR $false_val)
+			echo "1 OR 0: true"
+		else
+			echo "1 OR 0: false"
+		end
+		
+		# Test false OR false
+		if ($false_val OR $false_val)
+			echo "0 OR 0: true"
+		else
+			echo "0 OR 0: false"
+		end
+		
+		# Test complex expression
+		setVar $a 5
+		setVar $b 20
+		if (($a < 3) OR ($b > 15))
+			echo "Complex OR: true"
+		else
+			echo "Complex OR: false"
+		end
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"1 OR 1: true",
+		"1 OR 0: true",
+		"0 OR 0: false",
+		"Complex OR: true",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestInfixOperators_LogicalXOR tests the XOR operator in expressions
+func TestInfixOperators_LogicalXOR_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test XOR operator in expressions
+		setVar $true_val 1
+		setVar $false_val 0
+		
+		# Test true XOR true
+		if ($true_val XOR $true_val)
+			echo "1 XOR 1: true"
+		else
+			echo "1 XOR 1: false"
+		end
+		
+		# Test true XOR false
+		if ($true_val XOR $false_val)
+			echo "1 XOR 0: true"
+		else
+			echo "1 XOR 0: false"
+		end
+		
+		# Test false XOR true
+		if ($false_val XOR $true_val)
+			echo "0 XOR 1: true"
+		else
+			echo "0 XOR 1: false"
+		end
+		
+		# Test false XOR false
+		if ($false_val XOR $false_val)
+			echo "0 XOR 0: true"
+		else
+			echo "0 XOR 0: false"
+		end
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"1 XOR 1: false",
+		"1 XOR 0: true",
+		"0 XOR 1: true",
+		"0 XOR 0: false",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestInfixOperators_StringConcatenation tests the & operator for string concatenation
+func TestInfixOperators_StringConcatenation_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test & operator for string concatenation
+		setVar $str1 "Hello"
+		setVar $str2 "World"
+		setVar $num1 42
+		setVar $num2 3.14
+		
+		# String & String
+		setVar $result1 ($str1 & " " & $str2)
+		echo "String concat: " $result1
+		
+		# String & Number
+		setVar $result2 ($str1 & $num1)
+		echo "String + Number: " $result2
+		
+		# Number & Number (should convert to strings)
+		setVar $result3 ($num1 & $num2)
+		echo "Number + Number: " $result3
+		
+		# Complex concatenation
+		setVar $result4 ("Value: " & $num1 & " (PI: " & $num2 & ")")
+		echo "Complex: " $result4
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"String concat: Hello World",
+		"String + Number: Hello42",
+		"Number + Number: 423.14",
+		"Complex: Value: 42 (PI: 3.14)",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestInfixOperators_ComplexExpressions tests complex expressions with multiple operators
+func TestInfixOperators_ComplexExpressions_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	script := `
+		# Test complex expressions with multiple operators
+		setVar $a 10
+		setVar $b 20
+		setVar $c 30
+		setVar $name "test"
+		
+		# Test mixed logical and comparison operators
+		if (($a < $b) AND ($b < $c) AND ($name <> ""))
+			echo "Complex condition 1: true"
+		else
+			echo "Complex condition 1: false"
+		end
+		
+		# Test OR with complex comparisons
+		if (($a > $c) OR ($b >= 20) OR ($name = "test"))
+			echo "Complex condition 2: true"
+		else
+			echo "Complex condition 2: false"
+		end
+		
+		# Test XOR with parentheses
+		if ((($a = 10) XOR ($b = 30)) AND ($c > 25))
+			echo "Complex condition 3: true"
+		else
+			echo "Complex condition 3: false"
+		end
+		
+		# Test string concatenation in complex expression
+		setVar $message ("Result: " & (($a + $b) & " total"))
+		echo $message
+	`
+	
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Errorf("Script execution failed: %v", result.Error)
+	}
+	
+	expectedOutputs := []string{
+		"Complex condition 1: true",
+		"Complex condition 2: true", 
+		"Complex condition 3: true",
+		"Result: 30 total",
+	}
+	
+	if len(result.Output) != len(expectedOutputs) {
+		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	}
+	
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}

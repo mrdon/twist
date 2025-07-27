@@ -3,17 +3,22 @@ package scripting
 import (
 	"fmt"
 	"twist/internal/database"
+	"twist/internal/scripting/constants"
 	"twist/internal/scripting/types"
 )
 
 // GameAdapter adapts the game database to the scripting interface
 type GameAdapter struct {
-	db database.Database
+	db              database.Database
+	systemConstants *constants.SystemConstants
 }
 
 // NewGameAdapter creates a new game adapter
 func NewGameAdapter(db database.Database) *GameAdapter {
-	return &GameAdapter{db: db}
+	adapter := &GameAdapter{db: db}
+	// Initialize system constants with self-reference for game interface
+	adapter.systemConstants = constants.NewSystemConstants(adapter)
+	return adapter
 }
 
 // GetSector implements GameInterface
@@ -211,6 +216,11 @@ func (g *GameAdapter) LoadScriptVariable(name string) (*types.Value, error) {
 			String: fmt.Sprintf("%v", v),
 		}, nil
 	}
+}
+
+// GetSystemConstants implements GameInterface
+func (g *GameAdapter) GetSystemConstants() types.SystemConstantsInterface {
+	return g.systemConstants
 }
 
 // ScriptManager provides high-level script management

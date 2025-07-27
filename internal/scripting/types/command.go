@@ -84,6 +84,9 @@ type VMInterface interface {
 	// Processing filters (for testing)
 	ProcessInput(filter string) error
 	ProcessOutput(filter string) error
+	
+	// Expression evaluation
+	EvaluateExpression(expression string) (*Value, error)
 }
 
 // GameInterface defines the interface for interacting with the game
@@ -111,6 +114,15 @@ type GameInterface interface {
 	// Script variable persistence
 	SaveScriptVariable(name string, value *Value) error
 	LoadScriptVariable(name string) (*Value, error)
+	
+	// System constants
+	GetSystemConstants() SystemConstantsInterface
+}
+
+// SystemConstantsInterface defines the interface for system constants
+type SystemConstantsInterface interface {
+	GetConstant(name string) (*Value, bool)
+	UpdateCurrentLine(text string)
 }
 
 // SectorData represents sector information

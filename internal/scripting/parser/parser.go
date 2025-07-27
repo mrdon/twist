@@ -508,8 +508,33 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 		return p.parseVariableAccess()
 	}
 	
+	// Handle system constants and identifiers that should be treated as variables
+	// Only in command parameter context (not in expressions)
+	if p.current.Type == TokenCommand && p.isSystemConstant(p.current.Value) {
+		// In TWX, system constants like TRUE, FALSE, CURRENTLINE are variable references
+		token := p.current
+		p.advance()
+		return &ASTNode{
+			Type:   NodeVariable,
+			Value:  token.Value,
+			Line:   token.Line,
+			Column: token.Column,
+		}, nil
+	}
+	
 	// For other cases, parse as primary expression
 	return p.parsePrimaryExpression()
+}
+
+// isSystemConstant checks if a token value is a known system constant
+func (p *Parser) isSystemConstant(value string) bool {
+	switch strings.ToUpper(value) {
+	case "TRUE", "FALSE", "CURRENTLINE", "CURRENTANSILINE", "VERSION", "GAME", 
+		 "CURRENTSECTOR", "CONNECTED", "DATE", "TIME", "GAMENAME", "TWXVERSION":
+		return true
+	default:
+		return false
+	}
 }
 
 // parseControlFlow parses control flow statements (goto, gosub, return)
@@ -544,6 +569,11 @@ func (p *Parser) parseExpression() (*ASTNode, error) {
 	return p.parseOrExpression()
 }
 
+// ParseExpression parses a single expression (public method for external use)
+func (p *Parser) ParseExpression() (*ASTNode, error) {
+	return p.parseExpression()
+}
+
 // parseOrExpression parses OR expressions
 func (p *Parser) parseOrExpression() (*ASTNode, error) {
 	left, err := p.parseAndExpression()
@@ -570,14 +600,14 @@ func (p *Parser) parseOrExpression() (*ASTNode, error) {
 	return left, nil
 }
 
-// parseAndExpression parses AND expressions
+// parseAndExpression parses AND and XOR expressions
 func (p *Parser) parseAndExpression() (*ASTNode, error) {
 	left, err := p.parseEqualityExpression()
 	if err != nil {
 		return nil, err
 	}
 	
-	for p.current.Type == TokenAnd {
+	for p.current.Type == TokenAnd || p.current.Type == TokenXor {
 		op := p.current.Value
 		p.advance()
 		

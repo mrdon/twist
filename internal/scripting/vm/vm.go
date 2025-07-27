@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 	"twist/internal/database"
-	"twist/internal/scripting/constants"
 	"twist/internal/scripting/manager"
 	"twist/internal/scripting/parser"
 	"twist/internal/scripting/types"
@@ -27,9 +26,6 @@ type VirtualMachine struct {
 	// Commands and triggers
 	commands map[string]*types.CommandDef
 	triggers map[string]types.TriggerInterface
-	
-	// System constants
-	systemConstants *constants.SystemConstants
 	
 	// Output handlers
 	outputHandler func(string) error
@@ -58,8 +54,7 @@ func NewVirtualMachine(gameInterface types.GameInterface) *VirtualMachine {
 	// Initialize execution engine
 	vm.execution = NewExecutionEngine(vm)
 	
-	// Initialize system constants
-	vm.systemConstants = constants.NewSystemConstants(gameInterface)
+	// System constants are now provided by GameInterface
 	
 	// Initialize script manager
 	if db := gameInterface.GetDatabase(); db != nil {
@@ -359,6 +354,33 @@ func (vm *VirtualMachine) ProcessOutput(filter string) error {
 	// In a real implementation, this would set up output processing filters
 	// For now, just return success for compatibility with tests
 	return nil
+}
+
+// EvaluateExpression evaluates a string expression and returns its value
+func (vm *VirtualMachine) EvaluateExpression(expression string) (*types.Value, error) {
+	// Unescape any escaped quotes in the expression
+	unescapedExpression := strings.ReplaceAll(expression, "\\\"", "\"")
+	
+	// Parse the expression string into an AST node
+	lexer := parser.NewLexer(strings.NewReader(unescapedExpression))
+	tokens, err := lexer.TokenizeAll()
+	if err != nil {
+		return nil, fmt.Errorf("failed to tokenize expression: %v", err)
+	}
+	
+	parserObj := parser.NewParser(tokens)
+	// Parse as a single expression
+	expr, err := parserObj.ParseExpression()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse expression: %v", err)
+	}
+	
+	// Use the execution engine to evaluate the expression
+	if vm.execution == nil {
+		vm.execution = NewExecutionEngine(vm)
+	}
+	
+	return vm.execution.evaluateExpression(expr)
 }
 
 // Command registration - this is used by the command registry

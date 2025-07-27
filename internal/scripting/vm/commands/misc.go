@@ -72,6 +72,8 @@ func cmdSaveVar(vm types.VMInterface, params []*types.CommandParam) error {
 }
 
 // cmdBranch evaluates an expression and conditionally branches to a label
+// Per TWX behavior: branches when condition is FALSE (0, empty string, etc.)
+// This is used by IF/WHILE macros to jump over or out of blocks when condition fails
 func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 	if len(params) != 2 {
 		return vm.Error("BRANCH requires exactly 2 parameters: expression, label")
@@ -80,20 +82,31 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 	expression := GetParamString(vm, params[0])
 	label := GetParamString(vm, params[1])
 	
-	// For TWX compatibility: BRANCH branches when the expression is FALSE
-	// This is a simplified implementation - a real one would parse and evaluate the expression
-	// For now, we'll use a basic heuristic or return an error for complex expressions
-	
-	// Simple number check: if expression is "0" or empty, branch
-	if expression == "0" || expression == "" {
+	// Handle empty expression - branch on empty (false condition)
+	if expression == "" {
 		return vm.Goto(label)
 	}
 	
-	// Try to parse as a number - if it's 0, branch
-	if num := GetParamNumber(vm, params[0]); num == 0 {
+	// Evaluate the expression using the VM's expression evaluator
+	result, err := vm.EvaluateExpression(expression)
+	if err != nil {
+		return vm.Error("BRANCH: failed to evaluate expression '" + expression + "': " + err.Error())
+	}
+	
+	// TWX logic: branch when condition is FALSE (0 or empty string)
+	shouldBranch := false
+	if result.Type == types.NumberType {
+		// Branch if the number equals 0
+		shouldBranch = (result.Number == 0.0)
+	} else if result.Type == types.StringType {
+		// Branch if the string is empty or "0"
+		shouldBranch = (result.String == "" || result.String == "0")
+	}
+	
+	if shouldBranch {
 		return vm.Goto(label)
 	}
 	
-	// If expression is non-zero, don't branch (continue to next instruction)
+	// Don't branch if condition is true (continue to next instruction)
 	return nil
 }

@@ -3,12 +3,14 @@
 package scripting
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
 	"twist/integration/setup"
 	"twist/internal/database"
 	"twist/internal/scripting"
+	"twist/internal/scripting/include"
 	"twist/internal/scripting/parser"
 	"twist/internal/scripting/vm"
 )
@@ -124,19 +126,8 @@ func NewIntegrationScriptTesterWithSharedDB(t *testing.T, sharedSetup *setup.Int
 
 // ExecuteScript executes a TWX script and returns the results
 func (tester *IntegrationScriptTester) ExecuteScript(script string) *IntegrationTestResult {
-	// Parse the script
-	lexer := parser.NewLexer(strings.NewReader(script))
-	tokens, err := lexer.TokenizeAll()
-	if err != nil {
-		return &IntegrationTestResult{
-			Output:   []string{},
-			Commands: []string{},
-			Error:    err,
-		}
-	}
-	
-	parserObj := parser.NewParser(tokens)
-	ast, err := parserObj.Parse()
+	// Parse the script using the same pipeline as the engine (including preprocessing)
+	ast, err := tester.parseScriptWithPreprocessor(script)
 	if err != nil {
 		return &IntegrationTestResult{
 			Output:   []string{},
@@ -261,15 +252,8 @@ func (tester *IntegrationScriptTester) AssertCommands(result *IntegrationTestRes
 // ExecuteScriptAsync executes a script asynchronously and returns a channel for the result
 // This is needed for WAITFOR tests that need to continue execution after network input
 func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan *IntegrationTestResult, error) {
-	// Parse the script
-	lexer := parser.NewLexer(strings.NewReader(script))
-	tokens, err := lexer.TokenizeAll()
-	if err != nil {
-		return nil, err
-	}
-	
-	parserObj := parser.NewParser(tokens)
-	ast, err := parserObj.Parse()
+	// Parse the script using the same pipeline as the engine (including preprocessing)
+	ast, err := tester.parseScriptWithPreprocessor(script)
 	if err != nil {
 		return nil, err
 	}
@@ -343,4 +327,44 @@ func (tester *IntegrationScriptTester) IsWaiting() bool {
 func (tester *IntegrationScriptTester) SimulateNetworkInput(text string) error {
 	// Process the text through the VM's trigger system
 	return tester.setupData.VM.ProcessIncomingText(text)
+}
+
+// parseScriptWithPreprocessor parses script source code using the same pipeline as the engine
+// This mirrors the parseScriptWithBasePath method from the engine but without file path handling
+func (tester *IntegrationScriptTester) parseScriptWithPreprocessor(source string) (*parser.ASTNode, error) {
+	// Step 1: Preprocess script to expand IF/ELSE/END and WHILE/END macros
+	lines := strings.Split(source, "\n")
+	preprocessor := parser.NewPreprocessor()
+	processedLines, err := preprocessor.ProcessScript(lines)
+	if err != nil {
+		return nil, fmt.Errorf("preprocessing error: %v", err)
+	}
+	
+	// Rejoin the processed lines
+	processedSource := strings.Join(processedLines, "\n")
+	
+	// Step 2: Create lexer
+	lexer := parser.NewLexer(strings.NewReader(processedSource))
+	
+	// Step 3: Tokenize
+	tokens, err := lexer.TokenizeAll()
+	if err != nil {
+		return nil, fmt.Errorf("lexer error: %v", err)
+	}
+	
+	// Step 4: Parse
+	parserObj := parser.NewParser(tokens)
+	ast, err := parserObj.Parse()
+	if err != nil {
+		return nil, fmt.Errorf("parser error: %v", err)
+	}
+	
+	// Step 5: Process includes (minimal processing for integration tests)
+	includeProcessor := include.NewIncludeProcessor(".")
+	processedAST, err := includeProcessor.ProcessIncludes(ast)
+	if err != nil {
+		return nil, fmt.Errorf("include processing error: %v", err)
+	}
+	
+	return processedAST, nil
 }
