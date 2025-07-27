@@ -10,10 +10,10 @@ import (
 
 // RegisterMathCommands registers all mathematical commands
 func RegisterMathCommands(vm CommandRegistry) {
-	vm.RegisterCommand("ADD", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdAdd)
-	vm.RegisterCommand("SUBTRACT", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdSubtract)
-	vm.RegisterCommand("MULTIPLY", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdMultiply)
-	vm.RegisterCommand("DIVIDE", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdDivide)
+	vm.RegisterCommand("ADD", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdAdd)
+	vm.RegisterCommand("SUBTRACT", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdSubtract)
+	vm.RegisterCommand("MULTIPLY", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdMultiply)
+	vm.RegisterCommand("DIVIDE", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdDivide)
 	vm.RegisterCommand("MOD", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdMod)
 	vm.RegisterCommand("RANDOM", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdRandom)
 	vm.RegisterCommand("ABS", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdAbs)
@@ -29,50 +29,53 @@ func RegisterMathCommands(vm CommandRegistry) {
 var rng = rand.New(rand.NewSource(time.Now().UnixNano()))
 
 func cmdAdd(vm types.VMInterface, params []*types.CommandParam) error {
+	// TWX-style in-place modification: ADD $var value
 	num1 := GetParamNumber(vm, params[0])
 	num2 := GetParamNumber(vm, params[1])
 	result := &types.Value{
 		Type:   types.NumberType,
 		Number: num1 + num2,
 	}
-	vm.SetVariable(params[2].VarName, result)
+	vm.SetVariable(params[0].VarName, result)
 	return nil
 }
 
 func cmdSubtract(vm types.VMInterface, params []*types.CommandParam) error {
+	// TWX-style in-place modification: SUBTRACT $var value
 	num1 := GetParamNumber(vm, params[0])
 	num2 := GetParamNumber(vm, params[1])
 	result := &types.Value{
 		Type:   types.NumberType,
 		Number: num1 - num2,
 	}
-	vm.SetVariable(params[2].VarName, result)
+	vm.SetVariable(params[0].VarName, result)
 	return nil
 }
 
 func cmdMultiply(vm types.VMInterface, params []*types.CommandParam) error {
+	// TWX-style in-place modification: MULTIPLY $var value
 	num1 := GetParamNumber(vm, params[0])
 	num2 := GetParamNumber(vm, params[1])
 	result := &types.Value{
 		Type:   types.NumberType,
 		Number: num1 * num2,
 	}
-	vm.SetVariable(params[2].VarName, result)
+	vm.SetVariable(params[0].VarName, result)
 	return nil
 }
 
 func cmdDivide(vm types.VMInterface, params []*types.CommandParam) error {
+	// TWX-style in-place modification: DIVIDE $var value
 	num1 := GetParamNumber(vm, params[0])
 	divisor := GetParamNumber(vm, params[1])
 	if divisor == 0 {
 		return vm.Error("Division by zero")
 	}
-	
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: num1 / divisor,
 	}
-	vm.SetVariable(params[2].VarName, result)
+	vm.SetVariable(params[0].VarName, result)
 	return nil
 }
 

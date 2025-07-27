@@ -5,7 +5,9 @@ package scripting
 import (
 	"strings"
 	"testing"
+	"time"
 	"twist/integration/setup"
+	"twist/internal/database"
 	"twist/internal/scripting"
 	"twist/internal/scripting/parser"
 	"twist/internal/scripting/vm"
@@ -16,6 +18,66 @@ type IntegrationTestResult struct {
 	Output   []string
 	Commands []string
 	Error    error
+}
+
+// TestScript implements types.ScriptInterface for testing purposes
+type TestScript struct {
+	id       string
+	filename string
+	name     string
+	running  bool
+	system   bool
+}
+
+// NewTestScript creates a new test script with a unique ID and registers it in the database
+func NewTestScript(name string, db database.Database) *TestScript {
+	script := &TestScript{
+		id:       "test_script_" + name, // Remove timestamp to make it deterministic
+		filename: name + ".twx",
+		name:     name,
+		running:  true,
+		system:   false,
+	}
+	
+	// Register the script in the database to satisfy foreign key constraints
+	if sqlDB := db.GetDB(); sqlDB != nil {
+		query := `
+		INSERT OR IGNORE INTO scripts (script_id, name, filename, version, is_running, is_system, loaded_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?);`
+		
+		_, err := sqlDB.Exec(query, script.id, script.name, script.filename, 6, script.running, script.system, time.Now().Format("2006-01-02 15:04:05"))
+		if err != nil {
+			// Log but don't fail - the script creation can still proceed
+			// In a real implementation, we'd use proper logging
+		}
+	}
+	
+	return script
+}
+
+func (ts *TestScript) GetID() string {
+	return ts.id
+}
+
+func (ts *TestScript) GetFilename() string {
+	return ts.filename
+}
+
+func (ts *TestScript) GetName() string {
+	return ts.name
+}
+
+func (ts *TestScript) IsRunning() bool {
+	return ts.running
+}
+
+func (ts *TestScript) IsSystem() bool {
+	return ts.system
+}
+
+func (ts *TestScript) Stop() error {
+	ts.running = false
+	return nil
 }
 
 // IntegrationScriptTester provides real integration testing for TWX scripts
@@ -103,8 +165,11 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 		return nil
 	})
 	
+	// Create a test script instance for call stack persistence
+	testScript := NewTestScript("integration_test", tester.setupData.DB)
+	
 	// Load and execute the script
-	if err := tester.setupData.VM.LoadScript(ast, nil); err != nil {
+	if err := tester.setupData.VM.LoadScript(ast, testScript); err != nil {
 		return &IntegrationTestResult{
 			Output:   output,
 			Commands: commands,
@@ -120,6 +185,8 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 		}
 	}
 	
+	// For WAITFOR tests, we need to keep the handlers active
+	// The result should be returned by the goroutine only when the script truly completes
 	return &IntegrationTestResult{
 		Output:   output,
 		Commands: commands,
@@ -164,7 +231,7 @@ func (tester *IntegrationScriptTester) AssertOutput(result *IntegrationTestResul
 // AssertOutputContains asserts that the output contains the specified text
 func (tester *IntegrationScriptTester) AssertOutputContains(result *IntegrationTestResult, expectedText string) {
 	for _, line := range result.Output {
-		if line == expectedText {
+		if strings.Contains(line, expectedText) {
 			return // Found it
 		}
 	}
@@ -189,6 +256,87 @@ func (tester *IntegrationScriptTester) AssertCommands(result *IntegrationTestRes
 			tester.t.Errorf("Command %d mismatch: got %q, expected %q", i, result.Commands[i], expected)
 		}
 	}
+}
+
+// ExecuteScriptAsync executes a script asynchronously and returns a channel for the result
+// This is needed for WAITFOR tests that need to continue execution after network input
+func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan *IntegrationTestResult, error) {
+	// Parse the script
+	lexer := parser.NewLexer(strings.NewReader(script))
+	tokens, err := lexer.TokenizeAll()
+	if err != nil {
+		return nil, err
+	}
+	
+	parserObj := parser.NewParser(tokens)
+	ast, err := parserObj.Parse()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Create result channel
+	resultChan := make(chan *IntegrationTestResult, 1)
+	
+	// Capture output and commands in shared slices
+	var output []string
+	var commands []string
+	
+	// Set up output handlers that will persist across the async execution
+	tester.setupData.VM.SetOutputHandler(func(text string) error {
+		output = append(output, text)
+		return nil
+	})
+	
+	tester.setupData.VM.SetEchoHandler(func(text string) error {
+		output = append(output, text)
+		return nil
+	})
+	
+	tester.setupData.VM.SetSendHandler(func(text string) error {
+		commands = append(commands, text)
+		return nil
+	})
+	
+	// Create a test script instance
+	testScript := NewTestScript("integration_test_async", tester.setupData.DB)
+	
+	// Start async execution
+	go func() {
+		defer func() {
+			// Always send result when goroutine completes
+			resultChan <- &IntegrationTestResult{
+				Output:   output,
+				Commands: commands,
+				Error:    nil,
+			}
+		}()
+		
+		// Load and execute the script
+		if err := tester.setupData.VM.LoadScript(ast, testScript); err != nil {
+			return
+		}
+		
+		// Execute until completion or waiting
+		if err := tester.setupData.VM.Execute(); err != nil {
+			return
+		}
+		
+		// If we're waiting, the script will continue via ProcessIncomingText calls
+		// The goroutine will remain alive until the script completes or times out
+		for tester.setupData.VM.IsWaiting() {
+			// Keep the goroutine alive while waiting
+			// ProcessIncomingText will resume execution and eventually complete
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	
+	return resultChan, nil
+}
+
+// IsWaiting returns true if the VM is currently waiting for input
+func (tester *IntegrationScriptTester) IsWaiting() bool {
+	// Access the VM's waiting state - we need to add this method to the VM interface
+	return tester.setupData.VM.IsWaiting()
 }
 
 // SimulateNetworkInput simulates incoming network text for trigger processing

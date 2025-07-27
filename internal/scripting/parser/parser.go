@@ -288,11 +288,16 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	// Look ahead to see if this is an assignment
 	nextToken := p.peek()
-	if nextToken.Type == TokenAssign || nextToken.Type == TokenLeftBracket ||
+	if nextToken.Type == TokenLeftBracket ||
 		nextToken.Type == TokenPlusAssign || nextToken.Type == TokenMinusAssign ||
 		nextToken.Type == TokenMultiplyAssign || nextToken.Type == TokenDivideAssign ||
 		nextToken.Type == TokenConcatAssign {
 		return p.parseAssignment()
+	}
+	
+	// Check for Go-style assignment and reject it explicitly
+	if nextToken.Type == TokenAssign {
+		return nil, fmt.Errorf("invalid syntax: Go-style assignment ':=' not supported in TWX scripts. Use 'setVar %s value' instead at line %d", p.current.Value, nextToken.Line)
 	}
 	
 	// Check for increment/decrement operators
@@ -313,26 +318,7 @@ func (p *Parser) parseAssignment() (*ASTNode, error) {
 	}
 	
 	// Check what kind of assignment this is
-	if p.current.Type == TokenAssign {
-		// Regular assignment
-		node := &ASTNode{
-			Type:     NodeAssignment,
-			Line:     p.current.Line,
-			Column:   p.current.Column,
-			Children: []*ASTNode{variable},
-		}
-		
-		p.advance() // skip :=
-		
-		// Parse expression
-		expr, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		node.Children = append(node.Children, expr)
-		
-		return node, nil
-	} else if p.current.Type == TokenPlusAssign || p.current.Type == TokenMinusAssign ||
+	if p.current.Type == TokenPlusAssign || p.current.Type == TokenMinusAssign ||
 		p.current.Type == TokenMultiplyAssign || p.current.Type == TokenDivideAssign ||
 		p.current.Type == TokenConcatAssign {
 		
@@ -429,23 +415,26 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 	}
 	p.advance()
 	
-	// Check for array access
+	// Check for array access (supports multi-dimensional arrays)
 	if p.current.Type == TokenLeftBracket {
 		arrayAccess := &ASTNode{
 			Type:     NodeArrayAccess,
 			Children: []*ASTNode{variable},
 		}
 		
-		p.advance() // skip '['
-		
-		index, err := p.parseExpression()
-		if err != nil {
-			return nil, err
-		}
-		arrayAccess.Children = append(arrayAccess.Children, index)
-		
-		if err := p.expect(TokenRightBracket); err != nil {
-			return nil, err
+		// Parse all bracket pairs for multi-dimensional arrays
+		for p.current.Type == TokenLeftBracket {
+			p.advance() // skip '['
+			
+			index, err := p.parseExpression()
+			if err != nil {
+				return nil, err
+			}
+			arrayAccess.Children = append(arrayAccess.Children, index)
+			
+			if err := p.expect(TokenRightBracket); err != nil {
+				return nil, err
+			}
 		}
 		
 		return arrayAccess, nil
@@ -472,9 +461,9 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 	
 	// Parse parameters
 	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
-		param, err := p.parseExpression()
+		param, err := p.parseCommandParameter()
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error parsing parameter for command %s: %v", node.Value, err)
 		}
 		node.Children = append(node.Children, param)
 		
@@ -485,6 +474,42 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 	}
 	
 	return node, nil
+}
+
+// parseCommandParameter parses a single command parameter
+// This is more restrictive than parseExpression to handle space-separated parameters correctly
+func (p *Parser) parseCommandParameter() (*ASTNode, error) {
+	// Handle special case: negative numbers in command parameters
+	if p.current.Type == TokenMinus && p.peek() != nil && p.peek().Type == TokenNumber {
+		// Create unary minus expression for negative numbers
+		minusToken := p.current
+		p.advance() // skip minus
+		numberToken := p.current
+		p.advance() // skip number
+		
+		return &ASTNode{
+			Type:     NodeExpression,
+			Value:    "-",
+			Line:     minusToken.Line,
+			Column:   minusToken.Column,
+			Children: []*ASTNode{
+				{
+					Type:   NodeLiteral,
+					Value:  numberToken.Value,
+					Line:   numberToken.Line,
+					Column: numberToken.Column,
+				},
+			},
+		}, nil
+	}
+	
+	// Handle variables (including array access)
+	if p.current.Type == TokenVariable {
+		return p.parseVariableAccess()
+	}
+	
+	// For other cases, parse as primary expression
+	return p.parsePrimaryExpression()
 }
 
 // parseControlFlow parses control flow statements (goto, gosub, return)

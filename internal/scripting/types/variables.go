@@ -54,7 +54,19 @@ func (v *VarParam) GetIndexVar(indexes []string) *VarParam {
 		if current.ArraySize > 0 {
 			// Static array - perform bounds checking like Pascal
 			indexNum, err := strconv.Atoi(index)
-			if err != nil || indexNum < 1 || indexNum > current.ArraySize {
+			if err != nil {
+				panic(fmt.Sprintf("Invalid array index '%s'", index))
+			}
+			
+			// Special case: index 0 returns array size (TWX behavior)
+			if indexNum == 0 {
+				// Return a VarParam with the array size as its value
+				sizeVar := NewVarParam(fmt.Sprintf("%s[0]", current.Name), VarParamVariable)
+				sizeVar.Value = strconv.Itoa(current.ArraySize)
+				return sizeVar
+			}
+			
+			if indexNum < 1 || indexNum > current.ArraySize {
 				// Create error like Pascal: "Static array index 'X' is out of range (must be 1-Y)"
 				panic(fmt.Sprintf("Static array index '%s' is out of range (must be 1-%d)", index, current.ArraySize))
 			}
@@ -115,11 +127,11 @@ func (v *VarParam) SetArray(dimensions []int) {
 			v.Vars[indexStr] = subVar
 		}
 	} else {
-		// Single dimension - create variables initialized with "0" like Pascal
+		// Single dimension - create variables initialized with "0" for TWX/Pascal compatibility
 		for i := 1; i <= dimensions[0]; i++ {
 			indexStr := strconv.Itoa(i)
 			subVar := NewVarParam(fmt.Sprintf("%s[%s]", v.Name, indexStr), VarParamVariable)
-			subVar.Value = "0" // Pascal default initialization
+			subVar.Value = "0" // TWX/Pascal default initialization (zero)
 			v.Vars[indexStr] = subVar
 		}
 	}
@@ -160,9 +172,9 @@ func (v *VarParam) SetValue(value string) {
 	}
 }
 
-// IsArray returns true if this variable has array elements
+// IsArray returns true if this variable is an array (including empty arrays)
 func (v *VarParam) IsArray() bool {
-	return v != nil && len(v.Vars) > 0
+	return v != nil && (v.ArraySize >= 0 || len(v.Vars) > 0)
 }
 
 // GetArraySize returns the declared array size (-1 for dynamic)
@@ -282,11 +294,8 @@ func (v *VarParam) SetArrayElement(index string, value *VarParam) {
 		v.Vars = make(map[string]*VarParam)
 	}
 	
-	if value != nil {
-		// Update name to reflect new position
-		value.Name = fmt.Sprintf("%s[%s]", v.Name, index)
-	}
-	
+	// Don't change the value's name - it should keep its original name
+	// The indexing path is maintained by the parent-child relationship
 	v.Vars[index] = value
 }
 

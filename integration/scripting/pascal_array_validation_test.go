@@ -14,20 +14,20 @@ func TestArrayVariables_PascalCompatibility_RealIntegration(t *testing.T) {
 	script := `
 		# Test basic auto-vivification like Pascal TVarParam - use simpler approach
 		# Based on working syntax from completed Phase 1
-		SETARRAY sectors 10
-		SETVAR sectors[1] "123"
-		SETVAR sectors[5] "456"
+		SETARRAY $sectors 10
+		SETVAR $sectors[1] "123"
+		SETVAR $sectors[5] "456"
 		echo "Basic arrays work"
 		
-		# Test basic retrieval using GETVAR instead of direct access
-		GETVAR sectors[1] $result1
-		GETVAR sectors[5] $result5  
+		# Test basic retrieval using direct access (TWX style)
+		SETVAR $result1 $sectors[1]
+		SETVAR $result5 $sectors[5]
 		echo "Results: " $result1 " and " $result5
 		
 		# Test multi-dimensional - if supported
-		SETARRAY data[3][3] 
-		SETVAR data[1][2] "nested"
-		GETVAR data[1][2] $nested_result
+		SETARRAY $data 3 3 
+		SETVAR $data[1][2] "nested"
+		SETVAR $nested_result $data[1][2]
 		echo "Multi-dim: " $nested_result
 	`
 	
@@ -60,13 +60,13 @@ func TestArrayVariables_SetArrayBehavior_RealIntegration(t *testing.T) {
 	script := `
 		# Pascal SetArray creates elements with default "0" values
 		# This should create sectors[1], sectors[2], sectors[3] all with value "0"
-		setarray $sectors 3
+		setArray $sectors 3
 		echo "Array element 1: [" $sectors[1] "]"
 		echo "Array element 2: [" $sectors[2] "]" 
 		echo "Array element 3: [" $sectors[3] "]"
 		
 		# Test that we can override the default values
-		setvar $sectors[2] "modified"
+		setVar $sectors[2] "modified"
 		echo "Modified element 2: [" $sectors[2] "]"
 	`
 	
@@ -99,9 +99,9 @@ func TestArrayVariables_StaticArrayBounds_RealIntegration(t *testing.T) {
 	
 	// Test accessing within bounds (should work)
 	script1 := `
-		setarray $static_test 3
-		setvar $static_test[1] "valid"
-		setvar $static_test[3] "also_valid"
+		setArray $static_test 3
+		setVar $static_test[1] "valid"
+		setVar $static_test[3] "also_valid"
 		echo "Within bounds: " $static_test[1] " " $static_test[3]
 	`
 	
@@ -121,8 +121,8 @@ func TestArrayVariables_StaticArrayBounds_RealIntegration(t *testing.T) {
 	// Test accessing out of bounds (should error like Pascal)
 	tester2 := NewIntegrationScriptTester(t)
 	script2 := `
-		setarray $static_test 3
-		setvar $static_test[5] "out_of_bounds"
+		setArray $static_test 3
+		setVar $static_test[5] "out_of_bounds"
 		echo "Should not reach here"
 	`
 	
@@ -153,15 +153,15 @@ func TestArrayVariables_MultiParameterSetVar_RealIntegration(t *testing.T) {
 	script := `
 		# Pascal supports: setVar $result "part1" "part2" "part3"
 		# Should concatenate all parameters after the variable
-		setvar $message "Hello" " " "World" "!"
+		setVar $message "Hello" " " "World" "!"
 		echo "Concatenated: " $message
 		
 		# Test with array variables
-		setvar $sectors[1] "Sector" " " "123"
+		setVar $sectors[1] "Sector" " " "123"
 		echo "Array concat: " $sectors[1]
 		
 		# Test with mixed parameter types
-		setvar $mixed "Count: " 42 " items"
+		setVar $mixed "Count: " 42 " items"
 		echo "Mixed types: " $mixed
 	`
 	
@@ -193,13 +193,13 @@ func TestArrayVariables_PascalIndexing_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Pascal TWX uses 1-based indexing throughout
-		setarray $test 3
+		setArray $test 3
 		
 		# Elements should be created as test[1], test[2], test[3]
 		# NOT test[0], test[1], test[2]
-		setvar $test[1] "first"
-		setvar $test[2] "second" 
-		setvar $test[3] "third"
+		setVar $test[1] "first"
+		setVar $test[2] "second" 
+		setVar $test[3] "third"
 		
 		echo "1-based indexing: " $test[1] " " $test[2] " " $test[3]
 		
@@ -228,13 +228,13 @@ func TestArrayVariables_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		setvar $persistent[1] "saved_value_1"
-		setvar $persistent[2] "saved_value_2"
-		setarray $static_array 2
-		setvar $static_array[1] "static_saved"
-		savevar $persistent[1]
-		savevar $persistent[2] 
-		savevar $static_array[1]
+		setVar $persistent[1] "saved_value_1"
+		setVar $persistent[2] "saved_value_2"
+		setArray $static_array 2
+		setVar $static_array[1] "static_saved"
+		saveVar $persistent[1]
+		saveVar $persistent[2] 
+		saveVar $static_array[1]
 		echo "Saved arrays"
 	`
 	
@@ -247,9 +247,9 @@ func TestArrayVariables_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $persistent[1]
-		loadvar $persistent[2]
-		loadvar $static_array[1] 
+		loadVar $persistent[1]
+		loadVar $persistent[2]
+		loadVar $static_array[1] 
 		echo "Loaded dynamic: " $persistent[1] " " $persistent[2]
 		echo "Loaded static: " $static_array[1]
 	`

@@ -148,34 +148,48 @@ func (g *GameAdapter) GetDatabase() interface{} {
 
 // SaveScriptVariable implements GameInterface
 func (g *GameAdapter) SaveScriptVariable(name string, value *types.Value) error {
-	// Convert Value to appropriate interface{} type for database storage
-	var dbValue interface{}
+	// Like Pascal TWX, save individual variables with simple values
+	// Arrays are handled by saving each element separately with its full path
 	
 	switch value.Type {
 	case types.StringType:
-		dbValue = value.String
+		return g.db.SaveScriptVariable(name, value.String)
 	case types.NumberType:
-		dbValue = value.Number
+		return g.db.SaveScriptVariable(name, value.Number)
 	case types.ArrayType:
-		// For arrays, serialize to string (simplified implementation)
-		dbValue = fmt.Sprintf("array[%d]", len(value.Array))
+		// For arrays, save each element individually with its full path
+		// This matches Pascal TWX behavior where each TVarParam is stored separately
+		for index, element := range value.Array {
+			elementName := name + "[" + index + "]"
+			if err := g.SaveScriptVariable(elementName, element); err != nil {
+				return err
+			}
+		}
+		// Save array metadata (size) separately if needed
+		if value.ArraySize > 0 {
+			return g.db.SaveScriptVariable(name+"[ARRAYSIZE]", value.ArraySize)
+		}
+		return nil
 	default:
-		dbValue = value.ToString()
+		return g.db.SaveScriptVariable(name, value.ToString())
 	}
-	
-	return g.db.SaveScriptVariable(name, dbValue)
 }
 
 // LoadScriptVariable implements GameInterface
 func (g *GameAdapter) LoadScriptVariable(name string) (*types.Value, error) {
+	// Like Pascal TWX, load individual variables with simple values
+	// Arrays are handled by loading individual elements by their full path
+	
 	dbValue, err := g.db.LoadScriptVariable(name)
 	if err != nil {
 		return nil, err
 	}
 	
-	// Convert database value back to Value type
+	// Convert database value back to Value type (simple values only)
 	switch v := dbValue.(type) {
 	case string:
+		// Check if this was stored as an array element - if so, just return the clean value
+		// The key insight: array elements are stored individually, no special processing needed
 		return &types.Value{
 			Type:   types.StringType,
 			String: v,

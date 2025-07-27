@@ -2,6 +2,7 @@ package vm
 
 import (
 	"fmt"
+	"strings"
 	"time"
 	"twist/internal/database"
 	"twist/internal/scripting/constants"
@@ -48,7 +49,7 @@ func NewVirtualMachine(gameInterface types.GameInterface) *VirtualMachine {
 	vm := &VirtualMachine{
 		state:         NewVMState(),
 		callStack:     NewCallStack(),
-		variables:     NewVariableManager(),
+		variables:     NewVariableManager(gameInterface),
 		commands:      make(map[string]*types.CommandDef),
 		triggers:      make(map[string]types.TriggerInterface),
 		gameInterface: gameInterface,
@@ -85,6 +86,15 @@ func (vm *VirtualMachine) LoadScript(ast *parser.ASTNode, script types.ScriptInt
 	vm.script = script
 	vm.state.SetRunning()
 	vm.state.Position = 0
+	
+	// Restore call stack from database if script is provided
+	if script != nil {
+		if err := vm.restoreCallStack(script.GetID()); err != nil {
+			// Log error but don't fail - just start with empty call stack
+			fmt.Printf("Warning: failed to restore call stack for script %s: %v\n", script.GetID(), err)
+		}
+	}
+	
 	return nil
 }
 
@@ -147,6 +157,15 @@ func (vm *VirtualMachine) Gosub(label string) error {
 	frame := NewStackFrame(label, vm.state.Position, vm.state.Position+1)
 	vm.callStack.Push(frame)
 	vm.state.SetJumpTarget(label)
+	
+	// Save call stack to database for persistence across VM instances
+	if vm.script != nil {
+		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
+			// Log error but don't fail the GOSUB
+			fmt.Printf("Warning: failed to save call stack for script %s: %v\n", vm.script.GetID(), err)
+		}
+	}
+	
 	return nil
 }
 
@@ -157,6 +176,15 @@ func (vm *VirtualMachine) Return() error {
 	}
 	// Set position to ReturnAddr - 1 because the execution loop will increment it
 	vm.state.Position = frame.ReturnAddr - 1
+	
+	// Save updated call stack to database for persistence across VM instances
+	if vm.script != nil {
+		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
+			// Log error but don't fail the RETURN
+			fmt.Printf("Warning: failed to save call stack for script %s: %v\n", vm.script.GetID(), err)
+		}
+	}
+	
 	return nil
 }
 
@@ -295,10 +323,13 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 		return err
 	}
 	
-	// Check if we're waiting for specific text
+	// Check if we're waiting for specific text (like TWX WaitFor)
 	if vm.state.IsWaiting() && vm.state.WaitText != "" {
-		if text == vm.state.WaitText {
+		// Use substring matching like TWX does with Pos(FWaitText, Text) > 0
+		if strings.Contains(text, vm.state.WaitText) {
 			vm.state.ClearWait()
+			// Resume execution - the position was already advanced by ExecuteStep
+			return vm.Execute()
 		}
 	}
 	
@@ -310,6 +341,11 @@ func (vm *VirtualMachine) Error(message string) error {
 	vm.state.SetError(message)
 	vm.lastError = &types.VMError{Message: message}
 	return vm.lastError
+}
+
+// IsWaiting returns true if the VM is currently waiting for input (for testing)
+func (vm *VirtualMachine) IsWaiting() bool {
+	return vm.state.IsWaiting()
 }
 
 // Processing filters (for testing compatibility)
@@ -334,4 +370,92 @@ func (vm *VirtualMachine) registerCommand(name string, minParams, maxParams int,
 		ParamTypes: paramTypes,
 		Handler:    handler,
 	}
+}
+
+// Call stack persistence methods for TWX compatibility
+func (vm *VirtualMachine) saveCallStack(scriptID string) error {
+	if vm.gameInterface == nil {
+		return nil // No database available
+	}
+	
+	db := vm.gameInterface.GetDatabase()
+	if db == nil {
+		return nil // No database available
+	}
+	
+	dbInterface, ok := db.(database.Database)
+	if !ok {
+		return nil // Not the right database interface
+	}
+	
+	// Clear existing call stack for this script
+	deleteQuery := `DELETE FROM script_call_stack WHERE script_id = ?;`
+	if _, err := dbInterface.GetDB().Exec(deleteQuery, scriptID); err != nil {
+		return fmt.Errorf("failed to clear call stack: %w", err)
+	}
+	
+	// Save current call stack frames
+	frames := vm.callStack.GetFrames()
+	if len(frames) == 0 {
+		return nil // Nothing to save
+	}
+	
+	insertQuery := `
+	INSERT INTO script_call_stack (script_id, frame_index, label, position, return_addr)
+	VALUES (?, ?, ?, ?, ?);`
+	
+	for i, frame := range frames {
+		_, err := dbInterface.GetDB().Exec(insertQuery, scriptID, i, frame.Label, frame.Position, frame.ReturnAddr)
+		if err != nil {
+			return fmt.Errorf("failed to save call stack frame %d: %w", i, err)
+		}
+	}
+	
+	return nil
+}
+
+func (vm *VirtualMachine) restoreCallStack(scriptID string) error {
+	if vm.gameInterface == nil {
+		return nil // No database available
+	}
+	
+	db := vm.gameInterface.GetDatabase()
+	if db == nil {
+		return nil // No database available
+	}
+	
+	dbInterface, ok := db.(database.Database)
+	if !ok {
+		return nil // Not the right database interface
+	}
+	
+	// Clear current call stack
+	vm.callStack.Clear()
+	
+	// Load call stack frames from database, ordered by frame_index
+	query := `
+	SELECT label, position, return_addr
+	FROM script_call_stack
+	WHERE script_id = ?
+	ORDER BY frame_index;`
+	
+	rows, err := dbInterface.GetDB().Query(query, scriptID)
+	if err != nil {
+		return fmt.Errorf("failed to query call stack: %w", err)
+	}
+	defer rows.Close()
+	
+	for rows.Next() {
+		var label string
+		var position, returnAddr int
+		
+		if err := rows.Scan(&label, &position, &returnAddr); err != nil {
+			return fmt.Errorf("failed to scan call stack frame: %w", err)
+		}
+		
+		frame := NewStackFrame(label, position, returnAddr)
+		vm.callStack.Push(frame)
+	}
+	
+	return rows.Err()
 }

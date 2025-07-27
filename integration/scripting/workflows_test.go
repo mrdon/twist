@@ -15,31 +15,36 @@ func TestComprehensiveWorkflow_RealIntegration(t *testing.T) {
 # Testing core functionality
 
 # Test variables and basic assignment
-$name := "TWX Test"
-$number := 42
-$result := ""
+setVar $name "TWX Test"
+setVar $number 42
+setVar $result ""
 
 echo "Testing basic assignment and concatenation"
 echo "Name: " $name
 echo "Number: " $number
 
 # Test arrays
-array $test_array 5
-setarrayelement $test_array 0 "First"
-setarrayelement $test_array 1 "Second"
-setarrayelement $test_array 2 "Third"
+SETARRAY $test_array 5
+setVar $test_array[1] "First"  
+setVar $test_array[2] "Second"
+setVar $test_array[3] "Third"
 
-getarrayelement $test_array 1 $result
+setVar $result $test_array[2]
 echo "Array element 1: " $result
 
-arraysize $test_array $size
+# Array size is stored in element 0 in TWX
+setVar $size $test_array[0]
 echo "Array size: " $size
 
 # Test math operations
-add 10 20 $sum
-subtract 50 15 $diff
-multiply 6 7 $product
-divide 100 4 $quotient
+setVar $sum 10
+add $sum 20
+setVar $diff 50
+subtract $diff 15
+setVar $product 6
+multiply $product 7
+setVar $quotient 100
+divide $quotient 4
 
 echo "Math results:"
 echo "10 + 20 = " $sum
@@ -82,7 +87,7 @@ echo "Starting game automation..."
 send "look"
 
 # Move to a specific sector
-$target_sector := 100
+setVar $target_sector 100
 echo "Moving to sector " $target_sector
 send "m " $target_sector
 
@@ -91,12 +96,12 @@ echo "Checking port status"
 send "p"
 
 # Use arrays to track inventory
-array $inventory 3
-setarrayelement $inventory 0 "Fuel Ore"
-setarrayelement $inventory 1 "Organics" 
-setarrayelement $inventory 2 "Equipment"
+SETARRAY $inventory 3
+setVar $inventory[1] "Fuel Ore"
+setVar $inventory[2] "Organics"
+setVar $inventory[3] "Equipment"
 
-getarrayelement $inventory 0 $item
+setVar $item $inventory[1]
 echo "First inventory item: " $item
 
 echo "Script completed successfully"
@@ -122,23 +127,25 @@ func TestMathAndLogicWorkflow_RealIntegration(t *testing.T) {
 	
 	script := `
 # Test complex mathematical operations and logic
-$base := 10
-$multiplier := 3
-$bonus := 5
+setVar $base 10
+setVar $multiplier 3
+setVar $bonus 5
 
 # Calculate compound value
-multiply $base $multiplier $temp1
-add $temp1 $bonus $final_value
+setVar $temp1 $base
+multiply $temp1 $multiplier
+setVar $final_value $temp1
+add $final_value $bonus
 
 echo "Calculation result: " $final_value
 
 # Test loop with calculation
-$i := 1
-$factorial := 1
+setVar $i 1
+setVar $factorial 1
 while $i <= 4
-  multiply $factorial $i $factorial
+  multiply $factorial $i
   echo "Factorial step " $i ": " $factorial
-  add $i 1 $i
+  add $i 1
 end
 
 echo "Final factorial: " $factorial
@@ -165,13 +172,13 @@ func TestStringProcessingWorkflow_RealIntegration(t *testing.T) {
 	
 	script := `
 # Test complex string processing
-$input := "Hello World Test"
-$processed := ""
+setVar $input "Hello World Test"
+setVar $processed ""
 
 # Get each word
-getword $input $word1 1
-getword $input $word2 2  
-getword $input $word3 3
+getWord $input $word1 1
+getWord $input $word2 2  
+getWord $input $word3 3
 
 echo "Words: " $word1 " | " $word2 " | " $word3
 
@@ -203,34 +210,41 @@ func TestArrayWorkflow_RealIntegration(t *testing.T) {
 echo "Creating and populating arrays..."
 
 # Create multiple arrays
-array $names 3
-array $scores 3
+SETARRAY $names 3
+SETARRAY $scores 3
 
 # Populate arrays
-setarrayelement $names 0 "Alice"
-setarrayelement $names 1 "Bob"
-setarrayelement $names 2 "Charlie"
+setVar $names[1] "Alice"
+setVar $names[2] "Bob"
+setVar $names[3] "Charlie"
 
-setarrayelement $scores 0 "95"
-setarrayelement $scores 1 "87"
-setarrayelement $scores 2 "92"
+setVar $scores[1] "95"
+setVar $scores[2] "87"
+setVar $scores[3] "92"
 
-# Process arrays with loop
-$index := 0
-while $index < 3
-  getarrayelement $names $index $name
-  getarrayelement $scores $index $score
-  echo "Student " $name " scored " $score
-  add $index 1 $index
-end
+# Access individual elements
+setVar $name $names[1]
+setVar $score $scores[1]
+echo "Student " $name " scored " $score
+
+setVar $name $names[2]
+setVar $score $scores[2]
+echo "Student " $name " scored " $score
+
+setVar $name $names[3]
+setVar $score $scores[3]
+echo "Student " $name " scored " $score
 
 # Calculate average (simplified)
-getarrayelement $scores 0 $s1
-getarrayelement $scores 1 $s2
-getarrayelement $scores 2 $s3
-add $s1 $s2 $temp
-add $temp $s3 $total
-divide $total 3 $average
+setVar $s1 $scores[1]
+setVar $s2 $scores[2]
+setVar $s3 $scores[3]
+setVar $temp $s1
+add $temp $s2
+setVar $total $temp
+add $total $s3
+setVar $average $total
+divide $average 3
 int $average $average
 
 echo "Average score: " $average
@@ -256,8 +270,8 @@ func TestErrorHandlingWorkflow_RealIntegration(t *testing.T) {
 	
 	// Test script with array bounds error
 	script := `
-array $test 2
-setarrayelement $test 5 "Out of bounds"
+SETARRAY $test 2
+setVar $test[5] "Out of bounds"
 echo "This should not execute"
 `
 	

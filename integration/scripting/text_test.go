@@ -34,7 +34,7 @@ func TestEchoCommand_MultipleParameters_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$test_var := "Variable"
+		setVar $test_var "Variable"
 		echo "Hello " $test_var " World!"
 	`
 	
@@ -80,7 +80,7 @@ func TestClientMessageCommand_WithVariable_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$msg_var := "Variable message"
+		setVar $msg_var "Variable message"
 		clientmessage $msg_var
 	`
 	
@@ -126,8 +126,8 @@ func TestTextCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$message := "Persistent message"
-		savevar $message
+		setVar $message "Persistent message"
+		saveVar $message
 		echo "Saved: " $message
 	`
 	
@@ -140,7 +140,7 @@ func TestTextCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $message
+		loadVar $message
 		echo "Loaded: " $message
 	`
 	
@@ -164,7 +164,7 @@ func TestTextCommands_NumberToStringConversion_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$num_var := 42.5
+		setVar $num_var 42.5
 		echo "Number: " $num_var
 	`
 	
@@ -188,8 +188,8 @@ func TestTextCommands_EmptyAndSpecialCharacters_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$empty := ""
-		$special := "Line1\nLine2\tTabbed"
+		setVar $empty ""
+		setVar $special "Line1\nLine2\tTabbed"
 		echo "Empty: [" $empty "]"
 		echo "Special: " $special
 	`
@@ -217,9 +217,9 @@ func TestTextCommands_VariableInterpolation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$name := "World"
-		$greeting := "Hello"
-		$punctuation := "!"
+		setVar $name "World"
+		setVar $greeting "Hello"
+		setVar $punctuation "!"
 		echo $greeting " " $name $punctuation
 	`
 	
@@ -243,8 +243,8 @@ func TestCutTextCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$source := "Command [TL=00:10:05]:"
-		cuttext $source $result 1 7
+		setVar $source "Command [TL=00:10:05]:"
+		cutText $source $result 1 7
 		echo "Cut result: " $result
 	`
 	
@@ -268,9 +268,9 @@ func TestCutTextCommand_EdgeCases_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$source := "Short"
-		cuttext $source $result1 1 10
-		cuttext $source $result3 3 2
+		setVar $source "Short"
+		cutText $source $result1 1 10
+		cutText $source $result3 3 2
 		echo "Long cut: [" $result1 "]"
 		echo "Mid cut: [" $result3 "]"
 	`
@@ -302,8 +302,8 @@ func TestCutTextCommand_ErrorHandling_RealIntegration(t *testing.T) {
 	
 	// Test case where start position is beyond end of line (should error like Pascal)
 	script := `
-		$source := "Short"
-		cuttext $source $result 10 5
+		setVar $source "Short"
+		cutText $source $result 10 5
 		echo "Should not reach here"
 	`
 	
@@ -329,10 +329,10 @@ func TestCutTextCommand_BoundaryConditions_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$source := "Test"
-		cuttext $source $result1 1 0
-		cuttext $source $result2 4 1
-		cuttext $source $result3 1 4
+		setVar $source "Test"
+		cutText $source $result1 1 0
+		cutText $source $result2 4 1
+		cutText $source $result3 1 4
 		echo "Zero length: [" $result1 "]"
 		echo "Last char: [" $result2 "]"
 		echo "Exact length: [" $result3 "]"
@@ -365,10 +365,10 @@ func TestGetWordCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$line := "Sector 123 Density: 45 Warps: 3"
-		getword $line $sector 2
-		getword $line $density 4
-		getword $line $warps 6
+		setVar $line "Sector 123 Density: 45 Warps: 3"
+		getWord $line $sector 2
+		getWord $line $density 4
+		getWord $line $warps 6
 		echo "Sector: " $sector
 		echo "Density: " $density  
 		echo "Warps: " $warps
@@ -401,10 +401,10 @@ func TestGetWordCommand_EdgeCases_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$line := "One Two Three"
-		getword $line $first 1
-		getword $line $beyond 5
-		getword $line $zero 0
+		setVar $line "One Two Three"
+		getWord $line $first 1
+		getWord $line $beyond 5
+		getWord $line $zero 0
 		echo "First: [" $first "]"
 		echo "Beyond: [" $beyond "]"
 		echo "Zero: [" $zero "]"
@@ -437,11 +437,11 @@ func TestGetWordCommand_DefaultParameter_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$line := "Alpha Beta"
-		getword $line $exists 1
-		getword $line $missing 5 "DefaultValue"
-		getword $line $missing_no_default 6
-		getword $line $custom_default 10 "CUSTOM"
+		setVar $line "Alpha Beta"
+		getWord $line $exists 1
+		getWord $line $missing 5 "DefaultValue"
+		getWord $line $missing_no_default 6
+		getWord $line $custom_default 10 "CUSTOM"
 		echo "Exists: [" $exists "]"
 		echo "Missing with default: [" $missing "]"
 		echo "Missing no default: [" $missing_no_default "]"
@@ -476,9 +476,9 @@ func TestGetWordCommand_EmptyString_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$empty := ""
-		getword $empty $result1 1
-		getword $empty $result2 1 "EmptyDefault"
+		setVar $empty ""
+		getWord $empty $result1 1
+		getWord $empty $result2 1 "EmptyDefault"
 		echo "Empty string word 1: [" $result1 "]"
 		echo "Empty string with default: [" $result2 "]"
 	`
@@ -509,7 +509,7 @@ func TestStripTextCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$line := "Sector (123) has density"
+		setVar $line "Sector (123) has density"
 		echo "Before: " $line
 		striptext $line "("
 		echo "After (: " $line
@@ -547,7 +547,7 @@ func TestStripTextCommand_EmptyAndNonExistent_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$line := "Hello World"
+		setVar $line "Hello World"
 		striptext $line ""
 		echo "After empty strip: " $line
 		striptext $line "xyz"
@@ -583,20 +583,20 @@ func TestTWXTextProcessing_TradingScriptScenario_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$currentline := "Command [TL=00:10:05]:"
-		cuttext $currentline $location 1 7
+		setVar $currentline "Command [TL=00:10:05]:"
+		cutText $currentline $location 1 7
 		echo "Location: " $location
 		
-		$scanline := "LongRange Scan : Holographic Scanner"
-		getword $scanline $scantype 4
+		setVar $scanline "LongRange Scan : Holographic Scanner"
+		getWord $scanline $scantype 4
 		echo "Scanner Type: " $scantype
 		
-		$densityline := "Sector 123 : 45 density, 3 warps"
+		setVar $densityline "Sector 123 : 45 density, 3 warps"
 		striptext $densityline ":"
 		striptext $densityline ","
 		echo "Cleaned line: " $densityline
-		getword $densityline $sector 2
-		getword $densityline $density 3
+		getWord $densityline $sector 2
+		getWord $densityline $density 3
 		echo "Parsed - Sector: " $sector " Density: " $density
 	`
 	
@@ -629,14 +629,14 @@ func TestTWXTextProcessing_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$gameoutput := "Sector 456 : 78 density, 2 warps"
-		cuttext $gameoutput $sector_part 1 10
-		getword $gameoutput $sector_num 2
+		setVar $gameoutput "Sector 456 : 78 density, 2 warps"
+		cutText $gameoutput $sector_part 1 10
+		getWord $gameoutput $sector_num 2
 		striptext $gameoutput ":"
-		getword $gameoutput $density_val 3
-		savevar $sector_part
-		savevar $sector_num
-		savevar $density_val
+		getWord $gameoutput $density_val 3
+		saveVar $sector_part
+		saveVar $sector_num
+		saveVar $density_val
 		echo "Processed and saved"
 	`
 	
@@ -649,9 +649,9 @@ func TestTWXTextProcessing_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $sector_part
-		loadvar $sector_num
-		loadvar $density_val
+		loadVar $sector_part
+		loadVar $sector_num
+		loadVar $density_val
 		echo "Loaded sector part: " $sector_part
 		echo "Loaded sector number: " $sector_num
 		echo "Loaded density: " $density_val
@@ -675,6 +675,201 @@ func TestTWXTextProcessing_DatabasePersistence_RealIntegration(t *testing.T) {
 	for i, expected := range expectedOutputs {
 		if i < len(result2.Output) && result2.Output[i] != expected {
 			t.Errorf("Database persistence %d: got %q, want %q", i+1, result2.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXStringManipulation_GetWord tests TWX getWord function
+func TestTWXStringManipulation_GetWord_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test TWX string manipulation functions
+		setVar $text "Hello World 123"
+		
+		# Get word from string
+		getWord $text $word1 1
+		getWord $text $word2 2
+		getWord $text $word3 3
+		
+		echo "Word 1: " $word1
+		echo "Word 2: " $word2
+		echo "Word 3: " $word3
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX getWord script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Word 1: Hello",
+		"Word 2: World",
+		"Word 3: 123",
+	}
+
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("TWX getWord output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXStringManipulation_CutText tests TWX cutText function
+func TestTWXStringManipulation_CutText_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		setVar $text "Hello World 123"
+		
+		# Cut text
+		cutText $text $substring 1 5
+		echo "Substring: " $substring
+		
+		# Get length
+		getLength $text $length
+		echo "Length: " $length
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX cutText script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Substring: Hello", // Characters 1-5
+		"Length: 15",       // Length of "Hello World 123"
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("TWX cutText output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXStringManipulation_StripText tests TWX stripText function
+func TestTWXStringManipulation_StripText_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Strip text
+		setVar $textWithSpaces "  Hello  "  
+		stripText $textWithSpaces " "
+		echo "Stripped: [" $textWithSpaces "]"
+		
+		# Strip multiple characters
+		setVar $textWithPunc "Hello, World!"
+		stripText $textWithPunc ","
+		stripText $textWithPunc "!"
+		echo "No punctuation: " $textWithPunc
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX stripText script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Stripped: [Hello]", // Spaces stripped
+		"No punctuation: Hello World", // Punctuation stripped
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("TWX stripText output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXTextMerging_MergeText tests mergeText function
+func TestTWXTextMerging_MergeText_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test TWX mergeText function
+		setVar $base "Hello"
+		setVar $suffix "World"
+		mergeText $base $suffix $result
+		
+		echo "Merged: " $result
+		
+		# Test with numbers
+		setVar $prefix "Sector "
+		setVar $number 1234
+		mergeText $prefix $number $sector_text
+		echo "Sector text: " $sector_text
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX mergeText script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Merged: HelloWorld",
+		"Sector text: Sector 1234",
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("TWX mergeText output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXStringManipulation_CURRENTLINESimulation tests CURRENTLINE simulation
+func TestTWXStringManipulation_CURRENTLINESimulation_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test mock game state commands
+		setVar $currentSector 1234
+		echo "Current sector: " $currentSector
+		
+		# Test CURRENTLINE simulation
+		setVar $CURRENTLINE "Sector  : 1234  Density: 100"
+		cutText $CURRENTLINE $location 1 6
+		echo "Location: " $location
+		
+		getWord $CURRENTLINE $sector 3
+		echo "Parsed sector: " $sector
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX CURRENTLINE script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Current sector: 1234",
+		"Location: Sector",
+		"Parsed sector: 1234",
+	}
+
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("TWX CURRENTLINE output %d: got %q, want %q", i+1, result.Output[i], expected)
 		}
 	}
 }

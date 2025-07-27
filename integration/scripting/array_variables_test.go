@@ -353,3 +353,216 @@ func TestEmptyArrayElements(t *testing.T) {
 		t.Errorf("Non-existent element: expected empty string, got %q", nonExistent.ToString())
 	}
 }
+
+// TestTWXArrayOperations_SetArray tests TWX setArray syntax
+func TestTWXArrayOperations_SetArray_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test TWX array operations
+		setArray $testArray 10
+		
+		# Set some array values
+		setVar $testArray[1] "First"
+		setVar $testArray[2] "Second"
+		setVar $testArray[5] "Fifth"
+		
+		# Read array values
+		echo "Array[1]: " $testArray[1]
+		echo "Array[2]: " $testArray[2]
+		echo "Array[5]: " $testArray[5]
+		echo "Array[3]: [" $testArray[3] "]"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX array script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Array[1]: First",
+		"Array[2]: Second", 
+		"Array[5]: Fifth",
+		"Array[3]: [0]", // Unset array element has Pascal default initialization
+	}
+
+	if len(result.Output) != 4 {
+		t.Errorf("Expected 4 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Array output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXArrayOperations_RealWorldPattern tests pattern from real TWX scripts
+func TestTWXArrayOperations_RealWorldPattern_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test pattern similar to 1_Trade.ts
+		setArray $warp 6
+		setArray $density 6
+		setArray $weight 6
+		
+		# Initialize arrays like the trading script
+		setVar $i 1
+		:clearNext
+		setVar $warp[$i] 0
+		setVar $density[$i] "-1"
+		setVar $weight[$i] 9999
+		if ($i = 3)
+			goto arraysCleared
+		else
+			add $i 1
+			goto clearNext
+		end
+		:arraysCleared
+		
+		# Set some values
+		setVar $warp[1] 123
+		setVar $density[1] 45
+		setVar $weight[1] 100
+		
+		setVar $warp[2] 456
+		setVar $density[2] 67
+		setVar $weight[2] 50
+		
+		# Find best warp (lowest weight)
+		setVar $bestWarp 1
+		if ($weight[2] < $weight[1])
+			setVar $bestWarp 2
+		end
+		
+		echo "Best warp sector: " $warp[$bestWarp]
+		echo "Best weight: " $weight[$bestWarp]
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX real-world array pattern script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Best warp sector: 456", // warp[2] has lower weight (50 < 100)
+		"Best weight: 50",
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Real-world pattern output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXArrayOperations_LargeArrays tests arrays with large indices
+func TestTWXArrayOperations_LargeArrays_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test large arrays like SECTORS in real TWX
+		setArray $sectors 5000
+		
+		# Set some high-index values
+		setVar $sectors[1] "StardockAlpha"
+		setVar $sectors[100] "Sol"
+		setVar $sectors[1000] "Rigel"
+		setVar $sectors[4999] "EdgeOfSpace"
+		
+		echo "Sector 1: " $sectors[1]
+		echo "Sector 100: " $sectors[100]
+		echo "Sector 1000: " $sectors[1000]
+		echo "Sector 4999: " $sectors[4999]
+		echo "Unset sector: [" $sectors[2500] "]"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX large array script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Sector 1: StardockAlpha",
+		"Sector 100: Sol",
+		"Sector 1000: Rigel",
+		"Sector 4999: EdgeOfSpace",
+		"Unset sector: [0]",
+	}
+
+	if len(result.Output) != 5 {
+		t.Errorf("Expected 5 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("Large array output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXArrayOperations_WithPersistence tests arrays with database persistence
+func TestTWXArrayOperations_WithPersistence_RealIntegration(t *testing.T) {
+	// First instance: Set up arrays
+	tester1 := NewIntegrationScriptTester(t)
+
+	script1 := `
+		setArray $gameState 10
+		
+		setVar $gameState[1] "PlayerLevel5"
+		setVar $gameState[2] "Credits1000"
+		setVar $gameState[3] "Sector123"
+		
+		saveVar $gameState[1]
+		saveVar $gameState[2]
+		saveVar $gameState[3]
+		
+		echo "Saved game state"
+	`
+
+	result1 := tester1.ExecuteScript(script1)
+	if result1.Error != nil {
+		t.Fatalf("TWX array persistence save script failed: %v", result1.Error)
+	}
+
+	// Second instance: Load arrays
+	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
+
+	script2 := `
+		setArray $gameState 10
+		
+		loadVar $gameState[1]
+		loadVar $gameState[2]
+		loadVar $gameState[3]
+		
+		echo "Player: " $gameState[1]
+		echo "Money: " $gameState[2]
+		echo "Location: " $gameState[3]
+	`
+
+	result2 := tester2.ExecuteScript(script2)
+	if result2.Error != nil {
+		t.Fatalf("TWX array persistence load script failed: %v", result2.Error)
+	}
+
+	expectedOutputs := []string{
+		"Player: PlayerLevel5",
+		"Money: Credits1000",
+		"Location: Sector123",
+	}
+
+	if len(result2.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result2.Output), result2.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result2.Output) && result2.Output[i] != expected {
+			t.Errorf("Array persistence output %d: got %q, want %q", i+1, result2.Output[i], expected)
+		}
+	}
+}

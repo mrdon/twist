@@ -15,9 +15,9 @@ func TestTWXLoginSequence_RealIntegration(t *testing.T) {
 echo "Starting login sequence..."
 
 # Set up variables like real TWX scripts
-setvar $loginName "TestUser"
-setvar $password "TestPass123"
-setvar $game "A"
+setVar $loginName "TestUser"
+setVar $password "TestPass123"
+setVar $game "A"
 
 # Simulate login steps
 echo "Waiting for login prompt..."
@@ -62,8 +62,8 @@ func TestSectorNavigation_RealIntegration(t *testing.T) {
 echo "Starting sector navigation..."
 
 # Set destination
-setvar $targetSector 1500
-setvar $currentSector 1000
+setVar $targetSector 1500
+setVar $currentSector 1000
 
 echo "Current sector: " $currentSector
 echo "Target sector: " $targetSector
@@ -105,26 +105,27 @@ func TestPortTrading_RealIntegration(t *testing.T) {
 echo "Checking port status..."
 
 # Set up product tracking arrays like real scripts
-array $products 3
-setarrayelement $products 0 "Fuel Ore"
-setarrayelement $products 1 "Organics"
-setarrayelement $products 2 "Equipment"
+SETARRAY $products 3
+setVar $products[1] "Fuel Ore"
+setVar $products[2] "Organics"
+setVar $products[3] "Equipment"
 
 # Set up prices array
-array $prices 3
-setarrayelement $prices 0 "10"
-setarrayelement $prices 1 "15"
-setarrayelement $prices 2 "25"
+SETARRAY $prices 3
+setVar $prices[1] "10"
+setVar $prices[2] "15"
+setVar $prices[3] "25"
 
 # Check each product
-$i := 0
-while $i < 3
-  getarrayelement $products $i $product
-  getarrayelement $prices $i $price
+setVar $i 1
+while $i <= 3
+  setVar $product $products[$i]
+  setVar $price $prices[$i]
   echo "Product: " $product " Price: " $price
   
   # Simulate buying logic - convert price to number for comparison
-  add $price 0 $priceNum
+  setVar $priceNum $price
+  add $priceNum 0
   if $priceNum < 20
     echo "Buying " $product " at good price: " $price
     send "b"
@@ -133,7 +134,7 @@ while $i < 3
     echo "Price too high for " $product
   end
   
-  add $i 1 $i
+  add $i 1
 end
 
 echo "Trading analysis complete"
@@ -161,15 +162,15 @@ func TestStringProcessing_RealIntegration(t *testing.T) {
 echo "Processing game text..."
 
 # Simulate parsing game output
-$currentLine := "Sector  : 1500     Warps to Sectors : 1499, 1501"
+setVar $currentLine "Sector  : 1500     Warps to Sectors : 1499, 1501"
 echo "Parsing line: " $currentLine
 
 # Extract sector number (word 3)
-getword $currentLine $sector 3
+getWord $currentLine $sector 3
 echo "Current sector: " $sector
 
 # Extract warp information  
-cuttext $currentLine $warpText 20 25
+cutText $currentLine $warpText 20 5
 echo "Warp text: " $warpText
 
 # Validate results
@@ -204,44 +205,45 @@ func TestWeightingSystem_RealIntegration(t *testing.T) {
 echo "Calculating sector weights..."
 
 # Set up sector data arrays
-array $sectors 3
-array $densities 3
-array $weights 3
+SETARRAY $sectors 3
+SETARRAY $densities 3
+SETARRAY $weights 3
 
-setarrayelement $sectors 0 "1000"
-setarrayelement $sectors 1 "1001" 
-setarrayelement $sectors 2 "1002"
+setVar $sectors[1] "1000"
+setVar $sectors[2] "1001" 
+setVar $sectors[3] "1002"
 
-setarrayelement $densities 0 "100"
-setarrayelement $densities 1 "50"
-setarrayelement $densities 2 "0"
+setVar $densities[1] "100"
+setVar $densities[2] "50"
+setVar $densities[3] "0"
 
 # Calculate weights based on density
-$i := 0
-while $i < 3
-  getarrayelement $densities $i $density
-  $weight := 0
+setVar $i 1
+while $i <= 3
+  setVar $density $densities[$i]
+  setVar $weight 0
   
   # Convert to number for calculation
-  add $density 0 $densityNum
+  setVar $densityNum $density
+  add $densityNum 0
   
   # Bad density adds weight (avoid) - density between 1-99 is bad
   if $densityNum > 0
     if $densityNum < 100
-      add $weight 100 $weight
-      add $weight $densityNum $weight
+      add $weight 100
+      add $weight $densityNum
     end
   end
   
   # Add small randomness (simplified)
-  add $weight 5 $weight
+  add $weight 5
   
-  setarrayelement $weights $i $weight
+  setVar $weights[$i] $weight
   
-  getarrayelement $sectors $i $sector
+  setVar $sector $sectors[$i]
   echo "Sector " $sector " density " $density " weight " $weight
   
-  add $i 1 $i
+  add $i 1
 end
 
 echo "Weight calculation completed"

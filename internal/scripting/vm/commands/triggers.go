@@ -72,15 +72,9 @@ func cmdSetTextTrigger(vm types.VMInterface, params []*types.CommandParam) error
 	label := GetParamString(vm, params[1])
 	pattern := GetParamString(vm, params[2])
 
-	if id == "" {
-		return vm.Error("SETTEXTTRIGGER requires a non-empty trigger ID")
-	}
-	if label == "" {
-		return vm.Error("SETTEXTTRIGGER requires a non-empty label")
-	}
-	if pattern == "" {
-		return vm.Error("SETTEXTTRIGGER requires a non-empty pattern")
-	}
+	// Empty trigger IDs are valid in TWX Pascal implementation
+	// Empty trigger labels are valid in TWX Pascal implementation (will cause runtime errors if executed)
+	// Empty patterns are valid in TWX - they match any text
 
 	// Create TextTrigger with Pascal-compatible behavior
 	trigger := &types.TextTrigger{

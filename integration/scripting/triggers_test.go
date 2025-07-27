@@ -12,7 +12,7 @@ func TestSetTextTrigger_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'Text trigger fired'" "health"
+		setTextTrigger 1 "echo 'Text trigger fired'" "health"
 		echo "Trigger set"
 	`
 	
@@ -47,8 +47,8 @@ func TestSetTextTrigger_PatternMatching_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'Enemy found'" "orc"
-		settexttrigger 2 "echo 'Treasure found'" "gold"
+		setTextTrigger 1 "echo 'Enemy found'" "orc"
+		setTextTrigger 2 "echo 'Treasure found'" "gold"
 		echo "Triggers configured"
 	`
 	
@@ -155,9 +155,9 @@ func TestKillTrigger_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'This should not fire'" "test"
+		setTextTrigger 1 "echo 'This should not fire'" "test"
 		echo "Trigger set"
-		killtrigger 1
+		killTrigger 1
 		echo "Trigger killed"
 	`
 	
@@ -187,9 +187,9 @@ func TestTriggers_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		settexttrigger 1 "echo 'Persistent trigger fired'" "magic"
-		$trigger_pattern := "magic"
-		savevar $trigger_pattern
+		setTextTrigger 1 "echo 'Persistent trigger fired'" "magic"
+		setVar $trigger_pattern "magic"
+		saveVar $trigger_pattern
 		echo "Persistent trigger configured"
 	`
 	
@@ -202,9 +202,9 @@ func TestTriggers_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $trigger_pattern
+		loadVar $trigger_pattern
 		echo "Loaded trigger pattern: " $trigger_pattern
-		settexttrigger 2 "echo 'New instance trigger'" $trigger_pattern
+		setTextTrigger 2 "echo 'New instance trigger'" $trigger_pattern
 		echo "New trigger set with loaded pattern"
 	`
 	
@@ -228,9 +228,9 @@ func TestTriggers_MultiplePatterns_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'Combat trigger'" "attack"
-		settexttrigger 2 "echo 'Movement trigger'" "arrive"  
-		settexttrigger 3 "echo 'Chat trigger'" "says"
+		setTextTrigger 1 "echo 'Combat trigger'" "attack"
+		setTextTrigger 2 "echo 'Movement trigger'" "arrive"  
+		setTextTrigger 3 "echo 'Chat trigger'" "says"
 		echo "Multiple triggers configured"
 	`
 	
@@ -261,12 +261,12 @@ func TestTriggers_VariableInterpolation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$player_name := "Hero"
-		$health := 100
-		savevar $player_name
-		savevar $health
+		setVar $player_name "Hero"
+		setVar $health 100
+		saveVar $player_name
+		saveVar $health
 		
-		settexttrigger 1 "echo $player_name ' health: ' $health" "status"
+		setTextTrigger 1 "echo $player_name ' health: ' $health" "status"
 		echo "Variable-based trigger set"
 	`
 	
@@ -289,9 +289,9 @@ func TestTriggers_ConditionalLogic_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		$auto_fight := 1
+		setVar $auto_fight 1
 		
-		settexttrigger 1 "if $auto_fight = 1 then\nsend 'attack'\necho 'Auto-attacking'\nend if" "enemy"
+		setTextTrigger 1 "if $auto_fight = 1 then\nsend 'attack'\necho 'Auto-attacking'\nend if" "enemy"
 		echo "Conditional trigger configured"
 	`
 	
@@ -314,7 +314,7 @@ func TestTriggers_ChainedTriggers_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "settexttrigger 2 'echo Chain completed' 'complete'\necho 'First trigger fired, second trigger set'" "start"
+		setTextTrigger 1 "setTextTrigger 2 'echo Chain completed' 'complete'\necho 'First trigger fired, second trigger set'" "start"
 		echo "Chained trigger system configured"
 	`
 	
@@ -345,9 +345,9 @@ func TestTriggers_EmptyAndSpecialPatterns_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'Empty pattern triggered'" ""
-		settexttrigger 2 "echo 'Special chars triggered'" "test\ntab"
-		settexttrigger 3 "echo 'Unicode triggered'" "café"
+		setTextTrigger 1 "echo 'Empty pattern triggered'" ""
+		setTextTrigger 2 "echo 'Special chars triggered'" "test\ntab"
+		setTextTrigger 3 "echo 'Unicode triggered'" "café"
 		echo "Special pattern triggers configured"
 	`
 	
@@ -377,10 +377,10 @@ func TestTriggers_LifecycleManagement_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 	
 	script := `
-		settexttrigger 1 "echo 'Lifecycle trigger fired'" "test"
+		setTextTrigger 1 "echo 'Lifecycle trigger fired'" "test"
 		echo "Trigger 1 set"
 		
-		settexttrigger 2 "killtrigger 1\necho 'Trigger 1 killed by trigger 2'" "kill"
+		setTextTrigger 2 "killTrigger 1\necho 'Trigger 1 killed by trigger 2'" "kill"
 		echo "Trigger 2 set to kill trigger 1"
 	`
 	
@@ -423,15 +423,15 @@ func TestTriggers_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$trigger_id := 1
-		$trigger_response := "echo 'Restored trigger fired'"
-		$trigger_pattern := "restore"
+		setVar $trigger_id 1
+		setVar $trigger_response "echo 'Restored trigger fired'"
+		setVar $trigger_pattern "restore"
 		
-		savevar $trigger_id
-		savevar $trigger_response  
-		savevar $trigger_pattern
+		saveVar $trigger_id
+		saveVar $trigger_response  
+		saveVar $trigger_pattern
 		
-		settexttrigger $trigger_id $trigger_response $trigger_pattern
+		setTextTrigger $trigger_id $trigger_response $trigger_pattern
 		echo "Initial trigger configured and variables saved"
 	`
 	
@@ -444,11 +444,11 @@ func TestTriggers_DatabasePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTester(t)
 	
 	script2 := `
-		loadvar $trigger_id
-		loadvar $trigger_response
-		loadvar $trigger_pattern
+		loadVar $trigger_id
+		loadVar $trigger_response
+		loadVar $trigger_pattern
 		
-		settexttrigger $trigger_id $trigger_response $trigger_pattern
+		setTextTrigger $trigger_id $trigger_response $trigger_pattern
 		echo "Trigger recreated from saved variables"
 	`
 	
@@ -472,16 +472,16 @@ func TestTriggers_PerformanceWithManyTriggers_RealIntegration(t *testing.T) {
 	
 	// Set up multiple triggers
 	script := `
-		settexttrigger 1 "echo 'T1'" "pattern1"
-		settexttrigger 2 "echo 'T2'" "pattern2"
-		settexttrigger 3 "echo 'T3'" "pattern3"
-		settexttrigger 4 "echo 'T4'" "pattern4"
-		settexttrigger 5 "echo 'T5'" "pattern5"
-		settexttrigger 6 "echo 'T6'" "pattern6"
-		settexttrigger 7 "echo 'T7'" "pattern7"
-		settexttrigger 8 "echo 'T8'" "pattern8"
-		settexttrigger 9 "echo 'T9'" "pattern9"
-		settexttrigger 10 "echo 'T10'" "pattern10"
+		setTextTrigger 1 "echo 'T1'" "pattern1"
+		setTextTrigger 2 "echo 'T2'" "pattern2"
+		setTextTrigger 3 "echo 'T3'" "pattern3"
+		setTextTrigger 4 "echo 'T4'" "pattern4"
+		setTextTrigger 5 "echo 'T5'" "pattern5"
+		setTextTrigger 6 "echo 'T6'" "pattern6"
+		setTextTrigger 7 "echo 'T7'" "pattern7"
+		setTextTrigger 8 "echo 'T8'" "pattern8"
+		setTextTrigger 9 "echo 'T9'" "pattern9"
+		setTextTrigger 10 "echo 'T10'" "pattern10"
 		echo "10 triggers configured"
 	`
 	
@@ -598,21 +598,21 @@ func TestPhase3_TradeScriptScenario_RealIntegration(t *testing.T) {
 	// Simulate the key parts of 1_Trade.ts trigger setup and usage
 	script := `
 		# Initialize arrays for warp data (Phase 1 implemented)
-		setarray $warp 10
-		setarray $density 10  
-		setarray $weight 10
+		setArray $warp 10
+		setArray $density 10  
+		setArray $weight 10
 		
 		# Set up triggers for density scanning (Phase 3 new functionality) 
 		setTextLineTrigger 1 :getWarp "Sector "
 		setTextTrigger 2 :gotWarps "Command [TL="
 		
-		$i := 1
+		setVar $i 1
 		setVar $warp[$i] 0
 		setVar $density[$i] -1
 		setVar $weight[$i] 9999
 		
 		echo "Trade script initialization complete"
-		goto :scan
+		goto scan
 		
 		:getWarp
 		# This would normally extract warp data from CURRENTLINE
@@ -652,10 +652,10 @@ func TestPhase3_TriggerDatabasePersistence_RealIntegration(t *testing.T) {
 	
 	script1 := `
 		# Create persistent configuration
-		$triggerPattern := "Sector "
-		$triggerLabel := ":warpHandler"
-		savevar $triggerPattern
-		savevar $triggerLabel
+		setVar $triggerPattern "Sector "
+		setVar $triggerLabel ":warpHandler"
+		saveVar $triggerPattern
+		saveVar $triggerLabel
 		
 		setTextLineTrigger 1 $triggerLabel $triggerPattern
 		echo "Persistent trigger configuration saved"
@@ -670,8 +670,8 @@ func TestPhase3_TriggerDatabasePersistence_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $triggerPattern
-		loadvar $triggerLabel
+		loadVar $triggerPattern
+		loadVar $triggerLabel
 		
 		# Recreate trigger from saved configuration
 		setTextLineTrigger 1 $triggerLabel $triggerPattern

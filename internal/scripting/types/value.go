@@ -17,10 +17,11 @@ const (
 
 // Value represents a variable in the script system
 type Value struct {
-	Type   ValueType
-	String string
-	Number float64
-	Array  map[string]*Value
+	Type      ValueType
+	String    string
+	Number    float64
+	Array     map[string]*Value
+	ArraySize int // For TWX compatibility - stores the static array size for this dimension
 }
 
 // NewStringValue creates a new string value
@@ -277,4 +278,90 @@ func (v *Value) ClearArray() {
 	if v != nil && v.Type == ArrayType {
 		v.Array = make(map[string]*Value)
 	}
+}
+
+// SetArrayDimensions sets up a multi-dimensional array like TWX's SetArray
+func (v *Value) SetArrayDimensions(dimensions []int) {
+	if v == nil || len(dimensions) == 0 {
+		return
+	}
+	
+	// Convert to array type
+	v.Type = ArrayType
+	v.Array = make(map[string]*Value)
+	v.String = ""
+	v.Number = 0
+	v.ArraySize = dimensions[0]
+	
+	// Create elements for the first dimension
+	for i := 1; i <= dimensions[0]; i++ {
+		indexStr := fmt.Sprintf("%d", i) // TWX uses 1-based indexing
+		elem := &Value{
+			Type:   StringType,
+			String: "",
+		}
+		
+		// If there are more dimensions, recursively set them up
+		if len(dimensions) > 1 {
+			elem.SetArrayDimensions(dimensions[1:])
+		}
+		
+		v.Array[indexStr] = elem
+	}
+}
+
+// GetArrayBounds returns the bounds for multi-dimensional arrays
+func (v *Value) GetArrayBounds() []int {
+	if v == nil || v.Type != ArrayType {
+		return []int{}
+	}
+	
+	bounds := []int{v.ArraySize}
+	
+	// Check if elements have sub-dimensions
+	if v.ArraySize > 0 {
+		firstKey := "1"
+		if firstElem, exists := v.Array[firstKey]; exists && firstElem.Type == ArrayType {
+			subBounds := firstElem.GetArrayBounds()
+			bounds = append(bounds, subBounds...)
+		}
+	}
+	
+	return bounds
+}
+
+// GetStaticArrayElement gets an element with bounds checking for static arrays (TWX 1-based indexing)
+func (v *Value) GetStaticArrayElement(index int) (*Value, error) {
+	if v == nil || v.Type != ArrayType {
+		return nil, fmt.Errorf("variable is not an array")
+	}
+	
+	// TWX uses 1-based indexing
+	if v.ArraySize > 0 && (index < 1 || index > v.ArraySize) {
+		return nil, fmt.Errorf("array index out of bounds")
+	}
+	
+	indexStr := fmt.Sprintf("%d", index)
+	if elem, exists := v.Array[indexStr]; exists {
+		return elem, nil
+	}
+	
+	// Return empty string for non-existent elements in dynamic arrays
+	return NewStringValue(""), nil
+}
+
+// SetStaticArrayElement sets an element with bounds checking for static arrays (TWX 1-based indexing)
+func (v *Value) SetStaticArrayElement(index int, value *Value) error {
+	if v == nil || v.Type != ArrayType {
+		return fmt.Errorf("variable is not an array")
+	}
+	
+	// TWX uses 1-based indexing
+	if v.ArraySize > 0 && (index < 1 || index > v.ArraySize) {
+		return fmt.Errorf("array index out of bounds")
+	}
+	
+	indexStr := fmt.Sprintf("%d", index)
+	v.Array[indexStr] = value
+	return nil
 }

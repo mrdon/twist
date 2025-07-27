@@ -10,7 +10,6 @@ import (
 // RegisterVariableCommands registers all variable manipulation commands
 func RegisterVariableCommands(vm CommandRegistry) {
 	vm.RegisterCommand("SETVAR", 2, -1, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdSetVar)
-	vm.RegisterCommand("GETVAR", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdGetVar)
 	vm.RegisterCommand("ISNUM", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdIsNum)
 	vm.RegisterCommand("VAL", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdVal)
 	vm.RegisterCommand("STR", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdStr)
@@ -35,22 +34,13 @@ func cmdSetVar(vm types.VMInterface, params []*types.CommandParam) error {
 		}
 		vm.SetVariable(params[0].VarName, result)
 	} else {
-		// Single parameter assignment
-		vm.SetVariable(params[0].VarName, params[1].Value)
+		// Single parameter assignment - use GetParamValue to properly resolve variables or literals
+		resolvedValue := GetParamValue(vm, params[1])
+		vm.SetVariable(params[0].VarName, resolvedValue)
 	}
 	return nil
 }
 
-func cmdGetVar(vm types.VMInterface, params []*types.CommandParam) error {
-	varName := GetParamString(vm, params[0])
-	value := vm.GetVariable(varName)
-	if value == nil {
-		// Create empty variable if it doesn't exist
-		value = &types.Value{Type: types.StringType, String: ""}
-	}
-	vm.SetVariable(params[1].VarName, value)
-	return nil
-}
 
 func cmdIsNum(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])

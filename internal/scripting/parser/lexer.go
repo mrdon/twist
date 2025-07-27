@@ -215,7 +215,7 @@ func (l *Lexer) readVariable() string {
 	result.WriteRune(l.ch) // include the $
 	l.nextChar()
 	
-	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_') {
+	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '.') {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}

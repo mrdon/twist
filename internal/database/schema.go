@@ -169,6 +169,20 @@ func (d *SQLiteDatabase) createSchema() error {
 		UNIQUE(script_id, trigger_id)
 	);`
 	
+	// Script call stack table (for GOSUB/RETURN persistence across VM instances)
+	scriptCallStackTable := `
+	CREATE TABLE IF NOT EXISTS script_call_stack (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		script_id TEXT NOT NULL,
+		frame_index INTEGER NOT NULL, -- 0-based stack position (0 = bottom, higher = top)
+		label TEXT NOT NULL,
+		position INTEGER NOT NULL,
+		return_addr INTEGER NOT NULL,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
+		UNIQUE(script_id, frame_index)
+	);`
+	
 	// Create indexes for performance
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_sectors_constellation ON sectors(constellation);`,
@@ -189,10 +203,12 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_script_triggers_script ON script_triggers(script_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_script_triggers_id ON script_triggers(trigger_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_script_triggers_active ON script_triggers(is_active);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_call_stack_script ON script_call_stack(script_id);`,
+		`CREATE INDEX IF NOT EXISTS idx_script_call_stack_frame ON script_call_stack(script_id, frame_index);`,
 	}
 	
 	// Execute all DDL statements
-	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable}
+	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable}
 	statements = append(statements, indexes...)
 	
 	for _, stmt := range statements {

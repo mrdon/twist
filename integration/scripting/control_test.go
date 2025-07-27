@@ -12,14 +12,14 @@ func TestGotoCommand_RealIntegration(t *testing.T) {
 
 	script := `
 		echo "Before goto"
-		$counter := 1
+		setVar $counter 1
 		goto skip_section
 		echo "This should be skipped"
-		$counter := 999
+		setVar $counter 999
 
 		:skip_section
 		echo "After goto"
-		$counter := 2
+		setVar $counter 2
 		echo "Counter: " $counter
 	`
 
@@ -59,16 +59,16 @@ func TestGosubReturn_RealIntegration(t *testing.T) {
 
 	script := `
 		echo "Main: Start"
-		$main_var := 1
+		setVar $main_var 1
 		gosub subroutine
 		echo "Main: After subroutine"
-		add $main_var 100 $main_var
+		add $main_var 100
 		goto end
 
 		:subroutine
 		echo "Subroutine: Start"
-		$sub_var := 10
-		add $main_var $sub_var $main_var
+		setVar $sub_var 10
+		add $main_var $sub_var
 		echo "Subroutine: End"
 		return
 
@@ -108,32 +108,32 @@ func TestNestedGosub_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		$depth := 0
+		setVar $depth 0
 		echo "Main: Starting"
 		gosub level1
 		echo "Main: Done"
 		goto end
 
 		:level1
-		$depth := 1
+		setVar $depth 1
 		echo "Level1: Starting"
 		gosub level2
 		echo "Level1: After level2"
-		add $depth 10 $depth
+		add $depth 10
 		return
 
 		:level2  
-		$depth := 2
+		setVar $depth 2
 		echo "Level2: Starting"
 		gosub level3
 		echo "Level2: After level3"
-		add $depth 20 $depth
+		add $depth 20
 		return
 
 		:level3
-		$depth := 3
+		setVar $depth 3
 		echo "Level3: Only level"
-		add $depth 30 $depth
+		add $depth 30
 		return
 
 		:end
@@ -180,6 +180,151 @@ func TestNestedGosub_RealIntegration(t *testing.T) {
 	}
 }
 
+// TestTWXLooping_WhileLoop tests TWX while loop syntax
+func TestTWXLooping_WhileLoop_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test TWX while loop
+		setVar $counter 1
+		
+		while ($counter <= 3)
+			echo "Loop iteration: " $counter
+			add $counter 1
+		end
+		
+		echo "Loop complete"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX while loop script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Loop iteration: 1",
+		"Loop iteration: 2", 
+		"Loop iteration: 3",
+		"Loop complete",
+	}
+
+	if len(result.Output) != 4 {
+		t.Errorf("Expected 4 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("While loop output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXConditionals_IfElse tests TWX if/else syntax
+func TestTWXConditionals_IfElse_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test TWX if/else conditionals
+		setVar $value 42
+		
+		if ($value = 42)
+			echo "Value is 42"
+		else
+			echo "Value is not 42"
+		end
+		
+		if ($value > 50)
+			echo "Value is greater than 50"
+		elseif ($value > 30)
+			echo "Value is greater than 30"
+		else
+			echo "Value is 30 or less"
+		end
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX if/else script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Value is 42",
+		"Value is greater than 30",
+	}
+
+	if len(result.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("If/else output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXComplexScript_RealWorldPattern tests a pattern similar to real TWX scripts
+func TestTWXComplexScript_RealWorldPattern_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	// This script mimics the structure found in real TWX scripts
+	script := `
+		# Complex script similar to real TWX patterns
+		setVar $scriptName "Test Script"
+		setVar $version "1.0"
+		
+		# Show banner like real scripts
+		echo "**" $scriptName " v" $version "**"
+		
+		# Initialize variables
+		setVar $counter 0
+		setVar $maxRuns 3
+		
+		# Main loop
+		:main_loop
+		if ($counter >= $maxRuns)
+			goto script_end
+		end
+		
+		echo "Run " $counter ": Processing..."
+		
+		# Simulate some work
+		gosub do_work
+		
+		add $counter 1
+		goto main_loop
+		
+		:do_work
+		setVar $workResult "completed"
+		echo "Work " $workResult
+		return
+		
+		:script_end
+		echo "Script finished after " $counter " runs"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX complex script failed: %v", result.Error)
+	}
+
+	// Should see banner, 3 run messages with work results, and final message
+	if len(result.Output) != 8 {
+		t.Errorf("Expected 8 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	// Check banner
+	if len(result.Output) > 0 && !strings.Contains(result.Output[0], "Test Script v1") {
+		t.Errorf("Banner incorrect: got %q", result.Output[0])
+	}
+
+	// Check final message
+	lastLine := result.Output[len(result.Output)-1]
+	if !strings.Contains(lastLine, "Script finished after 3 runs") {
+		t.Errorf("Final message incorrect: got %q", lastLine)
+	}
+}
+
 func TestBranchCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
@@ -191,13 +336,13 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 		{
 			name: "Branch on zero",
 			script: `
-				$test_val := 0
-				$result := 1
+				setVar $test_val 0
+				setVar $result 1
 				branch $test_val branch_target
-				$result := 999
+				setVar $result 999
 				goto end
 				:branch_target
-				$result := 2
+				setVar $result 2
 				:end
 				echo "Result: " $result
 			`,
@@ -206,13 +351,13 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 		{
 			name: "No branch on non-zero",
 			script: `
-				$test_val := 5
-				$result := 1
+				setVar $test_val 5
+				setVar $result 1
 				branch $test_val branch_target
-				$result := 3
+				setVar $result 3
 				goto end
 				:branch_target
-				$result := 999
+				setVar $result 999
 				:end
 				echo "Result: " $result
 			`,
@@ -221,13 +366,13 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 		{
 			name: "Branch on empty string",
 			script: `
-				$test_val := ""
-				$result := 1
+				setVar $test_val ""
+				setVar $result 1
 				branch $test_val branch_target
-				$result := 999
+				setVar $result 999
 				goto end
 				:branch_target
-				$result := 4
+				setVar $result 4
 				:end
 				echo "Result: " $result
 			`,
@@ -258,15 +403,15 @@ func TestControlFlowPersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 
 	script1 := `
-		$counter := 0
+		setVar $counter 0
 		gosub increment_counter
 		gosub increment_counter  
 		gosub increment_counter
-		savevar $counter
+		saveVar $counter
 		goto end
 
 		:increment_counter
-		add $counter 1 $counter
+		add $counter 1
 		return
 
 		:end
@@ -286,13 +431,13 @@ func TestControlFlowPersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 
 	script2 := `
-		loadvar $counter
+		loadVar $counter
 		gosub double_counter
-		savevar $counter
+		saveVar $counter
 		goto end
 
 		:double_counter
-		multiply $counter 2 $counter
+		multiply $counter 2
 		return
 
 		:end
@@ -340,18 +485,18 @@ func TestComplexControlFlow_RealIntegration(t *testing.T) {
 
 	// Complex control flow that tests multiple features
 	script := `
-		$factorial_input := 5
-		$factorial_result := 1
+		setVar $factorial_input 5
+		setVar $factorial_result 1
 		gosub calculate_factorial
 		echo "Factorial result: " $factorial_result
 		goto end
 
 		:calculate_factorial
-		$counter := $factorial_input
+		setVar $counter $factorial_input
 		:factorial_loop
 		branch $counter factorial_done
-		multiply $factorial_result $counter $factorial_result
-		subtract $counter 1 $counter
+		multiply $factorial_result $counter
+		subtract $counter 1
 		goto factorial_loop
 		:factorial_done
 		return

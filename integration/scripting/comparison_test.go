@@ -12,9 +12,9 @@ func TestIsEqualCommand_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test string equality
-		$str1 := "hello"
-		$str2 := "hello"
-		$str3 := "world"
+		setVar $str1 "hello"
+		setVar $str2 "hello"
+		setVar $str3 "world"
 		
 		isequal $str1 $str2 $result1
 		echo "String equality (hello == hello): " $result1
@@ -49,9 +49,9 @@ func TestIsEqualCommand_Numbers_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test number equality
-		$num1 := 42
-		$num2 := 42
-		$num3 := 43
+		setVar $num1 42
+		setVar $num2 42
+		setVar $num3 43
 		
 		isequal $num1 $num2 $result1
 		echo "Number equality (42 == 42): " $result1
@@ -84,8 +84,8 @@ func TestIsEqualCommand_StringNumberConversion_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test string-number conversion
-		$str_num := "42"
-		$actual_num := 42
+		setVar $str_num "42"
+		setVar $actual_num 42
 		
 		isequal $str_num $actual_num $result
 		echo "String-number equality (\"42\" == 42): " $result
@@ -111,9 +111,9 @@ func TestIsGreaterCommand_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test greater than comparisons
-		$high := 100
-		$low := 50
-		$equal := 100
+		setVar $high 100
+		setVar $low 50
+		setVar $equal 100
 		
 		isgreater $high $low $result1
 		echo "Greater than (100 > 50): " $result1
@@ -153,9 +153,9 @@ func TestIsLessCommand_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test less than comparisons
-		$high := 100
-		$low := 50
-		$equal := 50
+		setVar $high 100
+		setVar $low 50
+		setVar $equal 50
 		
 		isless $low $high $result1
 		echo "Less than (50 < 100): " $result1
@@ -195,10 +195,10 @@ func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$value1 := 75
-		$value2 := 50
-		savevar $value1
-		savevar $value2
+		setVar $value1 75
+		setVar $value2 50
+		saveVar $value1
+		saveVar $value2
 		echo "Saved values: " $value1 " and " $value2
 	`
 	
@@ -211,8 +211,8 @@ func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $value1
-		loadvar $value2
+		loadVar $value1
+		loadVar $value2
 		isgreater $value1 $value2 $comparison_result
 		echo "Loaded comparison (75 > 50): " $comparison_result
 	`
@@ -238,9 +238,9 @@ func TestComparisonCommands_FloatingPoint_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test floating point comparisons
-		$float1 := 3.14
-		$float2 := 3.15
-		$float3 := 3.14
+		setVar $float1 3.14
+		setVar $float2 3.15
+		setVar $float3 3.14
 		
 		isgreater $float2 $float1 $result1
 		echo "Float greater (3.15 > 3.14): " $result1
@@ -280,9 +280,9 @@ func TestComparisonCommands_EdgeCases_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test edge cases
-		$empty := ""
-		$zero := 0
-		$zero_str := "0"
+		setVar $empty ""
+		setVar $zero 0
+		setVar $zero_str "0"
 		
 		isequal $empty $zero_str $result1
 		echo "Empty vs zero string: " $result1
@@ -316,9 +316,9 @@ func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Comprehensive comparison test
-		$a := 10
-		$b := 20
-		$c := 10
+		setVar $a 10
+		setVar $b 20
+		setVar $c 10
 		
 		# Test all comparison operators
 		isequal $a $c $eq_result

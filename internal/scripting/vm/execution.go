@@ -27,7 +27,15 @@ func (ee *ExecutionEngine) LoadAST(ast *parser.ASTNode) {
 }
 
 // ExecuteStep executes a single step of the script
-func (ee *ExecutionEngine) ExecuteStep() error {
+func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
+	// Add panic recovery for bounds checking and other runtime errors
+	defer func() {
+		if r := recover(); r != nil {
+			retErr = fmt.Errorf("%v", r)
+			ee.vm.state.SetError(retErr.Error())
+		}
+	}()
+	
 	if ee.ast == nil || ee.vm.state.Position >= len(ee.ast.Children) {
 		ee.vm.state.SetHalted()
 		return nil
@@ -620,7 +628,7 @@ func (ee *ExecutionEngine) buildArrayVarName(node *parser.ASTNode) (string, erro
 			return "", fmt.Errorf("error evaluating array index %d: %v", i, err)
 		}
 		varName.WriteString("[")
-		varName.WriteString(indexValue.String)
+		varName.WriteString(indexValue.ToString())
 		varName.WriteString("]")
 	}
 	
@@ -655,7 +663,7 @@ func (ee *ExecutionEngine) evaluateArrayAccess(node *parser.ASTNode) (*types.Val
 		if err != nil {
 			return nil, fmt.Errorf("error evaluating array index %d: %v", i, err)
 		}
-		indexes[i-1] = indexValue.String
+		indexes[i-1] = indexValue.ToString()
 	}
 	
 	// Get the indexed variable
@@ -786,6 +794,14 @@ func (ee *ExecutionEngine) evaluateStringOperation(left, right *types.Value, ope
 		return &types.Value{
 			Type:        types.StringType,
 			String: leftStr + rightStr,
+		}, nil
+	case "-":
+		// TWX compatibility: string subtraction (numeric operation on string values)
+		leftNum := left.ToNumber()
+		rightNum := right.ToNumber()
+		return &types.Value{
+			Type:        types.NumberType,
+			Number: leftNum - rightNum,
 		}, nil
 	case "=":
 		result := 0.0

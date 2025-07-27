@@ -16,14 +16,15 @@ func TestInclude_BasicFunctionality_RealIntegration(t *testing.T) {
 	// Create an include file with helper functions
 	includeFile := filepath.Join(tempDir, "helpers.twx")
 	includeContent := `# Helper functions and constants
-$GREETING_PREFIX := "Hello"
+setVar $GREETING_PREFIX "Hello"
 
 :say_hello
 echo $GREETING_PREFIX " from helper!"
 return
 
 :calculate_sum
-add $a $b $result
+setVar $result $a
+add $result $b
 return`
 
 	err := os.WriteFile(includeFile, []byte(includeContent), 0644)
@@ -37,21 +38,25 @@ return`
 	// This is a placeholder for when INCLUDE functionality is fully integrated with the VM
 	script := `
 # Test basic functionality without INCLUDE for now
-$GREETING_PREFIX := "Hello"
+setVar $GREETING_PREFIX "Hello"
 echo $GREETING_PREFIX " from main!"
-
-:say_hello
-echo $GREETING_PREFIX " from helper!"
-return
 
 # Test calling the subroutine
 gosub say_hello
 
 # Test calculation
-$a := 10
-$b := 20
-add $a $b $result
+setVar $a 10
+setVar $b 20
+setVar $result $a
+add $result $b
 echo "Sum result: " $result
+goto end
+
+:say_hello
+echo $GREETING_PREFIX " from helper!"
+return
+
+:end
 `
 	
 	result := tester.ExecuteScript(script)
@@ -70,16 +75,10 @@ func TestInclude_MultipleFiles_RealIntegration(t *testing.T) {
 	// Create temporary directory for test files
 	tempDir := t.TempDir()
 	
-	// Create math helper file
+	// Create math helper file  
 	mathFile := filepath.Join(tempDir, "math.twx")
-	mathContent := `# Math utilities
-:square
-multiply $input $input $result
-return
-
-:double
-multiply $input 2 $result
-return`
+	mathContent := `# Math utilities - direct commands (no subroutines for this test)
+# This test doesn't actually include these files - it tests direct command usage`
 
 	err := os.WriteFile(mathFile, []byte(mathContent), 0644)
 	if err != nil {
@@ -88,14 +87,8 @@ return`
 
 	// Create text helper file  
 	textFile := filepath.Join(tempDir, "text.twx")
-	textContent := `# Text utilities
-:shout
-upper $input $result
-return
-
-:whisper
-lower $input $result
-return`
+	textContent := `# Text utilities - direct commands (no subroutines for this test)
+# This test doesn't actually include these files - it tests direct command usage`
 
 	err = os.WriteFile(textFile, []byte(textContent), 0644)
 	if err != nil {
@@ -110,16 +103,18 @@ return`
 echo "Testing math and text utilities"
 
 # Math operations
-$input := 5
-multiply $input $input $result
+setVar $input 5
+setVar $result $input
+multiply $result $input
 echo "Square of " $input " is " $result
 
-$input := 7
-multiply $input 2 $result
+setVar $input 7
+setVar $result $input
+multiply $result 2
 echo "Double of " $input " is " $result
 
 # Text operations
-$input := "hello world"
+setVar $input "hello world"
 upper $input $result
 echo "Uppercase: " $result
 
@@ -148,7 +143,7 @@ func TestInclude_NestedIncludes_RealIntegration(t *testing.T) {
 	// Create base utility file
 	baseFile := filepath.Join(tempDir, "base.twx")
 	baseContent := `# Base utilities
-$PI := "3.14159"
+setVar $PI "3.14159"
 
 :print_pi
 echo "PI = " $PI
@@ -167,12 +162,13 @@ return`
 echo "Testing constants and utilities"
 
 # Use PI constant
-$PI := "3.14159"
+setVar $PI "3.14159"
 echo "PI = " $PI
 
 # Calculate circle area (simplified)
-$radius := 5
-multiply $radius $radius $area_temp
+setVar $radius 5
+setVar $area_temp $radius
+multiply $area_temp $radius
 # area_temp now has radius squared
 echo "Radius: " $radius
 echo "Radius squared: " $area_temp
@@ -212,14 +208,14 @@ func TestInclude_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	dataFile := filepath.Join(tempDir, "data.twx")
 	dataContent := `# Persistent data utilities
 :save_config
-savevar $config_name
-savevar $config_value
+saveVar $config_name
+saveVar $config_value
 echo "Saved config: " $config_name " = " $config_value
 return
 
 :load_config
-loadvar $config_name
-loadvar $config_value
+loadVar $config_name
+loadVar $config_value
 echo "Loaded config: " $config_name " = " $config_value
 return`
 
@@ -233,16 +229,19 @@ return`
 	
 	script1 := `
 # Save configuration
-$config_name := "max_retries"
-$config_value := "5"
+setVar $config_name "max_retries"
+setVar $config_value "5"
 gosub save_config
 echo "Configuration saved"
+goto end
 
 :save_config
-savevar $config_name
-savevar $config_value
+saveVar $config_name
+saveVar $config_value
 echo "Saved config: " $config_name " = " $config_value
 return
+
+:end
 `
 	
 	result1 := tester1.ExecuteScript(script1)
@@ -255,12 +254,15 @@ return
 # Load configuration
 gosub load_config
 echo "Configuration loaded: " $config_name " = " $config_value
+goto end
 
 :load_config
-loadvar $config_name
-loadvar $config_value
+loadVar $config_name
+loadVar $config_value
 echo "Loaded config: " $config_name " = " $config_value
 return
+
+:end
 `
 	
 	result2 := tester2.ExecuteScript(script2)

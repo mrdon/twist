@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
@@ -452,9 +453,16 @@ func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) erro
 
 	switch v := value.(type) {
 	case string:
-		varType = 0 // StringType
-		stringValue = v
-		numberValue = 0
+		// Check if this is a serialized array (TWX_ARRAY: prefix)
+		if strings.HasPrefix(v, "TWX_ARRAY:") {
+			varType = 2 // ArrayType
+			stringValue = v
+			numberValue = 0
+		} else {
+			varType = 0 // StringType
+			stringValue = v
+			numberValue = 0
+		}
 	case float64:
 		varType = 1 // NumberType  
 		stringValue = ""
@@ -515,6 +523,9 @@ func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
 		return stringValue, nil
 	case 1: // NumberType
 		return numberValue, nil
+	case 2: // ArrayType
+		// Arrays are stored as strings with TWX_ARRAY: prefix
+		return stringValue, nil
 	default:
 		// Default to string for unknown types
 		return stringValue, nil

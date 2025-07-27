@@ -116,6 +116,23 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 	}
 	
 	if t.Label != "" {
+		// In TWX, the "label" can be either a label to jump to OR a command to execute
+		// If it starts with a command (like "echo"), execute it as a command
+		// Otherwise, treat it as a label to jump to
+		if strings.HasPrefix(t.Label, "echo ") || 
+		   strings.HasPrefix(t.Label, "send ") ||
+		   strings.HasPrefix(t.Label, "setvar ") ||
+		   strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
+			// Execute as a command by parsing and running it
+			// For now, handle common cases
+			if strings.HasPrefix(t.Label, "echo ") {
+				message := strings.TrimPrefix(t.Label, "echo ")
+				message = strings.Trim(message, "'\"") // Remove quotes
+				return vm.Echo(message)
+			}
+			// For other commands, we'd need to parse and execute them
+			// For now, fall back to goto behavior
+		}
 		return vm.Goto(t.Label)
 	}
 	
@@ -147,6 +164,17 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 	}
 	
 	if t.Label != "" {
+		// Same logic as TextTrigger - handle commands vs labels
+		if strings.HasPrefix(t.Label, "echo ") || 
+		   strings.HasPrefix(t.Label, "send ") ||
+		   strings.HasPrefix(t.Label, "setvar ") ||
+		   strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
+			if strings.HasPrefix(t.Label, "echo ") {
+				message := strings.TrimPrefix(t.Label, "echo ")
+				message = strings.Trim(message, "'\"") // Remove quotes
+				return vm.Echo(message)
+			}
+		}
 		return vm.Goto(t.Label)
 	}
 	

@@ -3,6 +3,8 @@
 package scripting
 
 import (
+	"path/filepath"
+	"strings"
 	"testing"
 	"twist/internal/scripting/manager"
 )
@@ -68,8 +70,8 @@ func TestScriptManager_LoadScript_RealIntegration(t *testing.T) {
 				t.Errorf("ScriptInfo.System = %v, expected %v", scriptInfo.System, tt.isSystem)
 			}
 			
-			if scriptInfo.Running {
-				t.Error("ScriptInfo.Running should be false for newly loaded script")
+			if !scriptInfo.Running {
+				t.Error("ScriptInfo.Running should be true for newly loaded script (TWX behavior)")
 			}
 			
 			if scriptInfo.ID == "" {
@@ -160,9 +162,15 @@ func TestScriptManager_ListScripts_RealIntegration(t *testing.T) {
 	
 	// Test retrieval by name
 	for i, scriptDef := range scripts {
-		script, exists := sm.GetScriptByName(scriptDef.filename)
+		// Convert filename to expected name (base name without extension)
+		expectedName := filepath.Base(scriptDef.filename)
+		if ext := filepath.Ext(expectedName); ext != "" {
+			expectedName = strings.TrimSuffix(expectedName, ext)
+		}
+		
+		script, exists := sm.GetScriptByName(expectedName)
 		if !exists {
-			t.Errorf("Script %d (name: %s) not found by GetScriptByName", i, scriptDef.filename)
+			t.Errorf("Script %d (name: %s) not found by GetScriptByName", i, expectedName)
 		} else {
 			if script.Filename != scriptDef.filename {
 				t.Errorf("Script %d filename mismatch: got %s, expected %s", i, script.Filename, scriptDef.filename)

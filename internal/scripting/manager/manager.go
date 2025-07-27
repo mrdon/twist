@@ -67,7 +67,7 @@ func (sm *ScriptManager) LoadScript(filename string, isSystem bool) (*ScriptInfo
 		Name:           name,
 		Filename:       filename,
 		Version:        version,
-		Running:        true,
+		Running:        true, // In TWX, scripts are automatically running when loaded
 		System:         isSystem,
 		LoadedAt:       time.Now(),
 		IncludeScripts: includeScripts,

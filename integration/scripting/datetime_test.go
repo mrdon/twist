@@ -77,7 +77,7 @@ func TestGetDateTime_RealIntegration(t *testing.T) {
 	
 	// Parse and verify it's reasonable
 	datetimeStr := parts[1]
-	parsedTime, err := time.Parse("01/02/2006 15:04:05", datetimeStr)
+	parsedTime, err := time.ParseInLocation("01/02/2006 15:04:05", datetimeStr, time.Local)
 	if err != nil {
 		t.Errorf("Failed to parse datetime %s: %v", datetimeStr, err)
 		return
@@ -328,7 +328,7 @@ func TestDateTimePersistence_CrossInstance_RealIntegration(t *testing.T) {
 	// Get current datetime and save it
 	script1 := `
 		getdatetime $capture_time
-		savevar $capture_time
+		saveVar $capture_time
 		echo "Captured: " $capture_time
 	`
 
@@ -352,7 +352,7 @@ func TestDateTimePersistence_CrossInstance_RealIntegration(t *testing.T) {
 
 	// Load the saved time and use it
 	script2 := `
-		loadvar $capture_time
+		loadVar $capture_time
 		echo "Loaded: " $capture_time
 		datetimetostr $capture_time $formatted_time
 		echo "Formatted loaded time: " $formatted_time

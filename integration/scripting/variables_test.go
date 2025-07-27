@@ -13,13 +13,13 @@ func TestSaveVarCommand_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Test saving different types of variables
-		$string_var := "Hello, World!"
-		$number_var := 42.5
-		$empty_var := ""
+		setVar $string_var "Hello, World!"
+		setVar $number_var 42.5
+		setVar $empty_var ""
 		
-		savevar $string_var
-		savevar $number_var
-		savevar $empty_var
+		saveVar $string_var
+		saveVar $number_var
+		saveVar $empty_var
 		
 		echo "Saved string variable: " $string_var
 		echo "Saved number variable: " $number_var
@@ -54,10 +54,10 @@ func TestLoadVarCommand_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$persistent_string := "Persistent Value"
-		$persistent_number := 123.45
-		savevar $persistent_string
-		savevar $persistent_number
+		setVar $persistent_string "Persistent Value"
+		setVar $persistent_number 123.45
+		saveVar $persistent_string
+		saveVar $persistent_number
 		echo "Variables saved"
 	`
 	
@@ -75,8 +75,8 @@ func TestLoadVarCommand_RealIntegration(t *testing.T) {
 		echo "Before load - number: [" $persistent_number "]"
 		
 		# Load from database
-		loadvar $persistent_string
-		loadvar $persistent_number
+		loadVar $persistent_string
+		loadVar $persistent_number
 		
 		echo "After load - string: " $persistent_string
 		echo "After load - number: " $persistent_number
@@ -116,13 +116,13 @@ func TestVariablePersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$counter := 1
-		$message := "First instance"
-		$pi := 3.14159
+		setVar $counter 1
+		setVar $message "First instance"
+		setVar $pi 3.14159
 		
-		savevar $counter
-		savevar $message
-		savevar $pi
+		saveVar $counter
+		saveVar $message
+		saveVar $pi
 		
 		echo "Instance 1 saved: counter=" $counter " message=" $message " pi=" $pi
 	`
@@ -136,18 +136,18 @@ func TestVariablePersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $counter
-		loadvar $message
-		loadvar $pi
+		loadVar $counter
+		loadVar $message
+		loadVar $pi
 		
 		# Modify the variables
-		$counter := 2
-		$message := "Second instance"
+		setVar $counter 2
+		setVar $message "Second instance"
 		# pi stays the same
 		
-		savevar $counter
-		savevar $message
-		savevar $pi
+		saveVar $counter
+		saveVar $message
+		saveVar $pi
 		
 		echo "Instance 2 loaded and modified: counter=" $counter " message=" $message " pi=" $pi
 	`
@@ -161,9 +161,9 @@ func TestVariablePersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester3 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script3 := `
-		loadvar $counter
-		loadvar $message
-		loadvar $pi
+		loadVar $counter
+		loadVar $message
+		loadVar $pi
 		
 		echo "Instance 3 loaded: counter=" $counter " message=" $message " pi=" $pi
 	`
@@ -190,8 +190,8 @@ func TestLoadVar_NonExistentVariable_RealIntegration(t *testing.T) {
 	
 	script := `
 		# Try to load variables that don't exist
-		loadvar $nonexistent_var
-		loadvar $another_missing_var
+		loadVar $nonexistent_var
+		loadVar $another_missing_var
 		
 		echo "Loaded nonexistent: [" $nonexistent_var "]"
 		echo "Loaded another missing: [" $another_missing_var "]"
@@ -222,15 +222,15 @@ func TestVariablePersistence_ComplexWorkflow_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$player_name := "TestPlayer"
-		$player_level := 1
-		$player_gold := 100
-		$current_sector := 1
+		setVar $player_name "TestPlayer"
+		setVar $player_level 1
+		setVar $player_gold 100
+		setVar $current_sector 1
 		
-		savevar $player_name
-		savevar $player_level
-		savevar $player_gold
-		savevar $current_sector
+		saveVar $player_name
+		saveVar $player_level
+		saveVar $player_gold
+		saveVar $current_sector
 		
 		echo "Game initialized - Player: " $player_name " Level: " $player_level " Gold: " $player_gold
 	`
@@ -245,20 +245,20 @@ func TestVariablePersistence_ComplexWorkflow_RealIntegration(t *testing.T) {
 	
 	script2 := `
 		# Load current state
-		loadvar $player_name
-		loadvar $player_level
-		loadvar $player_gold
-		loadvar $current_sector
+		loadVar $player_name
+		loadVar $player_level
+		loadVar $player_gold
+		loadVar $current_sector
 		
 		# Simulate gaining a level and earning gold
-		$player_level := 2
-		$player_gold := 250
-		$current_sector := 5
+		setVar $player_level 2
+		setVar $player_gold 250
+		setVar $current_sector 5
 		
 		# Save updated state
-		savevar $player_level
-		savevar $player_gold
-		savevar $current_sector
+		saveVar $player_level
+		saveVar $player_gold
+		saveVar $current_sector
 		
 		echo "Progress update - " $player_name " reached Level: " $player_level " Gold: " $player_gold " Sector: " $current_sector
 	`
@@ -272,10 +272,10 @@ func TestVariablePersistence_ComplexWorkflow_RealIntegration(t *testing.T) {
 	tester3 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script3 := `
-		loadvar $player_name
-		loadvar $player_level
-		loadvar $player_gold
-		loadvar $current_sector
+		loadVar $player_name
+		loadVar $player_level
+		loadVar $player_gold
+		loadVar $current_sector
 		
 		echo "Final state - Player: " $player_name " Level: " $player_level " Gold: " $player_gold " Sector: " $current_sector
 	`
@@ -300,13 +300,13 @@ func TestVariablePersistence_SpecialCharacters_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$special_chars := "Hello\nWorld\tTab\"Quote'Apostrophe"
-		$unicode_text := "Test αβγ 中文 🚀"
-		$with_numbers := "Mix123ed-Ch@rs!"
+		setVar $special_chars "Hello\nWorld\tTab'Quote'Apostrophe"
+		setVar $unicode_text "Test αβγ 中文 🚀"
+		setVar $with_numbers "Mix123ed-Ch@rs!"
 		
-		savevar $special_chars
-		savevar $unicode_text
-		savevar $with_numbers
+		saveVar $special_chars
+		saveVar $unicode_text
+		saveVar $with_numbers
 		
 		echo "Saved special characters"
 	`
@@ -320,9 +320,9 @@ func TestVariablePersistence_SpecialCharacters_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		loadvar $special_chars
-		loadvar $unicode_text
-		loadvar $with_numbers
+		loadVar $special_chars
+		loadVar $unicode_text
+		loadVar $with_numbers
 		
 		echo "Loaded special: " $special_chars
 		echo "Loaded unicode: " $unicode_text
@@ -358,8 +358,8 @@ func TestVariableOverwrite_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 	
 	script1 := `
-		$overwrite_test := "Original Value"
-		savevar $overwrite_test
+		setVar $overwrite_test "Original Value"
+		saveVar $overwrite_test
 		echo "Saved original: " $overwrite_test
 	`
 	
@@ -372,8 +372,8 @@ func TestVariableOverwrite_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script2 := `
-		$overwrite_test := "New Value"
-		savevar $overwrite_test
+		setVar $overwrite_test "New Value"
+		saveVar $overwrite_test
 		echo "Saved new: " $overwrite_test
 	`
 	
@@ -386,7 +386,7 @@ func TestVariableOverwrite_RealIntegration(t *testing.T) {
 	tester3 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 	
 	script3 := `
-		loadvar $overwrite_test
+		loadVar $overwrite_test
 		echo "Loaded after overwrite: " $overwrite_test
 	`
 	
@@ -402,5 +402,118 @@ func TestVariableOverwrite_RealIntegration(t *testing.T) {
 	expected := "Loaded after overwrite: New Value"
 	if len(result3.Output) > 0 && result3.Output[0] != expected {
 		t.Errorf("Overwrite verification: got %q, want %q", result3.Output[0], expected)
+	}
+}
+
+// TestTWXSetVar_OriginalSyntax tests the original TWX setVar syntax
+func TestTWXSetVar_OriginalSyntax_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test original TWX setVar syntax
+		setVar $counter 1
+		setVar $message "Hello World"
+		setVar $decimal 42.5
+		setVar $empty ""
+		
+		echo "Counter: " $counter
+		echo "Message: " $message
+		echo "Decimal: " $decimal
+		echo "Empty: [" $empty "]"
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("TWX setVar script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Counter: 1",
+		"Message: Hello World",
+		"Decimal: 42.5",
+		"Empty: []",
+	}
+
+	if len(result.Output) != 4 {
+		t.Errorf("Expected 4 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("SetVar output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestTWXSetVar_WithPersistence tests setVar with database persistence
+func TestTWXSetVar_WithPersistence_RealIntegration(t *testing.T) {
+	tester1 := NewIntegrationScriptTester(t)
+
+	script1 := `
+		setVar $persistent_var "TWX Style"
+		saveVar $persistent_var
+		echo "Saved using setVar: " $persistent_var
+	`
+
+	result1 := tester1.ExecuteScript(script1)
+	if result1.Error != nil {
+		t.Fatalf("TWX setVar persistence script failed: %v", result1.Error)
+	}
+
+	// Load in new instance
+	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
+
+	script2 := `
+		loadVar $persistent_var
+		echo "Loaded: " $persistent_var
+		
+		setVar $persistent_var "Modified TWX Style"
+		echo "Modified: " $persistent_var
+	`
+
+	result2 := tester2.ExecuteScript(script2)
+	if result2.Error != nil {
+		t.Fatalf("TWX setVar load script failed: %v", result2.Error)
+	}
+
+	expectedOutputs := []string{
+		"Loaded: TWX Style",
+		"Modified: Modified TWX Style",
+	}
+
+	if len(result2.Output) != 2 {
+		t.Errorf("Expected 2 output lines, got %d: %v", len(result2.Output), result2.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result2.Output) && result2.Output[i] != expected {
+			t.Errorf("SetVar persistence output %d: got %q, want %q", i+1, result2.Output[i], expected)
+		}
+	}
+}
+
+// TestGoStyleAssignmentRejection tests that Go-style variable assignments are properly rejected
+func TestGoStyleAssignmentRejection(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+	
+	// Test script with Go-style assignment that should be rejected
+	script := `
+		$invalid_var := "this should fail"
+		echo "This should not execute"
+	`
+	
+	result := tester.ExecuteScript(script)
+	
+	// The script should fail due to invalid syntax
+	if result.Error == nil {
+		t.Error("Expected script to fail with Go-style assignment syntax, but it succeeded")
+	}
+	
+	// Verify the error message indicates syntax issue
+	errorMsg := result.Error.Error()
+	if !strings.Contains(strings.ToLower(errorMsg), "syntax") && 
+	   !strings.Contains(strings.ToLower(errorMsg), "invalid") &&
+	   !strings.Contains(strings.ToLower(errorMsg), "unknown") {
+		t.Errorf("Expected syntax-related error message, got: %v", errorMsg)
 	}
 }

@@ -13,7 +13,7 @@ func TestAdvancedGosub_BasicSubroutine_RealIntegration(t *testing.T) {
 	script := `
 # Test basic subroutine call
 echo "Starting main program"
-$counter := 0
+setVar $counter 0
 gosub SUBROUTINE
 echo "Back in main, counter = " $counter
 echo "Program finished"
@@ -21,7 +21,7 @@ goto END
 
 :SUBROUTINE
 echo "In subroutine"
-add $counter 1 $counter
+add $counter 1
 echo "Subroutine counter = " $counter
 return
 
@@ -50,14 +50,14 @@ func TestAdvancedGosub_NestedSubroutines_RealIntegration(t *testing.T) {
 	script := `
 # Test nested subroutine calls
 echo "Main program start"
-$depth := 0
+setVar $depth 0
 gosub LEVEL1
 echo "Back in main"
 goto END
 
 :LEVEL1
 echo "In LEVEL1"
-add $depth 1 $depth
+add $depth 1
 echo "Depth = " $depth
 gosub LEVEL2
 echo "Back in LEVEL1, depth = " $depth
@@ -65,7 +65,7 @@ return
 
 :LEVEL2
 echo "In LEVEL2"
-add $depth 1 $depth
+add $depth 1
 echo "Depth = " $depth
 gosub LEVEL3
 echo "Back in LEVEL2, depth = " $depth
@@ -73,7 +73,7 @@ return
 
 :LEVEL3
 echo "In LEVEL3"
-add $depth 1 $depth
+add $depth 1
 echo "Depth = " $depth
 echo "At deepest level"
 return
@@ -109,7 +109,7 @@ func TestAdvancedGosub_MultipleCallsSameSubroutine_RealIntegration(t *testing.T)
 	script := `
 # Test multiple calls to same subroutine
 echo "Testing multiple calls"
-$total := 0
+setVar $total 0
 
 echo "First call:"
 gosub ADDER
@@ -125,7 +125,7 @@ echo "Final total: " $total
 goto END
 
 :ADDER
-add $total 10 $total
+add $total 10
 echo "Added 10, current total: " $total
 return
 
@@ -161,21 +161,22 @@ func TestAdvancedGosub_ParameterPassing_RealIntegration(t *testing.T) {
 echo "Testing parameter passing"
 
 # Pass parameters via global variables
-$param1 := 15
-$param2 := 25
+setVar $param1 15
+setVar $param2 25
 gosub MULTIPLY
 echo "Result: " $result
 
 # Try different parameters
-$param1 := 7
-$param2 := 8
+setVar $param1 7
+setVar $param2 8
 gosub MULTIPLY
 echo "Result: " $result
 
 goto END
 
 :MULTIPLY
-multiply $param1 $param2 $result
+setVar $result $param1
+multiply $result $param2
 echo "Multiplying " $param1 " by " $param2 " = " $result
 return
 
@@ -204,13 +205,14 @@ func TestAdvancedGosub_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	
 	script1 := `
 # Set up subroutine state
-$counter := 0
+setVar $counter 0
 gosub COUNTER_SUB
-savevar $counter
+saveVar $counter
 echo "Final counter: " $counter
+halt
 
 :COUNTER_SUB
-add $counter 5 $counter
+add $counter 5
 echo "Counter in subroutine: " $counter
 return
 `
@@ -223,13 +225,14 @@ return
 	
 	script2 := `
 # Load previous state and continue
-loadvar $counter
+loadVar $counter
 echo "Loaded counter: " $counter
 gosub COUNTER_SUB
 echo "Final counter: " $counter
+halt
 
 :COUNTER_SUB
-add $counter 3 $counter
+add $counter 3
 echo "Counter in subroutine: " $counter
 return
 `

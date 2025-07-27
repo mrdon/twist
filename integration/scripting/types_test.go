@@ -10,9 +10,10 @@ import (
 func TestMathCommands_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
-	// Test ADD command 
+	// Test ADD command with TWX syntax
 	script := `
-		add 5 3 $result
+		setVar $result 5
+		add $result 3
 		echo "ADD result: " $result
 	`
 	
@@ -40,17 +41,17 @@ func TestMathCommandsAllTypes_RealIntegration(t *testing.T) {
 	}{
 		{
 			name:      "SUBTRACT command",
-			script:    "subtract 10 4 $result\necho \"SUBTRACT: \" $result",
+			script:    "setVar $result 10\nsubtract $result 4\necho \"SUBTRACT: \" $result",
 			expected:  "SUBTRACT: 6",
 		},
 		{
 			name:      "MULTIPLY command",
-			script:    "multiply 6 7 $result\necho \"MULTIPLY: \" $result",
+			script:    "setVar $result 6\nmultiply $result 7\necho \"MULTIPLY: \" $result",
 			expected:  "MULTIPLY: 42",
 		},
 		{
 			name:      "DIVIDE command",
-			script:    "divide 15 3 $result\necho \"DIVIDE: \" $result",
+			script:    "setVar $result 15\ndivide $result 3\necho \"DIVIDE: \" $result",
 			expected:  "DIVIDE: 5",
 		},
 		{
@@ -107,10 +108,12 @@ func TestTypeConversion_StringToNumber_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		$string_num := "42"
-		$string_float := "3.14"
-		add $string_num 8 $result1
-		multiply $string_float 2 $result2
+		setVar $string_num "42"
+		setVar $string_float "3.14"
+		setVar $result1 $string_num
+		add $result1 8
+		setVar $result2 $string_float
+		multiply $result2 2
 		echo "Result1: " $result1
 		echo "Result2: " $result2
 	`
@@ -145,7 +148,7 @@ func TestMathErrors_RealIntegration(t *testing.T) {
 	}{
 		{
 			name:   "Division by zero",
-			script: "divide 10 0 $result",
+			script: "setVar $result 10\ndivide $result 0",
 		},
 		{
 			name:   "Modulo by zero",
@@ -213,8 +216,9 @@ func TestMathPersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester1 := NewIntegrationScriptTester(t)
 
 	script1 := `
-		add 100 200 $math_result
-		savevar $math_result
+		setVar $math_result 100
+		add $math_result 200
+		saveVar $math_result
 		echo "Saved: " $math_result
 	`
 
@@ -231,8 +235,9 @@ func TestMathPersistence_CrossInstance_RealIntegration(t *testing.T) {
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
 
 	script2 := `
-		loadvar $math_result
-		multiply $math_result 2 $doubled
+		loadVar $math_result
+		setVar $doubled $math_result
+		multiply $doubled 2
 		echo "Loaded and doubled: " $doubled
 	`
 
@@ -254,14 +259,18 @@ func TestComplexMathWorkflow_RealIntegration(t *testing.T) {
 		# Calculate area of circle with radius 5
 		# Area = π * r²
 		power 5 2 $radius_squared
-		multiply $radius_squared 3.14159 $area
+		setVar $area $radius_squared
+		multiply $area 3.14159
 		
 		# Calculate circumference = 2 * π * r  
-		multiply 2 5 $diameter
-		multiply $diameter 3.14159 $circumference
+		setVar $diameter 2
+		multiply $diameter 5
+		setVar $circumference $diameter
+		multiply $circumference 3.14159
 		
 		# Calculate ratio of area to circumference
-		divide $area $circumference $ratio
+		setVar $ratio $area
+		divide $ratio $circumference
 		
 		echo "Area: " $area
 		echo "Circumference: " $circumference

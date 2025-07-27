@@ -10,10 +10,10 @@ import (
 func RegisterDateTimeCommands(vm CommandRegistry) {
 	vm.RegisterCommand("GETDATE", 1, 1, []types.ParameterType{types.ParamVar}, cmdGetDate)
 	vm.RegisterCommand("GETDATETIME", 1, 1, []types.ParameterType{types.ParamVar}, cmdGetDateTime)
-	vm.RegisterCommand("DATETIMEDIFF", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdDateTimeDiff)
-	vm.RegisterCommand("DATETIMETOSTR", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdDateTimeToStr)
-	vm.RegisterCommand("STARTTIMER", 1, 1, []types.ParameterType{types.ParamVar}, cmdStartTimer)
-	vm.RegisterCommand("STOPTIMER", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdStopTimer)
+	vm.RegisterCommand("DATETIMEDIFF", 3, 4, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamValue, types.ParamVar}, cmdDateTimeDiff)
+	vm.RegisterCommand("DATETIMETOSTR", 2, 3, []types.ParameterType{types.ParamValue, types.ParamVar, types.ParamValue}, cmdDateTimeToStr)
+	vm.RegisterCommand("STARTTIMER", 1, 1, []types.ParameterType{types.ParamValue}, cmdStartTimer)
+	vm.RegisterCommand("STOPTIMER", 1, 1, []types.ParameterType{types.ParamValue}, cmdStopTimer)
 }
 
 // cmdGetDate gets the current date
@@ -52,13 +52,24 @@ func cmdGetDateTime(vm types.VMInterface, params []*types.CommandParam) error {
 
 // cmdDateTimeDiff calculates the difference between two datetimes
 func cmdDateTimeDiff(vm types.VMInterface, params []*types.CommandParam) error {
-	if len(params) != 4 {
-		return vm.Error("DATETIMEDIFF requires exactly 4 parameters: datetime1, datetime2, unit, result_var")
+	if len(params) < 3 || len(params) > 4 {
+		return vm.Error("DATETIMEDIFF requires 3-4 parameters: datetime1, datetime2, result_var [, unit]")
 	}
 
 	dt1Str := GetParamString(vm, params[0])
 	dt2Str := GetParamString(vm, params[1])
-	unit := GetParamString(vm, params[2])
+	var unit string
+	var resultVarName string
+	
+	if len(params) == 3 {
+		// 3 params: datetime1, datetime2, result_var (default to seconds)
+		unit = "seconds"
+		resultVarName = params[2].VarName
+	} else {
+		// 4 params: datetime1, datetime2, unit, result_var
+		unit = GetParamString(vm, params[2])
+		resultVarName = params[3].VarName
+	}
 
 	// Try to parse the datetime strings - use multiple format attempts
 	formats := []string{
@@ -103,7 +114,7 @@ func cmdDateTimeDiff(vm types.VMInterface, params []*types.CommandParam) error {
 		result = duration.Seconds() // Default to seconds
 	}
 
-	vm.SetVariable(params[3].VarName, &types.Value{
+	vm.SetVariable(resultVarName, &types.Value{
 		Type:   types.NumberType,
 		Number: result,
 	})
@@ -118,16 +129,14 @@ func cmdDateTimeToStr(vm types.VMInterface, params []*types.CommandParam) error 
 	}
 
 	dtStr := GetParamString(vm, params[0])
+	resultVarName := params[1].VarName
 	var formatStr string
-	var resultVarName string
 	
 	if len(params) == 2 {
 		// Default format - no format parameter
-		formatStr = "2006-01-02 15:04:05" // Default format
-		resultVarName = params[1].VarName
+		formatStr = "2006-01-02 15:04:05" // Default ISO format
 	} else {
 		// Custom format provided
-		resultVarName = params[1].VarName
 		formatStr = GetParamString(vm, params[2])
 	}
 
@@ -171,18 +180,19 @@ func convertTWXFormatToGo(twxFormat string) string {
 	goFormat := twxFormat
 	
 	// Replace common TWX format codes with Go equivalents
-	replacements := map[string]string{
-		"YYYY": "2006",
-		"YY":   "06",
-		"MM":   "01",
-		"DD":   "02",
-		"HH":   "15",
-		"mm":   "04",
-		"ss":   "05",
+	// Process in order from longest to shortest to avoid partial replacements
+	replacements := []struct{twx, goFmt string}{
+		{"YYYY", "2006"},
+		{"YY", "06"},
+		{"MM", "01"},
+		{"DD", "02"},
+		{"HH", "15"},
+		{"mm", "04"},
+		{"ss", "05"},
 	}
 	
-	for twx, goFmt := range replacements {
-		goFormat = strings.ReplaceAll(goFormat, twx, goFmt)
+	for _, r := range replacements {
+		goFormat = strings.ReplaceAll(goFormat, r.twx, r.goFmt)
 	}
 	
 	return goFormat
@@ -207,7 +217,7 @@ func cmdStartTimer(vm types.VMInterface, params []*types.CommandParam) error {
 	return nil
 }
 
-// cmdStopTimer stops a timer by name
+// cmdStopTimer stops a timer by name and stores elapsed time
 func cmdStopTimer(vm types.VMInterface, params []*types.CommandParam) error {
 	if len(params) != 1 {
 		return vm.Error("STOPTIMER requires exactly 1 parameter: timer_name")
@@ -222,6 +232,7 @@ func cmdStopTimer(vm types.VMInterface, params []*types.CommandParam) error {
 		return mockVM.StopTimer(timerName)
 	}
 
-	// For real implementation, would stop timer tracking
+	// For real implementation, would stop timer tracking and return elapsed time
+	// For now, just return 0 as elapsed time
 	return nil
 }

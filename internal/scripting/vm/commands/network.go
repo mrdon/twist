@@ -135,6 +135,7 @@ func cmdDisconnect(vm types.VMInterface, params []*types.CommandParam) error {
 	return nil
 }
 
+
 // CleanupConnections closes all connections for cleanup (useful for tests)
 func CleanupConnections() {
 	connectionManager.mu.Lock()
