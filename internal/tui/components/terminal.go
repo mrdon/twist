@@ -41,7 +41,8 @@ func NewTerminalComponent(term *terminal.Terminal) *TerminalComponent {
 	// Enable dynamic colors for ANSI support
 	terminalView.SetDynamicColors(true)
 
-	terminalView.SetBorder(true).SetTitle("Terminal")
+	// Disable border to prevent width conflicts with 80-column terminal content
+	terminalView.SetBorder(false)
 
 	// Create wrapper with theme colors
 	wrapper := theme.NewFlex().SetDirection(tview.FlexRow).
@@ -151,11 +152,29 @@ func (tc *TerminalComponent) renderCellsDirect(cells [][]terminal.Cell) {
 			maxX = len(row)
 		}
 
+		// Count non-null characters in this row
+		nonNullCount := 0
+		for _, cell := range row {
+			if cell.Char != 0 {
+				nonNullCount++
+			}
+		}
+
+		// Debug logging for first few rows to understand the issue
+		if y < 5 {
+			tc.logger.Printf("ROW %d: buffer_len=%d, terminal_width=%d, maxX=%d, non_null_chars=%d", y, len(row), terminalWidth, maxX, nonNullCount)
+		}
+
 		for x := 0; x < maxX; x++ {
 			cell := row[x]
 			// Skip null characters
 			if cell.Char == 0 {
 				continue
+			}
+
+			// Debug logging for problematic characters at line end
+			if y < 5 && x >= maxX-3 {
+				tc.logger.Printf("ROW %d, COL %d: char='%c' (U+%04X) FG=%s BG=%s", y, x, cell.Char, cell.Char, cell.ForegroundHex, cell.BackgroundHex)
 			}
 
 			// Apply colors directly using tview color tags

@@ -475,8 +475,16 @@ func (t *Terminal) handleCursorPosition(params string) {
 	if len(paramList) >= 2 && paramList[1] > 0 {
 		col = paramList[1]
 	}
+	
+	oldX, oldY := t.cursorX, t.cursorY
 	t.cursorY = row - 1
 	t.cursorX = col - 1
+	
+	// Debug suspicious cursor movements
+	if t.cursorX >= t.width || t.cursorY >= t.height {
+		t.logger.Printf("CURSOR_MOVE: params=%q -> (%d,%d) BEFORE clamp, terminal=%dx%d", params, t.cursorX, t.cursorY, t.width, t.height)
+	}
+	
 	if t.cursorY >= t.height {
 		t.cursorY = t.height - 1
 	}
@@ -489,6 +497,18 @@ func (t *Terminal) handleCursorPosition(params string) {
 	if t.cursorX < 0 {
 		t.cursorX = 0
 	}
+	
+	// Debug significant cursor movements
+	if abs(t.cursorX - oldX) > 10 || abs(t.cursorY - oldY) > 5 {
+		t.logger.Printf("CURSOR_JUMP: (%d,%d) -> (%d,%d) from params=%q", oldX, oldY, t.cursorX, t.cursorY, params)
+	}
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
 
 // handleCursorUp handles cursor up command (A)
@@ -614,6 +634,7 @@ func (t *Terminal) processRune(char rune) {
 // putChar places a character at the current cursor position
 func (t *Terminal) putChar(char rune) {
 	if t.cursorX >= t.width {
+		t.logger.Printf("WRAP: char='%c' at cursor (%d,%d), width=%d - wrapping to next line", char, t.cursorX, t.cursorY, t.width)
 		t.newline()
 		t.cursorX = 0
 	}
@@ -626,6 +647,25 @@ func (t *Terminal) putChar(char rune) {
 			Bold:          t.bold,
 			Underline:     t.underline,
 			Reverse:       t.reverse,
+		}
+
+		// Debug logging for characters at or near line boundaries
+		if t.cursorX >= t.width-3 {
+			t.logger.Printf("NEAR_END: char='%c' at (%d,%d) width=%d FG=%s BG=%s", char, t.cursorX, t.cursorY, t.width, cell.ForegroundHex, cell.BackgroundHex)
+		}
+		
+		// Count characters being written to each row for debugging
+		if t.cursorY < 5 {
+			// Count non-null characters in current row
+			rowCellCount := 0
+			for x := 0; x < t.width; x++ {
+				if t.buffer[t.cursorY][x].Char != 0 {
+					rowCellCount++
+				}
+			}
+			if rowCellCount >= t.width-2 {
+				t.logger.Printf("ROW_FILLING: row %d has %d non-null chars, about to add char '%c' at col %d", t.cursorY, rowCellCount, char, t.cursorX)
+			}
 		}
 
 		// Log hex conversion for NO PVP characters
