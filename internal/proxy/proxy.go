@@ -28,6 +28,8 @@ type Proxy struct {
 	
 	// Logger for debugging
 	logger     *log.Logger
+	rawLogger  *log.Logger // Logger for raw server data
+	pvpLogger  *log.Logger // Logger for NO PVP tracking
 	
 	// Streaming pipeline
 	pipeline   *streaming.Pipeline
@@ -44,7 +46,21 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 		log.Fatalf("Failed to open log file: %v", err)
 	}
 	
+	// Set up raw server data logging
+	rawLogFile, err := os.OpenFile("raw_server_data.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open raw server data log file: %v", err)
+	}
+	
+	// Set up NO PVP tracking log
+	pvpLogFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open NO PVP tracking log file: %v", err)
+	}
+	
 	logger := log.New(logFile, "[PROXY] ", log.LstdFlags|log.Lshortfile)
+	rawLogger := log.New(rawLogFile, "[RAW] ", log.LstdFlags|log.Lshortfile)
+	pvpLogger := log.New(pvpLogFile, "[PVP] ", log.LstdFlags|log.Lshortfile)
 	logger.Println("Proxy initialized")
 	
 	// Initialize database
@@ -67,20 +83,64 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 		errorChan:     make(chan error, 10),
 		connected:     false,
 		logger:        logger,
+		rawLogger:     rawLogger,
+		pvpLogger:     pvpLogger,
 		scriptManager: scriptManager,
 		db:            db,
 	}
 	
-	// Initialize streaming pipeline
-	p.pipeline = streaming.NewPipeline(terminalWriter, func(data []byte) error {
+	// Initialize streaming pipeline with script manager and shared logger
+	p.pipeline = streaming.NewPipelineWithScriptManager(terminalWriter, func(data []byte) error {
 		if p.conn != nil {
 			_, err := p.conn.Write(data)
 			return err
 		}
 		return fmt.Errorf("not connected")
-	}, db)
+	}, db, scriptManager, pvpLogger)
+	
+	// Setup script manager connections to proxy and terminal
+	if terminal, ok := terminalWriter.(scripting.TerminalInterface); ok {
+		scriptManager.SetupConnections(p, terminal)
+		logger.Println("Script manager connections established")
+	} else {
+		logger.Println("Warning: terminalWriter does not implement TerminalInterface")
+	}
 	
 	return p
+}
+
+// escapeANSI converts ANSI escape sequences to readable text
+func escapeANSI(data []byte) string {
+	str := string(data)
+	// Replace escape character with \x1b for readability
+	str = strings.ReplaceAll(str, "\x1b", "\\x1b")
+	// Replace other common control characters
+	str = strings.ReplaceAll(str, "\r", "\\r")
+	str = strings.ReplaceAll(str, "\n", "\\n")
+	str = strings.ReplaceAll(str, "\t", "\\t")
+	return str
+}
+
+// extractContext returns 10 chars before and after the target string
+func extractContext(data []byte, target string) string {
+	str := string(data)
+	index := strings.Index(str, target)
+	if index == -1 {
+		return ""
+	}
+	
+	start := index - 10
+	if start < 0 {
+		start = 0
+	}
+	
+	end := index + len(target) + 10
+	if end > len(str) {
+		end = len(str)
+	}
+	
+	context := str[start:end]
+	return escapeANSI([]byte(context))
 }
 
 func (p *Proxy) Connect(address string) error {
@@ -194,6 +254,13 @@ func (p *Proxy) handleInput() {
 			continue
 		}
 
+		// Process outgoing text through script manager
+		if p.scriptManager != nil {
+			if err := p.scriptManager.ProcessOutgoingText(input); err != nil {
+				p.logger.Printf("Outgoing script processing error: %v", err)
+			}
+		}
+
 		_, err := p.writer.WriteString(input)
 		if err != nil {
 			p.errorChan <- fmt.Errorf("write error: %w", err)
@@ -235,8 +302,31 @@ func (p *Proxy) handleOutput() {
 		
 		if n > 0 {
 			p.logger.Printf("Read %d bytes from server", n)
+			
+			// Log raw server data with escaped ANSI codes
+			rawData := buffer[:n]
+			escapedData := escapeANSI(rawData)
+			p.rawLogger.Printf("RAW SERVER DATA (%d bytes): %s", n, escapedData)
+			
+			// Track NO PVP with color analysis
+			rawStr := string(rawData)
+			if strings.Contains(rawStr, "NO") && strings.Contains(rawStr, "PVP") {
+				// Extract the actual ANSI sequence around NO PVP
+				start := strings.Index(rawStr, "NO") - 10
+				if start < 0 { start = 0 }
+				end := strings.Index(rawStr, "PVP") + 10
+				if end > len(rawStr) { end = len(rawStr) }
+				context := rawStr[start:end]
+				// Escape for readability
+				context = strings.ReplaceAll(context, "\x1b", "\\x1b")
+				p.pvpLogger.Printf("STAGE 1 - RAW: %s", context)
+			}
+			
+			// Also log hex dump for complete analysis
+			p.rawLogger.Printf("HEX DUMP: %x", rawData)
+			
 			// Send raw data directly to the streaming pipeline
-			p.pipeline.Write(buffer[:n])
+			p.pipeline.Write(rawData)
 		}
 	}
 	

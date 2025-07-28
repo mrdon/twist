@@ -1,37 +1,67 @@
 package components
 
 import (
+	"log"
+	"os"
 	"strings"
 	"twist/internal/terminal"
-	
+	"twist/internal/theme"
+
 	"github.com/rivo/tview"
 )
 
 // TerminalComponent manages the terminal display component
 type TerminalComponent struct {
-	view    *tview.TextView
-	wrapper *tview.Flex
+	view     *tview.TextView
+	wrapper  *tview.Flex
 	terminal *terminal.Terminal
+	logger   *log.Logger
 }
 
 // NewTerminalComponent creates a new terminal component
 func NewTerminalComponent(term *terminal.Terminal) *TerminalComponent {
-	terminalView := tview.NewTextView().
-		SetDynamicColors(true).
+	// Set up debug logging to the same file as the app
+	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("Failed to open log file: %v", err)
+	}
+	logger := log.New(logFile, "[TERMINAL] ", log.LstdFlags|log.Lshortfile)
+
+	// Use theme factory for proper styling
+	terminalView := theme.NewTextView().
 		SetRegions(true).
-		SetWordWrap(true).
+		SetWordWrap(false).
 		SetScrollable(true)
-	
+
+	// Explicitly set theme colors for text without ANSI codes
+	colors := theme.Current().TerminalColors()
+	terminalView.SetTextColor(colors.Foreground).
+		SetBackgroundColor(colors.Background)
+
+	// Enable dynamic colors for ANSI support
+	terminalView.SetDynamicColors(true)
+
 	terminalView.SetBorder(true).SetTitle("Terminal")
-	
-	wrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+
+	// Create wrapper with theme colors
+	wrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(terminalView, 0, 1, false)
-	
-	return &TerminalComponent{
+
+	// The terminal buffer now handles ANSI conversion internally,
+	// so we use the tview ANSI writer directly
+	tc := &TerminalComponent{
 		view:     terminalView,
 		wrapper:  wrapper,
 		terminal: term,
+		logger:   logger,
 	}
+
+	// Set up direct streaming from terminal to view (no full rewrites)
+	if term != nil {
+		term.SetUpdateCallback(tc.streamUpdate)
+	}
+
+	return tc
 }
 
 // GetWrapper returns the wrapper component
@@ -44,74 +74,149 @@ func (tc *TerminalComponent) GetView() *tview.TextView {
 	return tc.view
 }
 
-// UpdateContent updates the terminal content
-func (tc *TerminalComponent) UpdateContent() {
+// streamUpdate handles incremental terminal updates (called from terminal buffer)
+func (tc *TerminalComponent) streamUpdate() {
+	defer func() {
+		if r := recover(); r != nil {
+			tc.logger.Printf("ERROR: Panic in streamUpdate(): %v", r)
+		}
+	}()
+
 	if tc.terminal == nil {
 		return
 	}
-	
+
+	// Get only the new data that was just written to the terminal
+	newData := tc.terminal.GetNewData()
+	if len(newData) == 0 {
+		return
+	}
+
+	tc.logger.Printf("DEBUG: Streaming %d bytes of new data", len(newData))
+
+	// Log sample only if it contains ANSI sequences for debugging
+	if len(newData) > 0 && strings.Contains(string(newData), "\x1b[") {
+		sample := string(newData)
+		if len(sample) > 100 {
+			sample = sample[:100] + "..."
+		}
+		tc.logger.Printf("DEBUG: Streaming ANSI data sample: %q", sample)
+	}
+
+	// For streaming updates, fall back to full refresh for now
+	// TODO: Implement incremental cell-based updates
+	tc.UpdateContent()
+}
+
+// UpdateContent updates the terminal content (for full refresh scenarios)
+func (tc *TerminalComponent) UpdateContent() {
+	defer func() {
+		if r := recover(); r != nil {
+			tc.logger.Printf("ERROR: Panic in UpdateContent(): %v", r)
+		}
+	}()
+
+	tc.logger.Printf("DEBUG: UpdateContent() called - full refresh")
+	if tc.terminal == nil {
+		tc.logger.Printf("DEBUG: Terminal is nil, returning")
+		return
+	}
+
+	// Get cells directly and render without double ANSI conversion
 	cells := tc.terminal.GetCells()
-	lines := tc.convertTerminalCellsToText(cells)
-	content := strings.Join(lines, "\n")
-	
-	tc.view.SetText(content)
+	tc.logger.Printf("DEBUG: Got %d rows of cells from terminal", len(cells))
+
+	// Clear view and render cells directly
+	tc.logger.Printf("DEBUG: Full refresh - clearing view and rendering cells")
+	tc.view.Clear()
+	tc.renderCellsDirect(cells)
 	tc.view.ScrollToEnd()
+	tc.logger.Printf("DEBUG: UpdateContent() completed")
 }
 
-// convertTerminalCellsToText converts terminal cells to tview-compatible text
-func (tc *TerminalComponent) convertTerminalCellsToText(cells [][]terminal.Cell) []string {
-	var lines []string
-	
-	for _, row := range cells {
-		var line strings.Builder
-		currentColor := ""
-		
-		for _, cell := range row {
-			// Convert terminal colors to tview color tags
-			cellColor := tc.ansiToTviewColor(cell.Foreground)
-			
-			if cellColor != currentColor {
-				if currentColor != "" {
-					line.WriteString("[-:-:-]") // Reset color
-				}
-				if cellColor != "" {
-					line.WriteString("[" + cellColor + ":-:-]")
-				}
-				currentColor = cellColor
+// renderCellsDirect renders terminal cells directly without ANSI conversion
+func (tc *TerminalComponent) renderCellsDirect(cells [][]terminal.Cell) {
+	for y, row := range cells {
+		var lineBuilder strings.Builder
+
+		// Get terminal width to prevent rendering extra columns
+		terminalWidth := len(row)
+		if tc.terminal != nil {
+			terminalWidth, _ = tc.terminal.GetSize()
+		}
+
+		// Limit iteration to prevent extra column rendering that causes line wrapping
+		maxX := terminalWidth
+		if maxX > len(row) {
+			maxX = len(row)
+		}
+
+		for x := 0; x < maxX; x++ {
+			cell := row[x]
+			// Skip null characters
+			if cell.Char == 0 {
+				continue
 			}
-			
-			line.WriteRune(cell.Char)
+
+			// Apply colors directly using tview color tags
+			if cell.BackgroundHex != "#000000" || cell.ForegroundHex != "#c0c0c0" || cell.Bold {
+				// Convert hex to tview color format
+				fgColor := tc.hexToTViewColor(cell.ForegroundHex)
+				bgColor := tc.hexToTViewColor(cell.BackgroundHex)
+
+				// Build tview color tag: [foreground:background:attributes]
+				var colorTag strings.Builder
+				colorTag.WriteString("[")
+				colorTag.WriteString(fgColor)
+				colorTag.WriteString(":")
+				colorTag.WriteString(bgColor)
+				if cell.Bold {
+					colorTag.WriteString(":b")
+				}
+				if cell.Underline {
+					colorTag.WriteString(":u")
+				}
+				if cell.Reverse {
+					colorTag.WriteString(":r")
+				}
+				colorTag.WriteString("]")
+
+				// Debug block characters specifically
+				if cell.Char == '▄' || cell.Char == '▀' || cell.Char == '█' {
+					tc.logger.Printf("RENDER BLOCK: '%c' with tag: %s (FG=%s->%s, BG=%s->%s)",
+						cell.Char, colorTag.String(), cell.ForegroundHex, fgColor, cell.BackgroundHex, bgColor)
+				}
+
+				lineBuilder.WriteString(colorTag.String())
+			}
+
+			lineBuilder.WriteRune(cell.Char)
 		}
-		
-		if currentColor != "" {
-			line.WriteString("[-:-:-]") // Reset color at end of line
+
+		// Add newline except for last row
+		if y < len(cells)-1 {
+			lineBuilder.WriteRune('\n')
 		}
-		
-		lines = append(lines, line.String())
+
+		// Write line to view
+		tc.view.Write([]byte(lineBuilder.String()))
 	}
-	
-	return lines
 }
 
-// ansiToTviewColor converts ANSI color codes to tview color names
-func (tc *TerminalComponent) ansiToTviewColor(colorCode int) string {
-	switch colorCode {
-	case 30: return "black"
-	case 31: return "red"
-	case 32: return "green"
-	case 33: return "yellow"
-	case 34: return "blue"
-	case 35: return "purple"
-	case 36: return "teal"
-	case 37: return "white"
-	case 90: return "gray"
-	case 91: return "red"
-	case 92: return "lime"
-	case 93: return "yellow"
-	case 94: return "blue"
-	case 95: return "fuchsia"
-	case 96: return "aqua"
-	case 97: return "white"
-	default: return ""
+// hexToTViewColor converts hex color to tview color format
+func (tc *TerminalComponent) hexToTViewColor(hex string) string {
+	if hex == "#000000" {
+		return "black"
 	}
+	if hex == "#c0c0c0" {
+		return "silver"
+	}
+	if hex == "#008000" {
+		return "green"
+	}
+	if hex == "#000080" {
+		return "navy"
+	}
+	// For other colors, use hex format (tview supports #rrggbb)
+	return hex
 }

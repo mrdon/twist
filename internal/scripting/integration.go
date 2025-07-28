@@ -7,10 +7,22 @@ import (
 	"twist/internal/scripting/types"
 )
 
+// ProxyInterface defines methods for sending commands to the game server
+type ProxyInterface interface {
+	SendInput(input string)
+}
+
+// TerminalInterface defines methods for getting terminal output
+type TerminalInterface interface {
+	GetLines() []string
+}
+
 // GameAdapter adapts the game database to the scripting interface
 type GameAdapter struct {
 	db              database.Database
 	systemConstants *constants.SystemConstants
+	proxy           ProxyInterface
+	terminal        TerminalInterface
 }
 
 // NewGameAdapter creates a new game adapter
@@ -19,6 +31,16 @@ func NewGameAdapter(db database.Database) *GameAdapter {
 	// Initialize system constants with self-reference for game interface
 	adapter.systemConstants = constants.NewSystemConstants(adapter)
 	return adapter
+}
+
+// SetProxy sets the proxy interface for sending commands
+func (g *GameAdapter) SetProxy(proxy ProxyInterface) {
+	g.proxy = proxy
+}
+
+// SetTerminal sets the terminal interface for getting output
+func (g *GameAdapter) SetTerminal(terminal TerminalInterface) {
+	g.terminal = terminal
 }
 
 // GetSector implements GameInterface
@@ -136,14 +158,24 @@ func (g *GameAdapter) GetCurrentPrompt() string {
 
 // SendCommand implements GameInterface
 func (g *GameAdapter) SendCommand(cmd string) error {
-	// TODO: Send command to game server
+	if g.proxy == nil {
+		return fmt.Errorf("proxy not available")
+	}
+	g.proxy.SendInput(cmd)
 	return nil
 }
 
 // GetLastOutput implements GameInterface
 func (g *GameAdapter) GetLastOutput() string {
-	// TODO: Get last output from game client
-	return ""
+	if g.terminal == nil {
+		return ""
+	}
+	lines := g.terminal.GetLines()
+	if len(lines) == 0 {
+		return ""
+	}
+	// Return the last line of output
+	return lines[len(lines)-1]
 }
 
 // GetDatabase implements GameInterface
@@ -225,8 +257,9 @@ func (g *GameAdapter) GetSystemConstants() types.SystemConstantsInterface {
 
 // ScriptManager provides high-level script management
 type ScriptManager struct {
-	engine *Engine
-	db     database.Database
+	engine      *Engine
+	db          database.Database
+	gameAdapter *GameAdapter
 }
 
 // NewScriptManager creates a new script manager
@@ -235,9 +268,35 @@ func NewScriptManager(db database.Database) *ScriptManager {
 	engine := NewEngine(gameAdapter)
 	
 	return &ScriptManager{
-		engine: engine,
-		db:     db,
+		engine:      engine,
+		db:          db,
+		gameAdapter: gameAdapter,
 	}
+}
+
+// SetupConnections wires the proxy and terminal to the game adapter and sets up engine handlers
+func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal TerminalInterface) {
+	// Wire the proxy and terminal to the game adapter
+	sm.gameAdapter.SetProxy(proxy)
+	sm.gameAdapter.SetTerminal(terminal)
+	
+	// Set up engine handlers for script output
+	sm.engine.SetSendHandler(func(text string) error {
+		return sm.gameAdapter.SendCommand(text)
+	})
+	
+	// Set up output handler (scripts can output to terminal)
+	sm.engine.SetOutputHandler(func(text string) error {
+		// For now, scripts output via the same proxy input mechanism
+		// This could be enhanced to have a separate output channel
+		return sm.gameAdapter.SendCommand(text)
+	})
+	
+	// Set up echo handler (local echo for script commands)
+	sm.engine.SetEchoHandler(func(text string) error {
+		// Echo is typically for local display, for now we'll send it as output
+		return sm.gameAdapter.SendCommand(text)
+	})
 }
 
 // GetEngine returns the scripting engine

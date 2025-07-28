@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/database"
+	"twist/internal/theme"
 	
 	"github.com/rivo/tview"
 )
@@ -18,22 +19,22 @@ type PanelComponent struct {
 
 // NewPanelComponent creates new panel components
 func NewPanelComponent() *PanelComponent {
-	// Left panel for trader info
-	leftPanel := tview.NewTextView().
+	// Left panel for trader info using theme
+	leftPanel := theme.NewPanelView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
 	leftPanel.SetBorder(true).SetTitle("Trader Info")
 	
-	leftWrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(leftPanel, 0, 1, false)
 	
-	// Right panel for sector info
-	rightPanel := tview.NewTextView().
+	// Right panel for sector info using theme
+	rightPanel := theme.NewPanelView().
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
 	rightPanel.SetBorder(true).SetTitle("Sector Info")
 	
-	rightWrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+	rightWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(rightPanel, 0, 1, false)
 	
 	return &PanelComponent{

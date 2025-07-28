@@ -3,6 +3,7 @@ package streaming
 import (
 	"log"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -12,6 +13,11 @@ import (
 	"twist/internal/database"
 	"twist/internal/streaming/parser"
 )
+
+// ScriptManager interface for script processing
+type ScriptManager interface {
+	ProcessGameLine(line string) error
+}
 
 // Pipeline provides high-performance streaming from network to terminal buffer
 type Pipeline struct {
@@ -23,6 +29,7 @@ type Pipeline struct {
 	terminalWriter TerminalWriter
 	decoder        *encoding.Decoder
 	sectorParser   *parser.SectorParser
+	scriptManager  ScriptManager
 	
 	// Batching
 	batchBuffer   []byte
@@ -41,6 +48,7 @@ type Pipeline struct {
 	batchesProcessed uint64
 	
 	logger *log.Logger
+	pvpLogger *log.Logger
 }
 
 // TerminalWriter interface for writing to terminal buffer
@@ -50,6 +58,11 @@ type TerminalWriter interface {
 
 // NewPipeline creates an optimized streaming pipeline
 func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database) *Pipeline {
+	return NewPipelineWithScriptManager(terminalWriter, writer, db, nil, nil)
+}
+
+// NewPipelineWithScriptManager creates an optimized streaming pipeline with script support
+func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database, scriptManager ScriptManager, pvpLogger *log.Logger) *Pipeline {
 	// Set up debug logging
 	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -63,11 +76,13 @@ func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db da
 		terminalWriter: terminalWriter,
 		decoder:        charmap.CodePage437.NewDecoder(),
 		sectorParser:   parser.NewSectorParser(db),
+		scriptManager:  scriptManager,
 		batchBuffer:    make([]byte, 0, 4096),
 		batchSize:      1,     // Process immediately - no batching
 		batchTimeout:   0,     // No timeout needed
 		stopChan:       make(chan struct{}),
 		logger:         logger,
+		pvpLogger:      pvpLogger,
 	}
 	
 	// Initialize telnet handler
@@ -148,11 +163,42 @@ func (p *Pipeline) batchProcessor() {
 			p.logger.Printf("Telnet processed %d bytes -> %d clean bytes", len(rawData), len(cleanData))
 			
 			if len(cleanData) > 0 {
+				// Track NO PVP after telnet processing
+				cleanStr := string(cleanData)
+				if strings.Contains(cleanStr, "NO") && strings.Contains(cleanStr, "PVP") {
+					start := strings.Index(cleanStr, "NO") - 10
+					if start < 0 { start = 0 }
+					end := strings.Index(cleanStr, "PVP") + 10
+					if end > len(cleanStr) { end = len(cleanStr) }
+					context := cleanStr[start:end]
+					context = strings.ReplaceAll(context, "\x1b", "\\x1b")
+					p.pvpLogger.Printf("STAGE 2 - TELNET: %s", context)
+				}
+				
+				// Process through script triggers EARLY with original ANSI codes intact
+				if p.scriptManager != nil {
+					if err := p.scriptManager.ProcessGameLine(string(cleanData)); err != nil {
+						p.logger.Printf("Script processing error: %v", err)
+					}
+				}
+				
 				// Use standard CP437 to UTF-8 conversion
 				decoded, err := p.decoder.Bytes(cleanData)
 				if err != nil {
 					p.logger.Printf("CP437 decode error: %v, falling back to raw data", err)
 					decoded = cleanData
+				}
+				
+				// Track NO PVP after encoding
+				decodedStr := string(decoded)
+				if strings.Contains(decodedStr, "NO") && strings.Contains(decodedStr, "PVP") {
+					start := strings.Index(decodedStr, "NO") - 10
+					if start < 0 { start = 0 }
+					end := strings.Index(decodedStr, "PVP") + 10
+					if end > len(decodedStr) { end = len(decodedStr) }
+					context := decodedStr[start:end]
+					context = strings.ReplaceAll(context, "\x1b", "\\x1b")
+					p.pvpLogger.Printf("STAGE 3 - ENCODING: %s", context)
 				}
 				
 				// Parse the decoded text for sector information
@@ -269,4 +315,38 @@ func (p *Pipeline) GetTerminalWriter() TerminalWriter {
 // GetMetrics returns pipeline performance metrics
 func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {
 	return p.bytesProcessed, p.batchesProcessed
+}
+
+// escapeANSI converts ANSI escape sequences to readable text
+func escapeANSI(data []byte) string {
+	str := string(data)
+	// Replace escape character with \x1b for readability
+	str = strings.ReplaceAll(str, "\x1b", "\\x1b")
+	// Replace other common control characters
+	str = strings.ReplaceAll(str, "\r", "\\r")
+	str = strings.ReplaceAll(str, "\n", "\\n")
+	str = strings.ReplaceAll(str, "\t", "\\t")
+	return str
+}
+
+// extractContext returns 10 chars before and after the target string
+func extractContext(data []byte, target string) string {
+	str := string(data)
+	index := strings.Index(str, target)
+	if index == -1 {
+		return ""
+	}
+	
+	start := index - 10
+	if start < 0 {
+		start = 0
+	}
+	
+	end := index + len(target) + 10
+	if end > len(str) {
+		end = len(str)
+	}
+	
+	context := str[start:end]
+	return escapeANSI([]byte(context))
 }
