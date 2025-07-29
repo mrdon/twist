@@ -1,8 +1,6 @@
 package tui
 
 import (
-	"log"
-	"os"
 	"twist/internal/ansi"
 	"twist/internal/proxy"
 	"twist/internal/terminal"
@@ -18,7 +16,6 @@ import (
 // TwistApp represents the main tview application - refactored version
 type TwistApp struct {
 	app    *tview.Application
-	logger *log.Logger
 	proxy  *proxy.Proxy
 
 	// Core components
@@ -47,19 +44,9 @@ type TwistApp struct {
 
 // NewApplication creates and configures the tview application
 func NewApplication() *TwistApp {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
 
-	logger := log.New(logFile, "[TVIEW] ", log.LstdFlags|log.Lshortfile)
-	logger.Println("TView TUI initialized")
-
-	// Create a dummy text view to create the ANSI converter
-	// (we need this to get the theme-aware converter)
-	dummyView := theme.NewTextView()
-	ansiConverter := ansi.NewThemeAwareANSIWriter(dummyView)
+	// Create the simplified color converter
+	ansiConverter := ansi.NewColorConverter()
 	
 	// Initialize terminal buffer with ANSI converter
 	term := terminal.NewTerminalWithConverter(80, 50, ansiConverter)
@@ -77,11 +64,10 @@ func NewApplication() *TwistApp {
 	statusComp := components.NewStatusComponent()
 
 	// Create input handler
-	inputHandler := handlers.NewInputHandler(app, logger)
+	inputHandler := handlers.NewInputHandler(app)
 
 	twistApp := &TwistApp{
 		app:                app,
-		logger:             logger,
 		proxy:              proxyInstance,
 		terminal:           term,
 		connected:          false,
@@ -97,12 +83,9 @@ func NewApplication() *TwistApp {
 
 	// Set up terminal update callback
 	term.SetUpdateCallback(func() {
-		logger.Printf("Terminal update callback triggered")
 		select {
 		case twistApp.terminalUpdateChan <- struct{}{}:
-			logger.Printf("Sent terminal update message")
 		default:
-			logger.Printf("Terminal update channel full, skipping")
 		}
 
 		// Trigger UI update
@@ -174,9 +157,7 @@ func (ta *TwistApp) setupInputHandling() {
 	ta.inputHandler.SetDropdownCallback(ta.showDropdownMenu)
 	
 	// Set up connection dialog callback
-	ta.logger.Printf("=== APP: Setting connection dialog callback ===")
 	ta.inputHandler.SetConnectionDialogCallback(ta.showConnectionDialog)
-	ta.logger.Printf("=== APP: Connection dialog callback set ===")
 
 	// Set up global input capture
 	ta.app.SetInputCapture(ta.handleGlobalKeys)
@@ -184,7 +165,6 @@ func (ta *TwistApp) setupInputHandling() {
 
 // registerMenuShortcuts registers all menu item shortcuts globally at startup
 func (ta *TwistApp) registerMenuShortcuts() {
-	ta.logger.Printf("GLOBAL: Registering menu shortcuts")
 	
 	// Register Session menu shortcuts
 	sessionItems := []twistComponents.MenuItem{
@@ -199,9 +179,7 @@ func (ta *TwistApp) registerMenuShortcuts() {
 		if item.Shortcut != "" {
 			label := item.Label   // Capture for closure
 			shortcut := item.Shortcut
-			ta.logger.Printf("GLOBAL: Registering shortcut %s for %s", shortcut, label)
 			ta.globalShortcuts.RegisterShortcut(shortcut, func() {
-				ta.logger.Printf("GLOBAL: Shortcut %s triggered for %s", shortcut, label)
 				// Handle the menu item action
 				switch label {
 				case "Quit":
@@ -222,17 +200,14 @@ func (ta *TwistApp) Run() error {
 
 // connect establishes connection to the game server
 func (ta *TwistApp) connect(address string) {
-	ta.logger.Printf("Connecting to %s", address)
 	
 	if err := ta.proxy.Connect(address); err != nil {
-		ta.logger.Printf("Connection failed: %v", err)
 		return
 	}
 	
 	ta.connected = true
 	ta.serverAddress = address
 	ta.menuComponent.SetConnectedMenu()
-	ta.logger.Printf("Connected to %s", address)
 }
 
 // disconnect closes the connection to the game server
@@ -241,7 +216,6 @@ func (ta *TwistApp) disconnect() {
 		ta.proxy.Disconnect()
 		ta.connected = false
 		ta.menuComponent.SetDisconnectedMenu()
-		ta.logger.Printf("Disconnected from server")
 	}
 }
 
@@ -260,14 +234,10 @@ func (ta *TwistApp) sendCommand(command string) {
 
 // updateTerminalView updates the terminal display
 func (ta *TwistApp) updateTerminalView() {
-	ta.logger.Printf("DEBUG: updateTerminalView() called")
 	if ta.terminalComponent == nil {
-		ta.logger.Printf("ERROR: terminalComponent is nil!")
 		return
 	}
-	ta.logger.Printf("DEBUG: About to call UpdateContent()")
 	ta.terminalComponent.UpdateContent()
-	ta.logger.Printf("DEBUG: UpdateContent() call completed")
 }
 
 // showMenuModal displays a modal menu
@@ -318,9 +288,7 @@ func (ta *TwistApp) closeModal() {
 func (ta *TwistApp) startUpdateWorker() {
 	go func() {
 		for range ta.terminalUpdateChan {
-			ta.logger.Printf("DEBUG: Update worker received message, queueing draw")
 			ta.app.QueueUpdateDraw(func() {
-				ta.logger.Printf("DEBUG: QueueUpdateDraw callback executing")
 				ta.updateTerminalView()
 				ta.updatePanels()
 			})
@@ -330,30 +298,25 @@ func (ta *TwistApp) startUpdateWorker() {
 
 // handleGlobalKeys handles global key events
 func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
-	ta.logger.Printf("GLOBAL KEY: Key=%v, Rune=%c, Modifiers=%v", event.Key(), event.Rune(), event.Modifiers())
 	
 	// Check global shortcuts first (including menu shortcuts like Alt+Q)
 	if ta.globalShortcuts.HandleKeyEvent(event) {
-		ta.logger.Printf("GLOBAL: Handled by global shortcut")
 		return nil
 	}
 	
 	// ESC key to close modal if visible
 	if event.Key() == tcell.KeyEscape && ta.modalVisible {
-		ta.logger.Printf("GLOBAL: Closing modal with ESC")
 		ta.closeModal()
 		return nil
 	}
 	
 	// F1 key for help
 	if event.Key() == tcell.KeyF1 {
-		ta.logger.Printf("GLOBAL: Opening help with F1")
 		ta.showHelpModal()
 		return nil
 	}
 	
 	// Pass to input handler for menu Alt+keys and other keys
-	ta.logger.Printf("GLOBAL: Passing to input handler")
 	return ta.inputHandler.HandleKeyEvent(event)
 }
 
@@ -393,7 +356,6 @@ func (ta *TwistApp) showHelpModal() {
 
 // showDropdownMenu displays a dropdown menu below the menu bar
 func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback func(string)) {
-	ta.logger.Printf("DROPDOWN: Creating dropdown for %s", menuName)
 	
 	// Convert string options to MenuItems with shortcuts for specific menus
 	items := make([]twistComponents.MenuItem, len(options))
@@ -414,10 +376,8 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 	var dropdownCallback func(string)
 	if menuName == "Session" {
 		dropdownCallback = func(selected string) {
-			ta.logger.Printf("DROPDOWN: Selected %s from Session menu", selected)
 			switch selected {
 			case "Connect":
-				ta.logger.Printf("=== DROPDOWN: Connect selected, showing dialog but NOT closing modal ===")
 				ta.showConnectionDialog()
 				// Don't call ta.closeModal() here - let the dialog manage its own lifecycle
 			case "Disconnect":
@@ -434,7 +394,6 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 	} else {
 		// Standard dropdown behavior for other menus
 		dropdownCallback = func(selected string) {
-			ta.logger.Printf("DROPDOWN: Selected %s", selected)
 			callback(selected)
 			ta.closeModal()
 		}
@@ -442,7 +401,6 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 	
 	dropdown := ta.menuComponent.ShowDropdown(menuName, items, dropdownCallback, func(direction string) {
 		// Handle left/right arrow navigation between menus
-		ta.logger.Printf("DROPDOWN: Navigation %s from %s", direction, menuName)
 		ta.navigateMenu(menuName, direction)
 	}, ta.globalShortcuts)
 	ta.pages.AddPage("dropdown-menu", dropdown, true, true)
@@ -475,7 +433,6 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	}
 	
 	nextMenu := menus[nextIndex]
-	ta.logger.Printf("DROPDOWN: Switching from %s to %s", currentMenu, nextMenu)
 	
 	// Close current dropdown and open next one
 	ta.closeModal()
@@ -492,10 +449,8 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 		}
 		// Custom dropdown handler for Session menu that doesn't auto-close on Connect
 		dropdown := ta.menuComponent.ShowDropdown("Session", items, func(selected string) {
-			ta.logger.Printf("DROPDOWN: Selected %s", selected)
 			switch selected {
 			case "Connect":
-				ta.logger.Printf("=== DROPDOWN: Connect selected, showing dialog but NOT closing modal ===")
 				ta.showConnectionDialog()
 				// Don't call ta.closeModal() here - let the dialog manage its own lifecycle
 			case "Disconnect":
@@ -507,7 +462,6 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 			}
 		}, func(direction string) {
 			// Handle left/right arrow navigation between menus
-			ta.logger.Printf("DROPDOWN: Navigation %s from %s", direction, "Session")
 			ta.navigateMenu("Session", direction)
 		}, ta.globalShortcuts)
 		ta.pages.AddPage("dropdown-menu", dropdown, true, true)
@@ -515,22 +469,18 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	case "Edit":
 		options := []string{"Cut", "Copy", "Paste", "Find", "Replace"}
 		ta.showDropdownMenu("Edit", options, func(selected string) {
-			ta.logger.Printf("Edit menu selection: %s", selected)
 		})
 	case "View":
 		options := []string{"Scripts", "Zoom In", "Zoom Out", "Full Screen", "Panels"}
 		ta.showDropdownMenu("View", options, func(selected string) {
-			ta.logger.Printf("View menu selection: %s", selected)
 		})
 	case "Terminal":
 		options := []string{"Clear", "Scroll Up", "Scroll Down", "Copy Selection"}
 		ta.showDropdownMenu("Terminal", options, func(selected string) {
-			ta.logger.Printf("Terminal menu selection: %s", selected)
 		})
 	case "Help":
 		options := []string{"Keyboard Shortcuts", "About", "User Manual"}
 		ta.showDropdownMenu("Help", options, func(selected string) {
-			ta.logger.Printf("Help menu selection: %s", selected)
 		})
 	}
 }
@@ -549,12 +499,9 @@ func (ta *TwistApp) showMessage(message string) {
 
 // showConnectionDialog displays the connection dialog
 func (ta *TwistApp) showConnectionDialog() {
-	ta.logger.Printf("=== APP: showConnectionDialog() called ===")
-	ta.logger.Printf("=== APP: Setting modal visible to true ===")
 	ta.modalVisible = true
 	ta.inputHandler.SetModalVisible(true)
 
-	ta.logger.Printf("=== APP: Closing any existing dropdown menus ===")
 	// Remove dropdown menu page first
 	ta.pages.RemovePage("dropdown-menu")
 	// Hide dropdown if visible
@@ -562,32 +509,24 @@ func (ta *TwistApp) showConnectionDialog() {
 		ta.menuComponent.HideDropdown()
 	}
 
-	ta.logger.Printf("=== APP: Creating connection dialog component ===")
 	// Create connection dialog
 	connectionDialog := components.NewConnectionDialog(
 		func(address string) {
-			ta.logger.Printf("=== APP: Connection dialog callback: connecting to %s ===", address)
 			ta.connect(address)
 			ta.closeModal()
 		},
 		func() {
-			ta.logger.Printf("=== APP: Connection dialog cancelled ===")
 			ta.closeModal()
 		},
 	)
 
-	ta.logger.Printf("=== APP: Setting up ESC key handling ===")
 	// Set up ESC key handling to close dialog
 	connectionDialog.SetDoneFunc(func() {
-		ta.logger.Printf("=== APP: Connection dialog ESC pressed ===")
 		ta.closeModal()
 	})
 
-	ta.logger.Printf("=== APP: Adding connection-dialog page to pages ===")
 	ta.pages.AddPage("connection-dialog", connectionDialog.GetView(), true, true)
-	ta.logger.Printf("=== APP: Setting focus to connection dialog form ===")
 	ta.app.SetFocus(connectionDialog.GetForm())
-	ta.logger.Printf("=== APP: showConnectionDialog() complete ===")
 }
 
 // updatePanels updates the information panels

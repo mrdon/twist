@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -18,7 +17,6 @@ const (
 // InputHandler manages input handling for the application
 type InputHandler struct {
 	app           *tview.Application
-	logger        *log.Logger
 	inputMode     InputMode
 	modalVisible  bool
 	
@@ -34,10 +32,9 @@ type InputHandler struct {
 }
 
 // NewInputHandler creates a new input handler
-func NewInputHandler(app *tview.Application, logger *log.Logger) *InputHandler {
+func NewInputHandler(app *tview.Application) *InputHandler {
 	return &InputHandler{
 		app:       app,
-		logger:    logger,
 		inputMode: InputModeMenu,
 	}
 }
@@ -81,7 +78,6 @@ func (ih *InputHandler) SetModalVisible(visible bool) {
 
 // HandleKeyEvent handles key events based on current input mode
 func (ih *InputHandler) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
-	ih.logger.Printf("Key event: %v, mode: %d, modal: %t", event.Key(), ih.inputMode, ih.modalVisible)
 	
 	// Modal mode handling
 	if ih.modalVisible {
@@ -141,39 +137,29 @@ func (ih *InputHandler) handleMenuInput(event *tcell.EventKey) *tcell.EventKey {
 
 // handleTerminalInput handles input in terminal mode
 func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventKey {
-	ih.logger.Printf("TERMINAL INPUT: Key=%v, Rune=%c, Modifiers=%v, ModAlt=%v", 
-		event.Key(), event.Rune(), event.Modifiers(), event.Modifiers()&tcell.ModAlt != 0)
 	
 	// Handle Alt+Letter combinations for menu access
 	if event.Key() == tcell.KeyRune && event.Modifiers()&tcell.ModAlt != 0 {
-		ih.logger.Printf("TERMINAL: Alt+key detected, rune=%c", event.Rune())
 		switch event.Rune() {
 		case 's', 'S':
-			ih.logger.Printf("TERMINAL: Opening Session menu")
 			ih.showSessionMenu()
 			return nil
 		case 'e', 'E':
-			ih.logger.Printf("TERMINAL: Opening Edit menu")
 			ih.showEditMenu()
 			return nil
 		case 'v', 'V':
-			ih.logger.Printf("TERMINAL: Opening View menu")
 			ih.showViewMenu()
 			return nil
 		case 't', 'T':
-			ih.logger.Printf("TERMINAL: Opening Terminal menu")
 			ih.showTerminalMenu()
 			return nil
 		case 'h', 'H':
-			ih.logger.Printf("TERMINAL: Opening Help menu")
 			ih.showHelpMenu()
 			return nil
 		case 'c', 'C':
-			ih.logger.Printf("TERMINAL: Connecting")
 			ih.showConnectDialog()
 			return nil
 		case 'd', 'D':
-			ih.logger.Printf("TERMINAL: Disconnecting")
 			if ih.onDisconnect != nil {
 				ih.onDisconnect()
 			}
@@ -242,19 +228,15 @@ func (ih *InputHandler) handleModalInput(event *tcell.EventKey) *tcell.EventKey 
 
 // Menu display functions
 func (ih *InputHandler) showSessionMenu() {
-	ih.logger.Printf("MENU: showSessionMenu() called")
 	// We need a special callback that doesn't auto-close when Connect is selected
 	// This will be handled by the app's navigation logic instead
 	if ih.onShowDropdown != nil {
-		ih.logger.Printf("MENU: Showing Session menu dropdown with special handling")
 		options := []string{"Connect", "Disconnect", "Quit"}
 		ih.onShowDropdown("Session", options, func(selected string) {
-			ih.logger.Printf("=== SESSION MENU: %s selected via Alt+S ===", selected)
 			// Note: The actual handling happens in app.go showDropdownMenu
 			// This callback gets overridden by the showDropdownMenu auto-close behavior
 		})
 	} else {
-		ih.logger.Printf("MENU: onShowDropdown is nil!")
 	}
 }
 
@@ -262,7 +244,6 @@ func (ih *InputHandler) showEditMenu() {
 	if ih.onShowDropdown != nil {
 		options := []string{"Cut", "Copy", "Paste", "Find", "Replace"}
 		ih.onShowDropdown("Edit", options, func(selected string) {
-			ih.logger.Printf("Edit menu selection: %s", selected)
 		})
 	}
 }
@@ -271,10 +252,8 @@ func (ih *InputHandler) showViewMenu() {
 	if ih.onShowDropdown != nil {
 		options := []string{"Scripts", "Zoom In", "Zoom Out", "Full Screen", "Panels"}
 		ih.onShowDropdown("View", options, func(selected string) {
-			ih.logger.Printf("View menu selection: %s", selected)
 			// Handle Scripts selection - for now just log
 			if selected == "Scripts" {
-				ih.logger.Printf("Scripts menu would open here")
 			}
 		})
 	}
@@ -284,7 +263,6 @@ func (ih *InputHandler) showTerminalMenu() {
 	if ih.onShowDropdown != nil {
 		options := []string{"Clear", "Scroll Up", "Scroll Down", "Copy Selection"}
 		ih.onShowDropdown("Terminal", options, func(selected string) {
-			ih.logger.Printf("Terminal menu selection: %s", selected)
 		})
 	}
 }
@@ -293,26 +271,18 @@ func (ih *InputHandler) showHelpMenu() {
 	if ih.onShowDropdown != nil {
 		options := []string{"Keyboard Shortcuts", "About", "User Manual"}
 		ih.onShowDropdown("Help", options, func(selected string) {
-			ih.logger.Printf("Help menu selection: %s", selected)
 		})
 	}
 }
 
 func (ih *InputHandler) showConnectDialog() {
-	ih.logger.Printf("=== INPUT HANDLER: showConnectDialog() called ===")
-	ih.logger.Printf("=== INPUT HANDLER: onShowConnectionDialog callback is nil? %v ===", ih.onShowConnectionDialog == nil)
 	if ih.onShowConnectionDialog != nil {
-		ih.logger.Printf("=== INPUT HANDLER: Calling onShowConnectionDialog callback ===")
 		ih.onShowConnectionDialog()
-		ih.logger.Printf("=== INPUT HANDLER: onShowConnectionDialog callback returned ===")
 	} else {
 		// Fallback to direct connection
-		ih.logger.Printf("=== INPUT HANDLER: No connection dialog callback, using fallback ===")
 		if ih.onConnect != nil {
-			ih.logger.Printf("=== INPUT HANDLER: Calling onConnect with default address ===")
 			ih.onConnect("twgs.geekm0nkey.com:23")
 		} else {
-			ih.logger.Printf("=== INPUT HANDLER: onConnect callback is also nil! ===")
 		}
 	}
 }

@@ -61,21 +61,17 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 	logger := log.New(logFile, "[PROXY] ", log.LstdFlags|log.Lshortfile)
 	rawLogger := log.New(rawLogFile, "[RAW] ", log.LstdFlags|log.Lshortfile)
 	pvpLogger := log.New(pvpLogFile, "[PVP] ", log.LstdFlags|log.Lshortfile)
-	logger.Println("Proxy initialized")
 	
 	// Initialize database
 	db := database.NewDatabase()
 	// Create or open database (TODO: make configurable)
 	if err := db.CreateDatabase("twist.db"); err != nil {
-		logger.Printf("Failed to create database, trying to open: %v", err)
 		if err := db.OpenDatabase("twist.db"); err != nil {
-			logger.Fatalf("Failed to open database: %v", err)
 		}
 	}
 	
 	// Initialize script manager
 	scriptManager := scripting.NewScriptManager(db)
-	logger.Println("Script manager initialized")
 	
 	p := &Proxy{
 		outputChan:    make(chan string, 100),
@@ -101,9 +97,7 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 	// Setup script manager connections to proxy and terminal
 	if terminal, ok := terminalWriter.(scripting.TerminalInterface); ok {
 		scriptManager.SetupConnections(p, terminal)
-		logger.Println("Script manager connections established")
 	} else {
-		logger.Println("Warning: terminalWriter does not implement TerminalInterface")
 	}
 	
 	return p
@@ -147,7 +141,6 @@ func (p *Proxy) Connect(address string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	p.logger.Printf("Attempting to connect to %s", address)
 
 	if p.connected {
 		return fmt.Errorf("already connected")
@@ -160,30 +153,25 @@ func (p *Proxy) Connect(address string) error {
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		p.logger.Printf("Connection failed: %v", err)
 		return fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
 
-	p.logger.Printf("TCP connection established to %s", address)
 	p.conn = conn
 	p.reader = bufio.NewReader(conn)
 	p.writer = bufio.NewWriter(conn)
 	p.connected = true
 
 	// Start the streaming pipeline
-	p.logger.Println("Starting streaming pipeline")
 	p.pipeline.Start()
 	
 	// Send initial telnet negotiation through pipeline
 	err = p.pipeline.SendTelnetNegotiation()
 	if err != nil {
-		p.logger.Printf("Telnet negotiation failed: %v", err)
 		conn.Close()
 		return fmt.Errorf("telnet negotiation failed: %w", err)
 	}
 
 	// Start goroutines for handling I/O
-	p.logger.Println("Starting I/O goroutines")
 	go p.handleInput()
 	go p.handleOutput()
 
@@ -203,7 +191,6 @@ func (p *Proxy) Disconnect() error {
 	// Stop all scripts
 	if p.scriptManager != nil {
 		if err := p.scriptManager.Stop(); err != nil {
-			p.logger.Printf("Error stopping scripts: %v", err)
 		}
 	}
 	
@@ -257,7 +244,6 @@ func (p *Proxy) handleInput() {
 		// Process outgoing text through script manager
 		if p.scriptManager != nil {
 			if err := p.scriptManager.ProcessOutgoingText(input); err != nil {
-				p.logger.Printf("Outgoing script processing error: %v", err)
 			}
 		}
 
@@ -275,7 +261,6 @@ func (p *Proxy) handleInput() {
 }
 
 func (p *Proxy) handleOutput() {
-	p.logger.Println("Output handler started")
 	
 	// Use a buffer for continuous reading
 	buffer := make([]byte, 4096)
@@ -286,14 +271,12 @@ func (p *Proxy) handleOutput() {
 		p.mu.RUnlock()
 
 		if !connected {
-			p.logger.Println("Output handler: connection closed, exiting")
 			break
 		}
 
 		// Read raw bytes from connection
 		n, err := p.reader.Read(buffer)
 		if err != nil {
-			p.logger.Printf("Read error: %v", err)
 			if err.Error() != "EOF" {
 				p.errorChan <- fmt.Errorf("read error: %w", err)
 			}
@@ -301,12 +284,8 @@ func (p *Proxy) handleOutput() {
 		}
 		
 		if n > 0 {
-			p.logger.Printf("Read %d bytes from server", n)
 			
-			// Log raw server data with escaped ANSI codes
 			rawData := buffer[:n]
-			escapedData := escapeANSI(rawData)
-			p.rawLogger.Printf("RAW SERVER DATA (%d bytes): %s", n, escapedData)
 			
 			// Track NO PVP with color analysis
 			rawStr := string(rawData)
@@ -319,18 +298,15 @@ func (p *Proxy) handleOutput() {
 				context := rawStr[start:end]
 				// Escape for readability
 				context = strings.ReplaceAll(context, "\x1b", "\\x1b")
-				p.pvpLogger.Printf("STAGE 1 - RAW: %s", context)
 			}
 			
 			// Also log hex dump for complete analysis
-			p.rawLogger.Printf("HEX DUMP: %x", rawData)
 			
 			// Send raw data directly to the streaming pipeline
 			p.pipeline.Write(rawData)
 		}
 	}
 	
-	p.logger.Println("Output handler exiting")
 }
 
 // GetScriptManager returns the script manager for external access
@@ -340,13 +316,11 @@ func (p *Proxy) GetScriptManager() *scripting.ScriptManager {
 
 // LoadScript loads a script from file
 func (p *Proxy) LoadScript(filename string) error {
-	p.logger.Printf("Loading script: %s", filename)
 	return p.scriptManager.LoadAndRunScript(filename)
 }
 
 // ExecuteScriptCommand executes a single script command
 func (p *Proxy) ExecuteScriptCommand(command string) error {
-	p.logger.Printf("Executing script command: %s", command)
 	return p.scriptManager.ExecuteCommand(command)
 }
 
@@ -357,7 +331,6 @@ func (p *Proxy) GetScriptStatus() map[string]interface{} {
 
 // StopAllScripts stops all running scripts
 func (p *Proxy) StopAllScripts() error {
-	p.logger.Println("Stopping all scripts")
 	return p.scriptManager.Stop()
 }
 

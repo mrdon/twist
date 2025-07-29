@@ -142,10 +142,6 @@ func TestTerminalComponentInitialization(t *testing.T) {
 		t.Error("Terminal should be initialized")
 	}
 	
-	if tc.ansiWriter == nil {
-		t.Error("ANSIWriter should be initialized")
-	}
-	
 	// Note: tview doesn't expose getter methods for these properties,
 	// but we verify they're set correctly in NewTerminalComponent:
 	// - SetDynamicColors(true) 

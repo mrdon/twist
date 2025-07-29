@@ -1,8 +1,6 @@
 package components
 
 import (
-	"log"
-	"os"
 	"strings"
 	"twist/internal/terminal"
 	"twist/internal/theme"
@@ -15,17 +13,10 @@ type TerminalComponent struct {
 	view     *tview.TextView
 	wrapper  *tview.Flex
 	terminal *terminal.Terminal
-	logger   *log.Logger
 }
 
 // NewTerminalComponent creates a new terminal component
 func NewTerminalComponent(term *terminal.Terminal) *TerminalComponent {
-	// Set up debug logging to the same file as the app
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	logger := log.New(logFile, "[TERMINAL] ", log.LstdFlags|log.Lshortfile)
 
 	// Use theme factory for proper styling
 	terminalView := theme.NewTextView().
@@ -54,7 +45,6 @@ func NewTerminalComponent(term *terminal.Terminal) *TerminalComponent {
 		view:     terminalView,
 		wrapper:  wrapper,
 		terminal: term,
-		logger:   logger,
 	}
 
 	// Set up direct streaming from terminal to view (no full rewrites)
@@ -79,7 +69,7 @@ func (tc *TerminalComponent) GetView() *tview.TextView {
 func (tc *TerminalComponent) streamUpdate() {
 	defer func() {
 		if r := recover(); r != nil {
-			tc.logger.Printf("ERROR: Panic in streamUpdate(): %v", r)
+			// Silently recover from panics
 		}
 	}()
 
@@ -93,19 +83,7 @@ func (tc *TerminalComponent) streamUpdate() {
 		return
 	}
 
-	tc.logger.Printf("DEBUG: Streaming %d bytes of new data", len(newData))
-
-	// Log sample only if it contains ANSI sequences for debugging
-	if len(newData) > 0 && strings.Contains(string(newData), "\x1b[") {
-		sample := string(newData)
-		if len(sample) > 100 {
-			sample = sample[:100] + "..."
-		}
-		tc.logger.Printf("DEBUG: Streaming ANSI data sample: %q", sample)
-	}
-
 	// For streaming updates, fall back to full refresh for now
-	// TODO: Implement incremental cell-based updates
 	tc.UpdateContent()
 }
 
@@ -113,129 +91,62 @@ func (tc *TerminalComponent) streamUpdate() {
 func (tc *TerminalComponent) UpdateContent() {
 	defer func() {
 		if r := recover(); r != nil {
-			tc.logger.Printf("ERROR: Panic in UpdateContent(): %v", r)
+			// Silently recover from panics
 		}
 	}()
 
-	tc.logger.Printf("DEBUG: UpdateContent() called - full refresh")
 	if tc.terminal == nil {
-		tc.logger.Printf("DEBUG: Terminal is nil, returning")
 		return
 	}
 
-	// Get cells directly and render without double ANSI conversion
-	cells := tc.terminal.GetCells()
-	tc.logger.Printf("DEBUG: Got %d rows of cells from terminal", len(cells))
+	// Get new efficient data structures
+	runes := tc.terminal.GetRunes()
+	colorChanges := tc.terminal.GetColorChanges()
 
-	// Clear view and render cells directly
-	tc.logger.Printf("DEBUG: Full refresh - clearing view and rendering cells")
+	// Clear view and render using new efficient method
 	tc.view.Clear()
-	tc.renderCellsDirect(cells)
+	tc.renderRunesWithColorTags(runes, colorChanges)
 	tc.view.ScrollToEnd()
-	tc.logger.Printf("DEBUG: UpdateContent() completed")
 }
 
-// renderCellsDirect renders terminal cells directly without ANSI conversion
-func (tc *TerminalComponent) renderCellsDirect(cells [][]terminal.Cell) {
-	for y, row := range cells {
+// renderRunesWithColorTags renders using the new efficient data structure
+func (tc *TerminalComponent) renderRunesWithColorTags(runes [][]rune, colorChanges []terminal.ColorChange) {
+	colorIndex := 0
+	
+	for y, row := range runes {
 		var lineBuilder strings.Builder
-
+		
 		// Get terminal width to prevent rendering extra columns
-		terminalWidth := len(row)
-		if tc.terminal != nil {
-			terminalWidth, _ = tc.terminal.GetSize()
-		}
-
-		// Limit iteration to prevent extra column rendering that causes line wrapping
+		terminalWidth, _ := tc.terminal.GetSize()
 		maxX := terminalWidth
 		if maxX > len(row) {
 			maxX = len(row)
 		}
-
-		// Count non-null characters in this row
-		nonNullCount := 0
-		for _, cell := range row {
-			if cell.Char != 0 {
-				nonNullCount++
-			}
-		}
-
-		// Debug logging for first few rows to understand the issue
-		if y < 5 {
-			tc.logger.Printf("ROW %d: buffer_len=%d, terminal_width=%d, maxX=%d, non_null_chars=%d", y, len(row), terminalWidth, maxX, nonNullCount)
-		}
-
+		
 		for x := 0; x < maxX; x++ {
-			cell := row[x]
-			// Skip null characters
-			if cell.Char == 0 {
-				continue
+			// Insert color tag if position matches a color change
+			if colorIndex < len(colorChanges) {
+				change := colorChanges[colorIndex]
+				if change.Y == y && change.X == x {
+					lineBuilder.WriteString(change.TViewTag)
+					colorIndex++
+				}
 			}
-
-			// Debug logging for problematic characters at line end
-			if y < 5 && x >= maxX-3 {
-				tc.logger.Printf("ROW %d, COL %d: char='%c' (U+%04X) FG=%s BG=%s", y, x, cell.Char, cell.Char, cell.ForegroundHex, cell.BackgroundHex)
+			
+			char := row[x]
+			// Skip null characters but include spaces if they're explicit
+			if char != 0 {
+				lineBuilder.WriteRune(char)
 			}
-
-			// Apply colors directly using tview color tags
-			if cell.BackgroundHex != "#000000" || cell.ForegroundHex != "#c0c0c0" || cell.Bold {
-				// Convert hex to tview color format
-				fgColor := tc.hexToTViewColor(cell.ForegroundHex)
-				bgColor := tc.hexToTViewColor(cell.BackgroundHex)
-
-				// Build tview color tag: [foreground:background:attributes]
-				var colorTag strings.Builder
-				colorTag.WriteString("[")
-				colorTag.WriteString(fgColor)
-				colorTag.WriteString(":")
-				colorTag.WriteString(bgColor)
-				if cell.Bold {
-					colorTag.WriteString(":b")
-				}
-				if cell.Underline {
-					colorTag.WriteString(":u")
-				}
-				if cell.Reverse {
-					colorTag.WriteString(":r")
-				}
-				colorTag.WriteString("]")
-
-				// Debug block characters specifically
-				if cell.Char == '▄' || cell.Char == '▀' || cell.Char == '█' {
-					tc.logger.Printf("RENDER BLOCK: '%c' with tag: %s (FG=%s->%s, BG=%s->%s)",
-						cell.Char, colorTag.String(), cell.ForegroundHex, fgColor, cell.BackgroundHex, bgColor)
-				}
-
-				lineBuilder.WriteString(colorTag.String())
-			}
-
-			lineBuilder.WriteRune(cell.Char)
 		}
-
+		
 		// Add newline except for last row
-		if y < len(cells)-1 {
+		if y < len(runes)-1 {
 			lineBuilder.WriteRune('\n')
 		}
-
+		
 		// Write line to view
 		tc.view.Write([]byte(lineBuilder.String()))
 	}
 }
 
-// hexToTViewColor converts hex color to tview color format
-func (tc *TerminalComponent) hexToTViewColor(hex string) string {
-	if hex == "#000000" {
-		return "black"
-	}
-	if hex == "#c0c0c0" {
-		return "silver"
-	}
-	if hex == "#008000" {
-		return "green"
-	}
-	if hex == "#000080" {
-		return "navy"
-	}
-	// For other colors, use hex format (tview supports #rrggbb)
-	return hex
-}

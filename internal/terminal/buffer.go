@@ -12,45 +12,32 @@ import (
 	"unicode/utf8"
 )
 
-// Cell represents a single character cell in the terminal
-type Cell struct {
-	Char          rune
-	ForegroundHex string // Hex color code (e.g., "#ff0000")
-	BackgroundHex string // Hex color code (e.g., "#000000")
-	Bold          bool
-	Underline     bool
-	Reverse       bool
+
+// ColorChange represents a position where color attributes change
+type ColorChange struct {
+	X, Y     int    // Position where color changes
+	TViewTag string // Direct tview color tag: "[red:blue:b]"
 }
 
 // Terminal represents a virtual terminal with a screen buffer
 type Terminal struct {
 	width     int
 	height    int
-	buffer    [][]Cell
+	
+	// Efficient storage
+	runes        [][]rune        // Just the characters (2D grid)
+	colorChanges []ColorChange  // Sparse color data
+	
 	cursorX   int
 	cursorY   int
 	scrollTop int // Top of scrollable region
 	scrollBot int // Bottom of scrollable region
 
-	// Scrollback buffer (circular buffer)
-	scrollback [][]Cell
-	scrollHead int
-	scrollSize int
-
-	// Screen history for MUD-style scrolling
-	screenHistory     [][][]Cell // Array of complete screens
-	screenHistoryHead int
-	maxScreenHistory  int
-
-	// Current text attributes (stored as hex colors now)
-	currentFgHex string
-	currentBgHex string
-	bold         bool
-	underline    bool
-	reverse      bool
+	// Current state tracking
+	currentColorTag string // Current tview color tag
 
 	// ANSI converter for immediate color conversion
-	ansiConverter ansi.ANSIConverter
+	ansiConverter *ansi.ColorConverter
 
 
 	// Partial escape sequence buffer for streaming
@@ -77,12 +64,12 @@ func NewTerminal(width, height int) *Terminal {
 }
 
 // NewTerminalWithConverter creates a new terminal buffer with an ANSI converter
-func NewTerminalWithConverter(width, height int, converter ansi.ANSIConverter) *Terminal {
+func NewTerminalWithConverter(width, height int, converter *ansi.ColorConverter) *Terminal {
 	return NewTerminalWithConverterAndLogger(width, height, converter, nil)
 }
 
 // NewTerminalWithConverterAndLogger creates a new terminal buffer with an ANSI converter and shared logger
-func NewTerminalWithConverterAndLogger(width, height int, converter ansi.ANSIConverter, pvpLogger *log.Logger) *Terminal {
+func NewTerminalWithConverterAndLogger(width, height int, converter *ansi.ColorConverter, pvpLogger *log.Logger) *Terminal {
 	// Set up debug logging
 	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err != nil {
@@ -90,37 +77,29 @@ func NewTerminalWithConverterAndLogger(width, height int, converter ansi.ANSICon
 	}
 
 	logger := log.New(logFile, "[TERM] ", log.LstdFlags|log.Lshortfile)
-	logger.Printf("Terminal initialized %dx%d", width, height)
 
 	t := &Terminal{
 		width:         width,
 		height:        height,
-		buffer:        make([][]Cell, height),
-		scrollback:    make([][]Cell, 1000), // 1000 lines of scrollback
-		scrollSize:    1000,
+		
+		// Efficient storage
+		runes:        make([][]rune, height),
+		colorChanges: make([]ColorChange, 0, 100), // Start with capacity for 100 color changes
+		
 		scrollTop:     0,
 		scrollBot:     height - 1,
-		currentFgHex:  "#c0c0c0", // Default white
-		currentBgHex:  "#000000", // Default black
+		currentColorTag: "[#c0c0c0:#000000]", // Default color tag
 		logger:        logger,
 		ansiConverter: converter,
-
-		// Screen history for MUD scrolling
-		screenHistory:    make([][][]Cell, 100), // Store 100 complete screens
-		maxScreenHistory: 100,
 	}
 
-	// Initialize buffer with default cells
-	for i := range t.buffer {
-		t.buffer[i] = make([]Cell, width)
-		for j := range t.buffer[i] {
-			t.buffer[i][j] = Cell{Char: ' ', ForegroundHex: "#c0c0c0", BackgroundHex: "#000000"}
+	// Initialize rune buffer
+	for i := range t.runes {
+		t.runes[i] = make([]rune, width)
+		// Default to spaces (rune 0 means empty)
+		for j := range t.runes[i] {
+			t.runes[i][j] = ' '
 		}
-	}
-
-	// Initialize scrollback
-	for i := range t.scrollback {
-		t.scrollback[i] = make([]Cell, width)
 	}
 
 	t.clear()
@@ -129,34 +108,33 @@ func NewTerminalWithConverterAndLogger(width, height int, converter ansi.ANSICon
 
 // Resize changes the terminal dimensions
 func (t *Terminal) Resize(width, height int) {
-	t.logger.Printf("Resizing terminal from %dx%d to %dx%d", t.width, t.height, width, height)
 
-	oldBuffer := t.buffer
+	oldRunes := t.runes
 	t.width = width
 	t.height = height
-	t.buffer = make([][]Cell, height)
 	t.scrollBot = height - 1
 
-	// Initialize new buffer with default cells
-	for i := range t.buffer {
-		t.buffer[i] = make([]Cell, width)
-		for j := range t.buffer[i] {
-			t.buffer[i][j] = Cell{Char: ' ', ForegroundHex: "#ffffff", BackgroundHex: "#000000"}
+	// Initialize new rune buffer
+	t.runes = make([][]rune, height)
+	for i := range t.runes {
+		t.runes[i] = make([]rune, width)
+		for j := range t.runes[i] {
+			t.runes[i][j] = ' '
 		}
 	}
 
 	// Copy old content (best effort)
 	copyHeight := height
-	if len(oldBuffer) < copyHeight {
-		copyHeight = len(oldBuffer)
+	if len(oldRunes) < copyHeight {
+		copyHeight = len(oldRunes)
 	}
 
 	for y := 0; y < copyHeight; y++ {
 		copyWidth := width
-		if len(oldBuffer[y]) < copyWidth {
-			copyWidth = len(oldBuffer[y])
+		if len(oldRunes[y]) < copyWidth {
+			copyWidth = len(oldRunes[y])
 		}
-		copy(t.buffer[y][:copyWidth], oldBuffer[y][:copyWidth])
+		copy(t.runes[y][:copyWidth], oldRunes[y][:copyWidth])
 	}
 
 	// Adjust cursor position
@@ -166,6 +144,10 @@ func (t *Terminal) Resize(width, height int) {
 	if t.cursorY >= height {
 		t.cursorY = height - 1
 	}
+
+	// Clear color changes since positions may no longer be valid
+	t.colorChanges = t.colorChanges[:0]
+	t.currentColorTag = "[#c0c0c0:#000000]"
 
 	t.dirty = true
 }
@@ -196,28 +178,7 @@ func extractContext(data []byte, target string) string {
 
 // Write processes incoming data and updates the terminal buffer
 func (t *Terminal) Write(data []byte) {
-	t.logger.Printf("Terminal received %d bytes: %q", len(data), string(data))
 
-	// Track NO PVP hex conversion - create shared logger if needed
-	var pvpLogger *log.Logger
-	if strings.Contains(string(data), "Select") {
-		pvpLogFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			pvpLogger = log.New(pvpLogFile, "[PVP] ", log.LstdFlags|log.Lshortfile)
-			start := strings.Index(string(data), "Select")
-			if start < 0 {
-				start = 0
-			}
-			end := strings.Index(string(data), "Select") + 120
-			if end > len(data) {
-				end = len(data)
-			}
-			context := string(data[start:end])
-			context = strings.ReplaceAll(context, "\x1b", "\\x1b")
-			pvpLogger.Printf("STAGE 4 - TERMINAL: %s", context)
-			pvpLogFile.Close()
-		}
-	}
 
 	// Store new data for incremental updates
 	t.newDataMutex.Lock()
@@ -234,6 +195,31 @@ func (t *Terminal) Write(data []byte) {
 		rawLogFile.Close()
 	}
 
+	// Log chunk content before ANSI processing
+	chunkDebugFile, err := os.OpenFile("chunk_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err == nil {
+		// Count visible characters (excluding ANSI sequences) in the entire chunk
+		visibleChars := 0
+		inEscape := false
+		for _, b := range data {
+			if b == 0x1B {
+				inEscape = true
+			} else if inEscape && (b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z') {
+				inEscape = false
+			} else if !inEscape {
+				visibleChars++
+			}
+		}
+		
+		chunkDebugFile.WriteString(fmt.Sprintf("=== CHUNK %s ===\n", time.Now().Format("15:04:05.000")))
+		chunkDebugFile.WriteString(fmt.Sprintf("CHUNK [len=%d, visible=%d]: %q\n", len(data), visibleChars, string(data)))
+		if visibleChars > 80 {
+			chunkDebugFile.WriteString(fmt.Sprintf("*** WARNING: Chunk has %d visible chars > 80 ***\n", visibleChars))
+		}
+		chunkDebugFile.WriteString("---\n")
+		chunkDebugFile.Close()
+	}
+
 	// Process ANSI escape sequences first, then handle remaining characters
 	t.processDataWithANSI(data)
 
@@ -242,31 +228,18 @@ func (t *Terminal) Write(data []byte) {
 
 	// Notify UI of update
 	if t.onUpdate != nil {
-		t.logger.Printf("Calling onUpdate callback")
 		t.onUpdate()
 	} else {
-		t.logger.Printf("No onUpdate callback set")
 	}
 }
 
 
 // processDataWithANSI processes input data by handling ANSI sequences at the correct positions
 func (t *Terminal) processDataWithANSI(data []byte) {
-	// Debug log to verify this method is being called
-	if strings.Contains(string(data), "Disconnect") {
-		debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			debugLogger := log.New(debugFile, "[NEW] ", log.LstdFlags|log.Lshortfile)
-			debugLogger.Printf("NEW ANSI PROCESSING: %q", string(data))
-			debugFile.Close()
-		}
-	}
 
 	// Combine any partial escape from previous write with new data
 	fullData := append(t.partialEscape, data...)
 	if len(t.partialEscape) > 0 {
-		t.logger.Printf("Combined partial escape %q with new data %q -> %q", 
-			string(t.partialEscape), string(data), string(fullData))
 	}
 	t.partialEscape = t.partialEscape[:0] // Clear the buffer
 
@@ -278,18 +251,8 @@ func (t *Terminal) processDataWithANSI(data []byte) {
 			if i+1 < len(fullData) && fullData[i+1] == '[' {
 			// Found ANSI escape sequence - find the end and process it
 			start := i
-			t.logger.Printf("*** ESCAPE START: Found \\x1b[ at pos %d ***", start)
 			i += 2 // Skip \x1b[
 
-			// Debug logging for parsing
-			if strings.Contains(string(data), "NO") && strings.Contains(string(data), "PVP") {
-				debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-				if err == nil {
-					debugLogger := log.New(debugFile, "[PARSE] ", log.LstdFlags|log.Lshortfile)
-					debugLogger.Printf("Found ANSI start at pos %d: %q", start, string(fullData[start:start+5]))
-					debugFile.Close()
-				}
-			}
 
 			// Find the end of the escape sequence (letter that terminates it)
 			for i < len(fullData) && !((fullData[i] >= 'a' && fullData[i] <= 'z') || (fullData[i] >= 'A' && fullData[i] <= 'Z')) {
@@ -302,25 +265,13 @@ func (t *Terminal) processDataWithANSI(data []byte) {
 				// Process the complete ANSI sequence immediately
 				sequence := fullData[start:i]
 
-				// Debug logging for all sequences
-				t.logger.Printf("Processing complete ANSI sequence: %q (hex: %x)", string(sequence), sequence)
 
-				// Debug logging for each sequence found
-				if strings.Contains(string(data), "NO") && strings.Contains(string(data), "PVP") {
-					debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-					if err == nil {
-						debugLogger := log.New(debugFile, "[PARSE] ", log.LstdFlags|log.Lshortfile)
-						debugLogger.Printf("Processing sequence: %q (hex: %x)", string(sequence), sequence)
-						debugFile.Close()
-					}
-				}
 
 				t.processANSISequence(sequence)
 			} else {
 				// Incomplete escape sequence at end of data - save for next write
 				incomplete := fullData[start:]
 				t.partialEscape = append(t.partialEscape, incomplete...)
-				t.logger.Printf("*** INCOMPLETE ANSI: Saved %q (hex: %x) for next write ***", string(incomplete), incomplete)
 				break
 			}
 			} else {
@@ -328,7 +279,6 @@ func (t *Terminal) processDataWithANSI(data []byte) {
 				if i+1 >= len(fullData) {
 					// \x1b at very end of data - save for next write
 					t.partialEscape = append(t.partialEscape, fullData[i:]...)
-					t.logger.Printf("*** INCOMPLETE ESC: Saved \\x1b at end of data ***")
 					break
 				} else {
 					// \x1b followed by something other than [ - treat as regular character
@@ -360,23 +310,11 @@ func (t *Terminal) processDataWithANSI(data []byte) {
 				context := string(fullData[start:end])
 				// Only log if this looks like a real ANSI fragment (has \x1b nearby)
 				if strings.Contains(context, "\x1b") && char == '[' {
-					t.logger.Printf("*** POTENTIAL ANSI FRAGMENT: char='%c' at pos %d, context: %q ***", char, i, context)
 				}
 			}
 
 			// Debug logging for block drawing characters
 			if char == '▄' || char == '▀' || char == '█' {
-				t.logger.Printf("BLOCK CHAR: '%c' (U+%04X) with FG=%s BG=%s Bold=%t", char, char, t.currentFgHex, t.currentBgHex, t.bold)
-			}
-			
-			// Debug logging for NO PVP characters
-			if char == 'N' || char == 'O' || char == 'P' || char == 'V' || char == ' ' {
-				debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-				if err == nil {
-					debugLogger := log.New(debugFile, "[CHAR] ", log.LstdFlags|log.Lshortfile)
-					debugLogger.Printf("Processing char '%c' with FG=%s Bold=%t", char, t.currentFgHex, t.bold)
-					debugFile.Close()
-				}
 			}
 
 			t.processRune(char)
@@ -399,33 +337,23 @@ func (t *Terminal) processANSISequence(sequence []byte) {
 	case 'm': // Color/attribute commands
 		// Always require converter - no fallback
 		if t.ansiConverter == nil {
-			// Log error if converter is missing
-			debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-			if err == nil {
-				debugLogger := log.New(debugFile, "[ERROR] ", log.LstdFlags|log.Lshortfile)
-				debugLogger.Printf("MISSING CONVERTER: params=%q - terminal has no converter!", params)
-				debugFile.Close()
-			}
 			return
 		}
 
-		// Pass complete parameters to converter and get back current state
-		fgHex, bgHex, bold, underline, reverse := t.ansiConverter.ConvertANSIParams(params)
+		// Pass complete parameters to converter and get back tview color tag
+		colorTag := t.ansiConverter.ConvertANSIParams(params)
 
-		// Debug logging for ALL sequences passed to converter
-		debugFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-		if err == nil {
-			debugLogger := log.New(debugFile, "[DEBUG] ", log.LstdFlags|log.Lshortfile)
-			debugLogger.Printf("ANSI CONVERT: params=%q -> FG:%s BG:%s Bold:%t", params, fgHex, bgHex, bold)
-			debugFile.Close()
+
+		// New approach: Store color change only if color actually changed
+		if colorTag != t.currentColorTag {
+			t.colorChanges = append(t.colorChanges, ColorChange{
+				X:        t.cursorX,
+				Y:        t.cursorY,
+				TViewTag: colorTag,
+			})
+			t.currentColorTag = colorTag
 		}
 
-		// Update terminal's current colors (converter is source of truth)
-		t.currentFgHex = fgHex
-		t.currentBgHex = bgHex
-		t.bold = bold
-		t.underline = underline
-		t.reverse = reverse
 
 	case 'H', 'f': // Cursor position
 		t.handleCursorPosition(params)
@@ -443,7 +371,6 @@ func (t *Terminal) processANSISequence(sequence []byte) {
 		t.handleEraseLine(params)
 	default:
 		// Unknown command - log it
-		t.logger.Printf("Unknown ANSI command: %c with params: %q", command, params)
 	}
 }
 
@@ -482,7 +409,6 @@ func (t *Terminal) handleCursorPosition(params string) {
 	
 	// Debug suspicious cursor movements
 	if t.cursorX >= t.width || t.cursorY >= t.height {
-		t.logger.Printf("CURSOR_MOVE: params=%q -> (%d,%d) BEFORE clamp, terminal=%dx%d", params, t.cursorX, t.cursorY, t.width, t.height)
 	}
 	
 	if t.cursorY >= t.height {
@@ -500,7 +426,6 @@ func (t *Terminal) handleCursorPosition(params string) {
 	
 	// Debug significant cursor movements
 	if abs(t.cursorX - oldX) > 10 || abs(t.cursorY - oldY) > 5 {
-		t.logger.Printf("CURSOR_JUMP: (%d,%d) -> (%d,%d) from params=%q", oldX, oldY, t.cursorX, t.cursorY, params)
 	}
 }
 
@@ -576,7 +501,6 @@ func (t *Terminal) handleEraseDisplay(params string) {
 	case 1: // Clear from beginning of screen to cursor
 		t.clearToCursor()
 	case 2: // Clear entire screen
-		t.saveCurrentScreen() // Save before clearing
 		t.clear()
 	}
 }
@@ -634,51 +558,21 @@ func (t *Terminal) processRune(char rune) {
 // putChar places a character at the current cursor position
 func (t *Terminal) putChar(char rune) {
 	if t.cursorX >= t.width {
-		t.logger.Printf("WRAP: char='%c' at cursor (%d,%d), width=%d - wrapping to next line", char, t.cursorX, t.cursorY, t.width)
 		t.newline()
 		t.cursorX = 0
 	}
 
 	if t.cursorY >= 0 && t.cursorY < t.height && t.cursorX >= 0 && t.cursorX < t.width {
-		cell := Cell{
-			Char:          char,
-			ForegroundHex: t.currentFgHex,
-			BackgroundHex: t.currentBgHex,
-			Bold:          t.bold,
-			Underline:     t.underline,
-			Reverse:       t.reverse,
-		}
-
+		// Store just the rune
+		t.runes[t.cursorY][t.cursorX] = char
+		
 		// Debug logging for characters at or near line boundaries
 		if t.cursorX >= t.width-3 {
-			t.logger.Printf("NEAR_END: char='%c' at (%d,%d) width=%d FG=%s BG=%s", char, t.cursorX, t.cursorY, t.width, cell.ForegroundHex, cell.BackgroundHex)
 		}
 		
-		// Count characters being written to each row for debugging
-		if t.cursorY < 5 {
-			// Count non-null characters in current row
-			rowCellCount := 0
-			for x := 0; x < t.width; x++ {
-				if t.buffer[t.cursorY][x].Char != 0 {
-					rowCellCount++
-				}
-			}
-			if rowCellCount >= t.width-2 {
-				t.logger.Printf("ROW_FILLING: row %d has %d non-null chars, about to add char '%c' at col %d", t.cursorY, rowCellCount, char, t.cursorX)
-			}
+		// Special debug for column 80 (should not happen)
+		if t.cursorX >= 80 {
 		}
-
-		// Log hex conversion for NO PVP characters
-		if char == 'N' || char == 'O' || char == ' ' || char == 'P' || char == 'V' {
-			pvpLogFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-			if err == nil {
-				pvpLogger := log.New(pvpLogFile, "[PVP] ", log.LstdFlags|log.Lshortfile)
-				pvpLogger.Printf("STAGE 5 - HEX: '%c' -> FG=%s BG=%s Bold=%t", char, cell.ForegroundHex, cell.BackgroundHex, cell.Bold)
-				pvpLogFile.Close()
-			}
-		}
-
-		t.buffer[t.cursorY][t.cursorX] = cell
 	}
 
 	t.cursorX++
@@ -695,29 +589,45 @@ func (t *Terminal) newline() {
 
 // scroll moves content up by one line
 func (t *Terminal) scroll() {
-	// Save top line to scrollback
-	t.scrollback[t.scrollHead] = make([]Cell, t.width)
-	copy(t.scrollback[t.scrollHead], t.buffer[t.scrollTop])
-	t.scrollHead = (t.scrollHead + 1) % t.scrollSize
-
-	// Move lines up
+	// Move lines up in rune buffer
 	for y := t.scrollTop; y < t.scrollBot; y++ {
-		copy(t.buffer[y], t.buffer[y+1])
+		copy(t.runes[y], t.runes[y+1])
 	}
 
-	// Clear bottom line
+	// Clear bottom line in rune buffer
 	for x := 0; x < t.width; x++ {
-		t.buffer[t.scrollBot][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.scrollBot][x] = ' '
 	}
+	
+	// Update color changes: remove any that scrolled off the top, adjust Y coordinates
+	newColorChanges := make([]ColorChange, 0, len(t.colorChanges))
+	for _, change := range t.colorChanges {
+		if change.Y > t.scrollTop {
+			// Move this color change up one line
+			newColorChanges = append(newColorChanges, ColorChange{
+				X:        change.X,
+				Y:        change.Y - 1,
+				TViewTag: change.TViewTag,
+			})
+		}
+		// Color changes at scrollTop are discarded (scrolled off)
+	}
+	t.colorChanges = newColorChanges
 }
 
 // clear clears the entire screen
 func (t *Terminal) clear() {
+	// Clear rune buffer
 	for y := 0; y < t.height; y++ {
 		for x := 0; x < t.width; x++ {
-			t.buffer[y][x] = Cell{Char: ' ', ForegroundHex: "#c0c0c0", BackgroundHex: "#000000"}
+			t.runes[y][x] = ' '
 		}
 	}
+	
+	// Clear color changes (start fresh)
+	t.colorChanges = t.colorChanges[:0]
+	t.currentColorTag = "[#c0c0c0:#000000]" // Reset to default
+	
 	t.cursorX = 0
 	t.cursorY = 0
 }
@@ -733,88 +643,6 @@ func hexToRGB(hex string) (r, g, b int) {
 }
 
 // GetLines returns the current screen content as strings with true color ANSI codes
-func (t *Terminal) GetLines() []string {
-	lines := make([]string, t.height)
-	for y := 0; y < t.height; y++ {
-		var line strings.Builder
-		// Track last state to minimize escape sequences
-		lastFgHex, lastBgHex := "", ""
-		lastBold, lastUnderline, lastReverse := false, false, false
-
-		// Find the actual end of content (skip trailing spaces and null chars)
-		endX := t.width - 1
-		for endX >= 0 && (t.buffer[y][endX].Char == ' ' || t.buffer[y][endX].Char == 0) {
-			endX--
-		}
-		endX++ // Include one position past the last non-space char
-
-		for x := 0; x <= endX && x < t.width; x++ {
-			cell := t.buffer[y][x]
-
-			// Skip null characters completely
-			if cell.Char == 0 {
-				continue
-			}
-
-			// Check if any attribute has changed
-			attributeChanged := cell.ForegroundHex != lastFgHex ||
-				cell.BackgroundHex != lastBgHex ||
-				cell.Bold != lastBold ||
-				cell.Underline != lastUnderline ||
-				cell.Reverse != lastReverse
-
-			if attributeChanged {
-				// Build complete true color ANSI sequence
-				var ansiParts []string
-
-				// Add true color foreground
-				if cell.ForegroundHex != "#c0c0c0" { // Not default white
-					fgR, fgG, fgB := hexToRGB(cell.ForegroundHex)
-					ansiParts = append(ansiParts, fmt.Sprintf("38;2;%d;%d;%d", fgR, fgG, fgB))
-				}
-
-				// Add true color background
-				if cell.BackgroundHex != "#000000" { // Not default black
-					bgR, bgG, bgB := hexToRGB(cell.BackgroundHex)
-					ansiParts = append(ansiParts, fmt.Sprintf("48;2;%d;%d;%d", bgR, bgG, bgB))
-				}
-
-				// Add attributes
-				if cell.Bold {
-					ansiParts = append(ansiParts, "1")
-				}
-				if cell.Underline {
-					ansiParts = append(ansiParts, "4")
-				}
-				if cell.Reverse {
-					ansiParts = append(ansiParts, "7")
-				}
-
-				// Output the complete sequence
-				if len(ansiParts) > 0 {
-					line.WriteString(fmt.Sprintf("\x1b[%sm", strings.Join(ansiParts, ";")))
-				} else {
-					// All attributes are default - reset
-					line.WriteString("\x1b[0m")
-				}
-
-				// Update tracking variables
-				lastFgHex, lastBgHex = cell.ForegroundHex, cell.BackgroundHex
-				lastBold, lastUnderline, lastReverse = cell.Bold, cell.Underline, cell.Reverse
-			}
-
-			line.WriteRune(cell.Char)
-		}
-
-		// Reset at end of line if any non-default attributes are active
-		if lastFgHex != "#c0c0c0" || lastBgHex != "#000000" || lastBold || lastUnderline || lastReverse {
-			line.WriteString("\x1b[0m")
-		}
-
-		lines[y] = strings.TrimRight(line.String(), " ")
-	}
-	return lines
-}
 
 // GetCursor returns the current cursor position
 func (t *Terminal) GetCursor() (int, int) {
@@ -826,105 +654,57 @@ func (t *Terminal) GetSize() (int, int) {
 	return t.width, t.height
 }
 
-// GetCells returns the raw cell data for external processing
-func (t *Terminal) GetCells() [][]Cell {
-	return t.buffer
+
+
+// GetRunes returns the character data without color information
+func (t *Terminal) GetRunes() [][]rune {
+	return t.runes
 }
 
-// GetAllCells returns scrollback + current buffer for scrolling
-func (t *Terminal) GetAllCells() [][]Cell {
-	var allCells [][]Cell
-	scrollbackLines := 0
+// GetColorChanges returns the sparse color change data
+func (t *Terminal) GetColorChanges() []ColorChange {
+	return t.colorChanges
+}
 
-	// Add scrollback content (oldest first) - only lines with visible content
-	for i := 0; i < t.scrollSize; i++ {
-		scrollIdx := (t.scrollHead + i) % t.scrollSize
-		if t.scrollback[scrollIdx] != nil && len(t.scrollback[scrollIdx]) > 0 {
-			// Check if this line has any visible content (be more lenient)
-			hasContent := false
-			nonSpaceCount := 0
-			for _, cell := range t.scrollback[scrollIdx] {
-				if cell.Char != 0 && cell.Char != ' ' {
-					nonSpaceCount++
-					if nonSpaceCount >= 1 { // At least 1 non-space character
-						hasContent = true
-						break
-					}
+// GetCurrentColors returns the current terminal color state for testing
+func (t *Terminal) GetCurrentColors() (string, string, bool, bool, bool) {
+	// Parse the current color tag to extract hex colors and attributes
+	fgHex, bgHex := "#c0c0c0", "#000000" // defaults
+	bold, underline, reverse := false, false, false
+	
+	if t.currentColorTag != "" {
+		// This is a simplified parser for the current tview tag
+		// In the new system, we track colors differently, but for testing
+		// we can infer from the current color tag
+		tag := t.currentColorTag
+		if strings.Contains(tag, ":b") {
+			bold = true
+		}
+		if strings.Contains(tag, ":u") {
+			underline = true
+		}
+		if strings.Contains(tag, ":r") {
+			reverse = true
+		}
+		// Extract hex colors from tag like [#800000:#000000:b]
+		if len(tag) > 3 && tag[0] == '[' {
+			parts := strings.Split(tag[1:len(tag)-1], ":")
+			if len(parts) >= 2 {
+				if parts[0] != "" && parts[0] != "-" {
+					fgHex = parts[0]
+				}
+				if parts[1] != "" && parts[1] != "-" {
+					bgHex = parts[1]
 				}
 			}
-			if hasContent {
-				// Make a copy to avoid reference issues
-				lineCopy := make([]Cell, len(t.scrollback[scrollIdx]))
-				copy(lineCopy, t.scrollback[scrollIdx])
-				allCells = append(allCells, lineCopy)
-				scrollbackLines++
-			}
 		}
 	}
-
-	// Add current screen buffer
-	allCells = append(allCells, t.buffer...)
-
-	t.logger.Printf("GetAllCells: %d scrollback lines + %d buffer lines = %d total",
-		scrollbackLines, len(t.buffer), len(allCells))
-
-	return allCells
+	
+	return fgHex, bgHex, bold, underline, reverse
 }
 
-// saveCurrentScreen saves the current screen to history before clearing
-func (t *Terminal) saveCurrentScreen() {
-	// Only save if there's actual content
-	hasContent := false
-	for _, line := range t.buffer {
-		for _, cell := range line {
-			if cell.Char > 32 && cell.Char != 127 {
-				hasContent = true
-				break
-			}
-		}
-		if hasContent {
-			break
-		}
-	}
 
-	if hasContent {
-		// Create a deep copy of the current screen
-		screenCopy := make([][]Cell, len(t.buffer))
-		for i, line := range t.buffer {
-			screenCopy[i] = make([]Cell, len(line))
-			copy(screenCopy[i], line)
-		}
 
-		// Store in circular buffer
-		t.screenHistory[t.screenHistoryHead] = screenCopy
-		t.screenHistoryHead = (t.screenHistoryHead + 1) % t.maxScreenHistory
-
-		t.logger.Printf("Saved complete screen to history (head: %d)", t.screenHistoryHead)
-	}
-}
-
-// GetScreenHistory returns all saved screens for scrolling
-func (t *Terminal) GetScreenHistory() [][][]Cell {
-	var screens [][][]Cell
-
-	// Collect all non-nil screens from history
-	for i := 0; i < t.maxScreenHistory; i++ {
-		idx := (t.screenHistoryHead + i) % t.maxScreenHistory
-		if t.screenHistory[idx] != nil {
-			screens = append(screens, t.screenHistory[idx])
-		}
-	}
-
-	// Add current screen at the end
-	currentScreen := make([][]Cell, len(t.buffer))
-	for i, line := range t.buffer {
-		currentScreen[i] = make([]Cell, len(line))
-		copy(currentScreen[i], line)
-	}
-	screens = append(screens, currentScreen)
-
-	return screens
-}
 
 // IsDirty returns whether the terminal has been updated since last check
 func (t *Terminal) IsDirty() bool {
@@ -963,12 +743,12 @@ func (t *Terminal) GetNewData() []byte {
 func (t *Terminal) clearFromCursor() {
 	// Clear from cursor to end of current line
 	for x := t.cursorX; x < t.width; x++ {
-		t.buffer[t.cursorY][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.cursorY][x] = ' '
 	}
 	// Clear all lines below
 	for y := t.cursorY + 1; y < t.height; y++ {
 		for x := 0; x < t.width; x++ {
-			t.buffer[y][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+			t.runes[y][x] = ' '
 		}
 	}
 }
@@ -977,29 +757,30 @@ func (t *Terminal) clearToCursor() {
 	// Clear all lines above
 	for y := 0; y < t.cursorY; y++ {
 		for x := 0; x < t.width; x++ {
-			t.buffer[y][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+			t.runes[y][x] = ' '
 		}
 	}
 	// Clear from beginning of current line to cursor
 	for x := 0; x <= t.cursorX && x < t.width; x++ {
-		t.buffer[t.cursorY][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.cursorY][x] = ' '
 	}
 }
 
 func (t *Terminal) clearLineFromCursor() {
 	for x := t.cursorX; x < t.width; x++ {
-		t.buffer[t.cursorY][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.cursorY][x] = ' '
 	}
 }
 
 func (t *Terminal) clearLineToCursor() {
 	for x := 0; x <= t.cursorX && x < t.width; x++ {
-		t.buffer[t.cursorY][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.cursorY][x] = ' '
 	}
 }
 
 func (t *Terminal) clearLine() {
 	for x := 0; x < t.width; x++ {
-		t.buffer[t.cursorY][x] = Cell{Char: ' ', ForegroundHex: t.currentFgHex, BackgroundHex: t.currentBgHex}
+		t.runes[t.cursorY][x] = ' '
 	}
 }
+
