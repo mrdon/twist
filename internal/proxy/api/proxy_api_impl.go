@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"fmt"
 	"time"
 	"twist/internal/proxy"
 )
@@ -48,6 +49,9 @@ func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
 			Status:      ConnectionStatusConnected,
 		}
 		tuiAPI.OnConnected(connectionInfo)
+		
+		// Start monitoring for network disconnections
+		go impl.monitorConnection()
 	}()
 	
 	// Return connected ProxyAPI instance immediately
@@ -113,4 +117,49 @@ func (p *ProxyApiImpl) Shutdown() error {
 		}
 	}()
 	return nil
+}
+
+// monitorConnection monitors the proxy connection and calls appropriate callbacks
+func (p *ProxyApiImpl) monitorConnection() {
+	fmt.Printf("[DEBUG] monitorConnection started\n")
+	if p.proxy == nil {
+		fmt.Printf("[DEBUG] proxy is nil, returning\n")
+		return
+	}
+	
+	// Use a ticker to periodically check connection status
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	
+	for {
+		select {
+		case err, ok := <-p.proxy.GetErrorChan():
+			if !ok {
+				fmt.Printf("[DEBUG] Error channel closed\n")
+				// Channel closed, check connection status
+				if !p.proxy.IsConnected() {
+					fmt.Printf("[DEBUG] Proxy not connected after channel close, calling OnDisconnected\n")
+					p.tuiAPI.OnDisconnected("connection closed")
+				}
+				return
+			}
+			fmt.Printf("[DEBUG] Got error from channel: %v\n", err)
+			// Check if proxy is still connected after the error
+			if !p.proxy.IsConnected() {
+				fmt.Printf("[DEBUG] Proxy not connected, calling OnDisconnected\n")
+				// Connection was lost - call disconnection callback
+				p.tuiAPI.OnDisconnected("connection lost: " + err.Error())
+				return
+			}
+			fmt.Printf("[DEBUG] Proxy still connected, continuing to monitor\n")
+			
+		case <-ticker.C:
+			// Periodically check if connection is still alive
+			if !p.proxy.IsConnected() {
+				fmt.Printf("[DEBUG] Periodic check: proxy not connected, calling OnDisconnected\n")
+				p.tuiAPI.OnDisconnected("connection lost")
+				return
+			}
+		}
+	}
 }

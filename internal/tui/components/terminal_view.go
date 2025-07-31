@@ -363,15 +363,8 @@ func (tv *TerminalView) Draw(screen tcell.Screen) {
 	x, y, width, height := tv.GetInnerRect()
 	
 	
-	// If we have no content, show a simple test message
+	// If we have no content, just show empty terminal
 	if len(tv.lines) == 0 {
-		testMsg := "Terminal Ready - Waiting for content..."
-		for i, char := range testMsg {
-			if i >= width {
-				break
-			}
-			screen.SetContent(x+i, y, char, nil, tv.currentStyle)
-		}
 		return
 	}
 	
@@ -428,45 +421,8 @@ func (tv *TerminalView) handleColorSequence(params string) {
 		return
 	}
 	
-	// Use existing ANSI converter to get tview color tag
-	colorTag := tv.ansiConverter.ConvertANSIParams(params)
-	
-	// Convert tview color tag to tcell.Style
-	// This is a simplified conversion - we could make this more sophisticated
-	style := tv.currentStyle
-	
-	// Parse basic colors from tag like "[#ff0000:#000000:b]"
-	if len(colorTag) > 3 && colorTag[0] == '[' && colorTag[len(colorTag)-1] == ']' {
-		parts := strings.Split(colorTag[1:len(colorTag)-1], ":")
-		
-		// Foreground color
-		if len(parts) > 0 && parts[0] != "" && parts[0] != "-" {
-			if color := tcell.GetColor(parts[0]); color != tcell.ColorDefault {
-				style = style.Foreground(color)
-			}
-		}
-		
-		// Background color  
-		if len(parts) > 1 && parts[1] != "" && parts[1] != "-" {
-			if color := tcell.GetColor(parts[1]); color != tcell.ColorDefault {
-				style = style.Background(color)
-			}
-		}
-		
-		// Attributes
-		for i := 2; i < len(parts); i++ {
-			switch parts[i] {
-			case "b":
-				style = style.Bold(true)
-			case "u":
-				style = style.Underline(true)
-			case "r":
-				style = style.Reverse(true)
-			}
-		}
-	}
-	
-	tv.currentStyle = style
+	// Convert ANSI params directly to tcell.Style (much more efficient!)
+	tv.currentStyle = tv.ansiConverter.ConvertToTCellStyle(params)
 }
 
 func (tv *TerminalView) handleCursorPosition(params string) {

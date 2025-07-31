@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	proxyapi "twist/internal/proxy/api"
 )
 
@@ -40,6 +41,7 @@ func (tui *TuiApiImpl) OnConnected(info proxyapi.ConnectionInfo) {
 }
 
 func (tui *TuiApiImpl) OnDisconnected(reason string) {
+	fmt.Printf("[DEBUG] TuiApiImpl.OnDisconnected called with reason: %s\n", reason)
 	go tui.app.HandleDisconnection(reason)
 }
 

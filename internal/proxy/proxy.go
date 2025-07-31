@@ -240,8 +240,12 @@ func (p *Proxy) handleOutput() {
 		// Read raw bytes from connection
 		n, err := p.reader.Read(buffer)
 		if err != nil {
+			fmt.Printf("[DEBUG] Read error in handleOutput: %v\n", err)
 			if err.Error() != "EOF" {
 				p.errorChan <- fmt.Errorf("read error: %w", err)
+			} else {
+				fmt.Printf("[DEBUG] Got EOF, sending to error channel\n")
+				p.errorChan <- fmt.Errorf("connection closed: %w", err)
 			}
 			break
 		}
@@ -254,6 +258,11 @@ func (p *Proxy) handleOutput() {
 		}
 	}
 	
+	// If we exit the loop, it means connection was lost
+	fmt.Printf("[DEBUG] handleOutput exiting, setting connected=false\n")
+	p.mu.Lock()
+	p.connected = false
+	p.mu.Unlock()
 }
 
 // GetScriptManager returns the script manager for external access

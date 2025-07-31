@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	"twist/internal/proxy"
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
@@ -253,10 +254,19 @@ func (ta *TwistApp) HandleConnectionEstablished(info proxyapi.ConnectionInfo) {
 }
 
 func (ta *TwistApp) HandleDisconnection(reason string) {
+	fmt.Printf("[DEBUG] HandleDisconnection called with reason: %s\n", reason)
 	ta.app.QueueUpdateDraw(func() {
+		fmt.Printf("[DEBUG] In QueueUpdateDraw callback\n")
 		ta.connected = false
 		ta.serverAddress = ""
 		ta.menuComponent.SetDisconnectedMenu()
+		
+		// Write red DISCONNECTED message to terminal (not sent to proxy)
+		// Move to beginning of line, clear it, show message, then newline
+		disconnectMsg := "\r\x1b[K\x1b[31;1;5mDISCONNECTED\x1b[0m\n"
+		fmt.Printf("[DEBUG] Writing disconnect message: %q\n", disconnectMsg)
+		n, err := ta.terminalComponent.Write([]byte(disconnectMsg))
+		fmt.Printf("[DEBUG] Write result: n=%d, err=%v\n", n, err)
 	})
 }
 
@@ -288,7 +298,6 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 	
 	// UI refresh is handled by the TerminalView's change callback
 }
-
 
 // showMenuModal displays a modal menu
 func (ta *TwistApp) showMenuModal(title string, options []string, callback func(string)) {

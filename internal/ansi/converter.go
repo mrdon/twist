@@ -16,6 +16,7 @@ type ColorConverter struct {
 	bold              bool
 	underline         bool
 	reverse           bool
+	blink             bool
 }
 
 // NewColorConverter creates a new color converter
@@ -31,7 +32,7 @@ func NewColorConverter() *ColorConverter {
 }
 
 // ConvertColorParams converts ANSI color parameters to hex colors and attributes
-func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string, bold, underline, reverse bool) {
+func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string, bold, underline, reverse, blink bool) {
 	// Get theme colors
 	currentTheme := theme.Current()
 	colors := currentTheme.TerminalColors()
@@ -45,12 +46,13 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 		c.bold = false
 		c.underline = false
 		c.reverse = false
+		c.blink = false
 		// Return theme defaults with all attributes reset
 		fgR, fgG, fgB := colors.Foreground.RGB()
 		bgR, bgG, bgB := colors.Background.RGB()
 		fgHex := fmt.Sprintf("#%02x%02x%02x", fgR, fgG, fgB)
 		bgHex := fmt.Sprintf("#%02x%02x%02x", bgR, bgG, bgB)
-		return fgHex, bgHex, false, false, false
+		return fgHex, bgHex, false, false, false, false
 	}
 
 	// Start with current state
@@ -59,6 +61,7 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 	bold = c.bold
 	underline = c.underline
 	reverse = c.reverse
+	blink = c.blink
 
 	// Process parameters sequentially
 	parts := strings.Split(params, ";")
@@ -72,7 +75,7 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 		case code == 0: // Reset
 			fg = colors.Foreground
 			bg = colors.Background
-			bold, underline, reverse = false, false, false
+			bold, underline, reverse, blink = false, false, false, false
 			
 		case code == 1: // Bold
 			bold = true
@@ -80,8 +83,14 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 		case code == 4: // Underline
 			underline = true
 			
+		case code == 5: // Slow blink
+			blink = true
+			
 		case code == 7: // Reverse
 			reverse = true
+			
+		case code == 25: // Blink off
+			blink = false
 			
 		case code >= 30 && code <= 37: // Standard foreground colors
 			colorIndex := code - 30
@@ -130,6 +139,7 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 	c.bold = bold
 	c.underline = underline
 	c.reverse = reverse
+	c.blink = blink
 	
 	// Convert to hex
 	fgR, fgG, fgB := fg.RGB()
@@ -137,17 +147,41 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 	fgHex = fmt.Sprintf("#%02x%02x%02x", fgR, fgG, fgB)
 	bgHex = fmt.Sprintf("#%02x%02x%02x", bgR, bgG, bgB)
 	
-	return fgHex, bgHex, bold, underline, reverse
+	return fgHex, bgHex, bold, underline, reverse, blink
+}
+
+// ConvertToTCellStyle converts ANSI color parameters directly to tcell.Style
+func (c *ColorConverter) ConvertToTCellStyle(params string) tcell.Style {
+	fgHex, bgHex, bold, underline, reverse, blink := c.ConvertColorParams(params)
+	
+	// Convert hex colors to tcell.Color
+	fgColor := tcell.GetColor(fgHex)
+	bgColor := tcell.GetColor(bgHex)
+	
+	// Build tcell.Style with attributes
+	style := tcell.StyleDefault.
+		Foreground(fgColor).
+		Background(bgColor).
+		Bold(bold).
+		Underline(underline).
+		Reverse(reverse)
+	
+	// Apply blink attribute
+	if blink {
+		style = style.Blink(true)
+	}
+	
+	return style
 }
 
 // ConvertANSIParams converts ANSI parameters to tview color tag
 func (c *ColorConverter) ConvertANSIParams(params string) string {
-	fgHex, bgHex, bold, underline, reverse := c.ConvertColorParams(params)
-	return c.buildTViewColorTag(fgHex, bgHex, bold, underline, reverse)
+	fgHex, bgHex, bold, underline, reverse, blink := c.ConvertColorParams(params)
+	return c.buildTViewColorTag(fgHex, bgHex, bold, underline, reverse, blink)
 }
 
 // buildTViewColorTag converts color attributes to tview color tag format
-func (c *ColorConverter) buildTViewColorTag(fgHex, bgHex string, bold, underline, reverse bool) string {
+func (c *ColorConverter) buildTViewColorTag(fgHex, bgHex string, bold, underline, reverse, blink bool) string {
 	// Build tview color tag: [foreground:background:attributes]
 	var tag strings.Builder
 	tag.WriteString("[")
@@ -168,6 +202,9 @@ func (c *ColorConverter) buildTViewColorTag(fgHex, bgHex string, bold, underline
 	}
 	if reverse {
 		tag.WriteString(":r")
+	}
+	if blink {
+		tag.WriteString(":k") // Use 'k' for blink (custom attribute)
 	}
 	
 	tag.WriteString("]")
