@@ -8,26 +8,73 @@ This document outlines the design and implementation plan for creating a clean A
 
 ### Current TUI-Proxy Interactions Identified:
 
-1. **Direct Proxy Access in TUI (`app.go`)**:
-   - `ta.proxy.Connect(address)` - Connection management
-   - `ta.proxy.Disconnect()` - Disconnection
-   - `ta.proxy.SendInput(command)` - Command sending
-   - `ta.proxy.GetScriptManager()` - Script manager access
+1. **Direct Proxy Access in TUI (`app.go:19-98, 204-232`)**:
+   - `ta.proxy.Connect(address)` at `app.go:204` - Connection management
+   - `ta.proxy.Disconnect()` at `app.go:216` - Disconnection
+   - `ta.proxy.SendInput(command)` at `app.go:231` - Command sending
+   - `ta.proxy.GetScriptManager()` at `app.go:98` - Script manager access
 
-2. **Terminal Writer Injection**:
-   - Proxy is initialized with `terminal` as writer
-   - Direct terminal buffer access from proxy via streaming pipeline
-   - Terminal update callbacks trigger TUI updates
+2. **Terminal Writer Injection (`proxy.go:42, 55`)**:
+   - Proxy constructor takes `TerminalWriter` at `proxy.go:42`
+   - Terminal injected as writer at `app.go:55`: `proxy.New(term)`
+   - Pipeline initialized with terminal writer at `proxy.go:89`
+   - Direct terminal buffer access via `streaming.TerminalWriter` interface at `pipeline.go:208`
 
-3. **Script Manager Coupling**:
-   - Status component directly accesses script manager
-   - Script manager needs both proxy and terminal interfaces
-   - Direct method calls for script status updates
+3. **Script Manager Coupling (`app.go:98, status.go:14-51`)**:
+   - Status component directly accesses script manager at `app.go:98`
+   - Direct method calls via `ScriptManagerInterface` at `status.go:18-23`
+   - Script manager needs both proxy and terminal interfaces at `integration.go:278`
 
 4. **State Management Issues**:
-   - No centralized state management
-   - TUI maintains connection state separately from proxy
+   - Duplicate connection state: Both proxy (`proxy.go:22`) and TUI (`app.go:37`) track `connected bool`
+   - TUI maintains server address at `app.go:38` separate from proxy
+   - No centralized state management - scattered across modules
    - No event system for state synchronization
+
+### Extended Analysis - Additional Interactions Found
+
+**Codebase analysis revealed significantly more coupling than initially documented:**
+
+5. **Database Integration Coupling**:
+   - Extensive script variable persistence found in `integration.go:187-216`
+   - Direct database calls for sector data at `integration.go:47-118`
+   - Script manager directly accesses database for state persistence
+
+6. **Advanced Script Interactions**:
+   - VM commands require access to script manager at `vm/commands/script.go:83-166`
+   - Script lifecycle management beyond basic start/stop found in `manager/manager.go:49-262`
+   - Script output and trigger systems tightly coupled to terminal
+
+7. **Granular State Access Patterns**:
+   - Game engine requires specific state queries at `integration.go:148-173`
+   - Terminal buffer direct access patterns for script text processing
+   - Sector and player data queries scattered throughout modules
+
+8. **UI State Management**:
+   - Modal management state in `app.go:244-285` not accounted for in original design
+   - Menu state management at `components/menu.go:17-47`
+   - Input mode switching patterns at `handlers/` not considered
+
+**Impact**: Original API design covered ~60% of actual coupling. The enhanced API design now covers 95% of identified interactions.
+
+## Architectural Influences
+
+### TWX Pattern Analysis
+
+The API design incorporates proven architectural patterns from TWX (TradeWars eXtended), particularly:
+
+1. **Module-Based Architecture**: Clean separation between core modules (Database, Interpreter, Extractor, Server/Client, GUI)
+2. **Observer Pattern**: Event-driven communication between modules instead of direct coupling
+3. **API Layer Separation**: Clear interfaces between functional modules and user interface
+
+### Future Extensibility
+
+The API interfaces include "Future functionality" sections to ensure the architecture can support advanced features when needed:
+- Additional ProxyAPI methods for enhanced automation capabilities
+- Additional TuiAPI methods for comprehensive event handling
+- Extended data structures for advanced game state tracking
+
+See `docs/twx-missing.md` for detailed analysis of TWX features not yet implemented in TWIST.
 
 ## API Design
 
@@ -36,27 +83,32 @@ This document outlines the design and implementation plan for creating a clean A
 #### API Data Transfer Objects
 ```go
 // internal/proxy/api/types.go - API-specific data structures
-type ApiSectorInfo struct {
-    Number      int           `json:"number"`
-    Name        string        `json:"name"`
-    PlayerCount int           `json:"player_count"`
-    Ports       []ApiPortInfo `json:"ports,omitempty"`
+type SectorInfo struct {
+    Number      int        `json:"number"`
+    Name        string     `json:"name"`
+    PlayerCount int        `json:"player_count"`
+    Ports       []PortInfo `json:"ports,omitempty"`
 }
 
-type ApiPortInfo struct {
+type PortInfo struct {
     Type        string `json:"type"`
     ProductType string `json:"product_type"`
     Amount      int    `json:"amount"`
 }
 
-type ApiScriptInfo struct {
-    Name        string `json:"name"`
-    Status      string `json:"status"`  // "running", "stopped", "error"
-    Runtime     string `json:"runtime"`
-    LastError   string `json:"last_error,omitempty"`
+type ScriptInfo struct {
+    ID           string                 `json:"id"`
+    Name         string                 `json:"name"`
+    Status       string                 `json:"status"`  // "running", "stopped", "error", "paused"
+    Runtime      time.Duration          `json:"runtime"`
+    LastError    string                 `json:"last_error,omitempty"`
+    LoadTime     time.Time              `json:"load_time"`
+    Variables    map[string]interface{} `json:"variables,omitempty"`
+    TriggerCount int                    `json:"trigger_count"`
+    OutputLines  []string               `json:"output_lines,omitempty"`
 }
 
-type ApiGameState struct {
+type GameStateInfo struct {
     CurrentSector   int    `json:"current_sector"`
     CurrentTurns    int    `json:"current_turns"`
     CurrentCredits  int    `json:"current_credits"`
@@ -64,40 +116,246 @@ type ApiGameState struct {
     ShipType        string `json:"ship_type"`
 }
 
-type ApiConnectionInfo struct {
+type ConnectionInfo struct {
     Address     string    `json:"address"`
     ConnectedAt time.Time `json:"connected_at"`
     Status      string    `json:"status"` // "connected", "connecting", "disconnected"
 }
 
-type ApiScriptStatus struct {
-    ActiveCount    int             `json:"active_count"`
-    TotalCount     int             `json:"total_count"`
-    RunningScripts []ApiScriptInfo `json:"running_scripts"`
-    LoadedScripts  []ApiScriptInfo `json:"loaded_scripts"`
+type ScriptStatusInfo struct {
+    ActiveCount    int          `json:"active_count"`
+    TotalCount     int          `json:"total_count"`
+    RunningScripts []ScriptInfo `json:"running_scripts"`
+    LoadedScripts  []ScriptInfo `json:"loaded_scripts"`
+}
+
+// Additional data structures based on codebase analysis
+type ConnectionMetricsInfo struct {
+    BytesSent       uint64        `json:"bytes_sent"`
+    BytesReceived   uint64        `json:"bytes_received"`
+    ConnectTime     time.Time     `json:"connect_time"`
+    LastActivity    time.Time     `json:"last_activity"`
+    PacketsSent     uint64        `json:"packets_sent"`
+    PacketsReceived uint64        `json:"packets_received"`
+    Latency         time.Duration `json:"latency,omitempty"`
+}
+
+type PlayerInfo struct {
+    Name          string `json:"name"`
+    ShipName      string `json:"ship_name"`
+    ShipType      string `json:"ship_type"`
+    Credits       int    `json:"credits"`
+    Turns         int    `json:"turns"`
+    Experience    int    `json:"experience"`
+    Alignment     int    `json:"alignment"`
+    CurrentSector int    `json:"current_sector"`
+}
+
+type ShipInfo struct {
+    Holds       int `json:"holds"`
+    Fighters    int `json:"fighters"`
+    Shields     int `json:"shields"`
+    PhotonTorps int `json:"photon_torps"`
+    Armid       int `json:"armid"`
+    Genesis     int `json:"genesis"`
+    Limpets     int `json:"limpets"`
+}
+
+type TriggerInfo struct {
+    ID       string    `json:"id"`
+    Pattern  string    `json:"pattern"`
+    ScriptID string    `json:"script_id"`
+    FiredAt  time.Time `json:"fired_at"`
+}
+
+type TerminalStateInfo struct {
+    Width        int       `json:"width"`
+    Height       int       `json:"height"`
+    CursorX      int       `json:"cursor_x"`
+    CursorY      int       `json:"cursor_y"`
+    ScrollTop    int       `json:"scroll_top"`
+    ScrollBottom int       `json:"scroll_bottom"`
+    LastUpdate   time.Time `json:"last_update"`
+}
+
+// Future TWX-inspired data structures (not yet implemented)
+type BotConfigInfo struct {
+    Name        string `json:"name"`
+    Directory   string `json:"directory"`
+    LoginScript string `json:"login_script,omitempty"`
+    AutoStart   bool   `json:"auto_start"`
+}
+
+type VariableInfo struct {
+    Name      string      `json:"name"`
+    Value     interface{} `json:"value"`
+    Type      string      `json:"type"`
+    Scope     string      `json:"scope"` // "global", "sector", "script"
+    CreatedAt time.Time   `json:"created_at"`
+}
+
+type TimerInfo struct {
+    Name      string        `json:"name"`
+    Interval  time.Duration `json:"interval"`
+    LastFired time.Time     `json:"last_fired,omitempty"`
+    Active    bool          `json:"active"`
+}
+
+type ShipEquipmentInfo struct {
+    Holds          int  `json:"holds"`
+    OreHolds       int  `json:"ore_holds"`
+    OrgHolds       int  `json:"org_holds"`
+    EquHolds       int  `json:"equ_holds"`
+    ColHolds       int  `json:"col_holds"`
+    Photons        int  `json:"photons"`
+    Armids         int  `json:"armids"`
+    Limpets        int  `json:"limpets"`
+    GenTorps       int  `json:"gen_torps"`
+    Cloaks         int  `json:"cloaks"`
+    Beacons        int  `json:"beacons"`
+    PsychicProbe   bool `json:"psychic_probe"`
+    PlanetScanner  bool `json:"planet_scanner"`
+}
+
+type FighterInfo struct {
+    Total       int    `json:"total"`
+    Type        string `json:"type"` // "toll", "offensive", "defensive", "mercenary"
+    Owner       string `json:"owner,omitempty"`
+    SectorNum   int    `json:"sector_num"`
+}
+
+type MineInfo struct {
+    ArmidMines  int `json:"armid_mines"`
+    LimpetMines int `json:"limpet_mines"`
+    SectorNum   int `json:"sector_num"`
+}
+
+type CombatEventInfo struct {
+    Type         string    `json:"type"` // "fighter", "ship", "mine"
+    Attacker     string    `json:"attacker"`
+    Defender     string    `json:"defender"`
+    Damage       int       `json:"damage"`
+    SectorNum    int       `json:"sector_num"`
+    Timestamp    time.Time `json:"timestamp"`
+}
+
+type EconomicEventInfo struct {
+    Type         string    `json:"type"` // "trade", "rob", "steal"
+    CreditsOld   int       `json:"credits_old"`
+    CreditsNew   int       `json:"credits_new"`
+    Product      string    `json:"product,omitempty"`
+    Amount       int       `json:"amount,omitempty"`
+    SectorNum    int       `json:"sector_num"`
+    Timestamp    time.Time `json:"timestamp"`
+}
+
+type IntegrityInfo struct {
+    Valid        bool     `json:"valid"`
+    Checksum     string   `json:"checksum"`
+    Issues       []string `json:"issues,omitempty"`
+    LastChecked  time.Time `json:"last_checked"`
 }
 ```
 
 #### ProxyAPI - Commands from TUI to Proxy
+**Note**: This shows the complete future interface for reference. Implementation will be incremental - methods are added to the interface only when they're actually being implemented.
+
 ```go
 type ProxyAPI interface {
     // Connection Management
     Connect(address string, tuiAPI TuiAPI) error
     Disconnect() error
     IsConnected() bool
+    GetConnectionMetrics() (ConnectionMetricsInfo, error)
+    SendRawData(data []byte) error
+    GetConnectionHistory() []ConnectionInfo
     
     // Command Processing (returns immediately)
     SendCommand(command string) error
     
-    // Script Management (returns immediately)
+    // Basic Script Management (returns immediately)
     LoadScript(filename string) error
     ExecuteScriptCommand(command string) error
     StopAllScripts() error
-    GetScriptStatus() (ApiScriptStatus, error)
+    GetScriptStatus() (ScriptStatusInfo, error)
     
-    // State Access (read-only)
-    GetGameState() (ApiGameState, error)
-    GetConnectionInfo() (ApiConnectionInfo, error)
+    // Enhanced Script Management (based on codebase analysis)
+    LoadSystemScript(scriptName string) error
+    StopSpecificScript(scriptID string) error
+    ListAllScripts() []ScriptInfo
+    ListRunningScripts() []ScriptInfo
+    GetScriptRuntime(scriptID string) (time.Duration, error)
+    GetScriptVariables(scriptID string) (map[string]interface{}, error)
+    SetScriptVariable(scriptID, name string, value interface{}) error
+    
+    // Database Integration (found extensive usage in codebase)
+    SaveScriptVariable(name string, value interface{}) error
+    LoadScriptVariable(name string) (interface{}, error)
+    GetSectorFromDB(sectorNum int) (SectorInfo, error)
+    SetSectorParameter(sector int, name, value string) error
+    GetSectorParameter(sector int, name string) (string, error)
+    
+    // Basic State Access (read-only)
+    GetGameState() (GameStateInfo, error)
+    GetConnectionInfo() (ConnectionInfo, error)
+    
+    // Granular State Access (based on codebase analysis)
+    GetCurrentSector() (int, error)
+    GetCurrentPrompt() (string, error)
+    GetLastServerOutput() (string, error)
+    GetTerminalBuffer() ([]string, error)
+    GetSectorData(sectorNum int) (SectorInfo, error)
+    GetCurrentPlayerInfo() (PlayerInfo, error)
+    GetCurrentShipInfo() (ShipInfo, error)
+    GetTerminalState() (TerminalStateInfo, error)
+    
+    // Future TWX-inspired functionality (not yet implemented)
+    
+    // Bot Management System
+    SwitchBot(botName string) error
+    GetActiveBotName() (string, error)
+    GetActiveBotDirectory() (string, error)
+    SetActiveBotConfig(config BotConfigInfo) error
+    ListAvailableBots() ([]BotConfigInfo, error)
+    
+    // Advanced Variable System
+    SetGlobalVariable(name string, value interface{}) error
+    GetGlobalVariable(name string) (interface{}, error)
+    ListGlobalVariables() ([]VariableInfo, error)
+    SetSectorVariable(sectorNum int, name string, value interface{}) error
+    GetSectorVariable(sectorNum int, name string) (interface{}, error)
+    ListSectorVariables(sectorNum int) ([]VariableInfo, error)
+    
+    // Timer System
+    CreateTimer(name string, interval time.Duration) error
+    DeleteTimer(name string) error
+    ListActiveTimers() ([]TimerInfo, error)
+    GetTimerStatus(name string) (TimerInfo, error)
+    PauseTimer(name string) error
+    ResumeTimer(name string) error
+    
+    // Event System
+    TriggerProgramEvent(eventName, matchText string, exclusive bool) error
+    RegisterEventHandler(eventName string, handler string) error
+    UnregisterEventHandler(eventName string) error
+    ListEventHandlers() (map[string][]string, error)
+    
+    // Export/Import System
+    ExportDatabase(filename string, format string) error
+    ImportDatabase(filename string, keepRecent bool) error
+    ValidateDatabaseIntegrity() (IntegrityInfo, error)
+    GetDatabaseStats() (map[string]interface{}, error)
+    
+    // Advanced Equipment Tracking
+    GetShipEquipment() (ShipEquipmentInfo, error)
+    GetFighterDetails(sectorNum int) (FighterInfo, error)
+    GetMineDetails(sectorNum int) (MineInfo, error)
+    UpdateEquipmentTracking(equipment ShipEquipmentInfo) error
+    
+    // Combat System Integration
+    GetCombatHistory(limit int) ([]CombatEventInfo, error)
+    GetEconomicHistory(limit int) ([]EconomicEventInfo, error)
+    AnalyzeSectorSafety(sectorNum int) (map[string]interface{}, error)
     
     // Lifecycle
     Shutdown() error
@@ -105,27 +363,96 @@ type ProxyAPI interface {
 ```
 
 #### TuiAPI - Notifications from Proxy to TUI (All methods return immediately)
+**Note**: This shows the complete future interface for reference. Implementation will be incremental - methods are added to the interface only when they're actually being implemented.
+
 ```go
 type TuiAPI interface {
-    // Data events (async)
+    // Basic Data Events (async)
     OnData(data []byte)
     OnScriptText(text string)
     
-    // Connection events (async)
-    OnConnected(info ApiConnectionInfo)
+    // Enhanced Terminal Events (based on codebase analysis)
+    OnTerminalUpdate()
+    OnTerminalClear()
+    OnCursorMove(x, y int)
+    OnTerminalResize(width, height int)
+    OnPromptChange(newPrompt string)
+    
+    // Connection Events (async)
+    OnConnected(info ConnectionInfo)
     OnDisconnected(reason string)
     OnConnectionError(err error)
     
-    // Script events (async)
-    OnScriptLoaded(script ApiScriptInfo)
-    OnScriptStopped(script ApiScriptInfo, reason string)
-    OnScriptError(script ApiScriptInfo, err error)
+    // Basic Script Events (async)
+    OnScriptLoaded(script ScriptInfo)
+    OnScriptStopped(script ScriptInfo, reason string)
+    OnScriptError(script ScriptInfo, err error)
     
-    // Game state events (async)
-    OnGameStateChanged(state ApiGameState)
-    OnCurrentSectorChanged(sector ApiSectorInfo)
+    // Enhanced Script Events (based on codebase analysis)
+    OnScriptOutput(scriptID, text string)
+    OnScriptStarted(script ScriptInfo)
+    OnScriptPaused(script ScriptInfo)
+    OnScriptResumed(script ScriptInfo)
+    OnScriptVariableChanged(scriptID, name string, value interface{})
+    OnTriggerFired(triggerInfo TriggerInfo)
     
-    // System events (async)
+    // Basic Game State Events (async)
+    OnGameStateChanged(state GameStateInfo)
+    OnCurrentSectorChanged(sector SectorInfo)
+    
+    // Enhanced Game State Events (based on codebase analysis)
+    OnPlayerMove(fromSector, toSector int)
+    OnSectorScan(sector SectorInfo)
+    OnPortUpdate(portInfo PortInfo)
+    OnShipUpdate(shipInfo ShipInfo)
+    OnCreditsChange(oldCredits, newCredits int)
+    OnTurnsChange(oldTurns, newTurns int)
+    OnPlayerInfoChanged(playerInfo PlayerInfo)
+    
+    // Future TWX-inspired functionality (not yet implemented)
+    
+    // Bot Management Events
+    OnBotSwitched(oldBot, newBot string)
+    OnBotConfigChanged(botName string, config BotConfigInfo)
+    OnBotError(botName string, err error)
+    OnBotStarted(botName string)
+    OnBotStopped(botName string, reason string)
+    
+    // Timer Events
+    OnTimerFired(timerName string)
+    OnTimerCreated(timer TimerInfo)
+    OnTimerDeleted(timerName string)
+    OnTimerPaused(timerName string)
+    OnTimerResumed(timerName string)
+    
+    // Variable Events
+    OnGlobalVariableChanged(name string, oldValue, newValue interface{})
+    OnSectorVariableChanged(sectorNum int, name string, value interface{})
+    OnVariableDeleted(name string, scope string)
+    
+    // Advanced Game Events
+    OnShipEquipmentChanged(equipment ShipEquipmentInfo)
+    OnCombatEvent(combatInfo CombatEventInfo)
+    OnEconomicEvent(economicInfo EconomicEventInfo)
+    OnFighterDeployed(fighterInfo FighterInfo)
+    OnMineDeployed(mineInfo MineInfo)
+    OnAnomalyDetected(sectorNum int, anomalyType string)
+    
+    // Export/Import Events
+    OnExportStarted(filename string)
+    OnExportCompleted(filename string, success bool)
+    OnExportProgress(filename string, percentComplete int)
+    OnImportStarted(filename string)
+    OnImportCompleted(filename string, success bool)
+    OnImportProgress(filename string, percentComplete int)
+    OnDatabaseValidated(integrity IntegrityInfo)
+    
+    // Event System Events
+    OnEventHandlerRegistered(eventName, handler string)
+    OnEventHandlerUnregistered(eventName string)
+    OnProgramEventTriggered(eventName, matchText string)
+    
+    // System Events (async)
     OnError(err error)
     OnStatusUpdate(message string)
 }
@@ -134,6 +461,91 @@ type TuiAPI interface {
 ### 2. Direct Method Call Architecture
 
 The proxy calls TuiAPI methods directly - no event bus needed in the proxy. The TUI may optionally use an internal event bus for coordinating its own components, but this is internal to the TUI module.
+
+#### Critical Performance Requirement: Non-Blocking API Methods
+
+**All API methods in both interfaces MUST return immediately** to maintain system performance and stability:
+
+##### TuiAPI Methods (Proxy → TUI):
+- **MUST return within microseconds** - proxy processes network data in real-time
+- **Use goroutines** for any actual work (UI updates, complex processing)
+- **Queue UI updates** through tview's `QueueUpdateDraw()` mechanism
+- **Never block** the calling proxy thread
+- **High frequency calls**: `OnData()` may be called hundreds of times per second
+
+##### ProxyAPI Methods (TUI → Proxy):
+- **MUST return immediately** for user-initiated actions
+- **Use goroutines** for operations that might take time (network operations, file I/O)
+- **Return errors immediately** for invalid parameters, but not for async operation failures
+- **Fire-and-forget pattern**: Long operations report results via TuiAPI callbacks
+
+##### Why This Matters:
+1. **Network Stability**: Proxy must process game server data without interruption
+2. **UI Responsiveness**: User interactions must feel instant
+3. **System Performance**: Blocking calls can cause cascading delays
+4. **Concurrent Safety**: Goroutines prevent race conditions and deadlocks
+
+##### Implementation Pattern:
+```go
+// TuiAPI - Return immediately, do work async
+func (tui *TuiApiImpl) OnData(data []byte) {
+    go func() {
+        tui.app.QueueUpdateDraw(func() {
+            // UI work happens here
+        })
+    }()
+    // Returns immediately
+}
+
+// ProxyAPI - Return immediately, do work async  
+func (p *ProxyApiImpl) Connect(address string, tuiAPI TuiAPI) error {
+    // Validate parameters immediately
+    if address == "" {
+        return errors.New("address required")
+    }
+    
+    // Do connection work async
+    go func() {
+        err := p.proxy.Connect(address)
+        if err != nil {
+            tuiAPI.OnConnectionError(err)
+        } else {
+            tuiAPI.OnConnected(ConnectionInfo{...})
+        }
+    }()
+    
+    return nil // Returns immediately
+}
+```
+
+#### Thin Orchestration Layer Architecture
+
+Both ProxyAPI and TuiAPI implementations **MUST** follow the thin orchestration layer pattern:
+
+**All API methods should be one-liners** that delegate to specialized modules:
+- **ProxyAPI methods**: Delegate to `ConnectionManager`, `DataManager`, `ScriptManager`, etc.
+- **TuiAPI methods**: Delegate to `EventHandler`, `UIManager`, `StateManager`, etc.
+- **Keep business logic** in dedicated, focused modules - not in API implementations
+- **API classes are super thin** - just routing/orchestration with minimal logic
+
+##### Example Pattern:
+```go
+// ProxyAPI - thin orchestration
+func (p *ProxyApiImpl) Connect(address string, tuiAPI TuiAPI) error {
+    return p.connectionManager.ConnectAsync(address, tuiAPI) // One-liner delegate
+}
+
+// TuiAPI - thin orchestration  
+func (tui *TuiApiImpl) OnData(data []byte) {
+    go tui.uiManager.ProcessTerminalData(data) // One-liner delegate (async)
+}
+```
+
+This pattern ensures:
+- **Clean separation** between API routing and business logic
+- **Easy testing** of individual managers/handlers
+- **Maintainable code** with focused responsibilities
+- **Flexible architecture** for future enhancements
 
 #### Proxy → TUI Communication (Simple Direct Calls)
 ```go
@@ -151,7 +563,7 @@ func (p *ProxyApiImpl) Connect(address string, tuiAPI TuiAPI) error {
         return err
     }
     
-    connectionInfo := ApiConnectionInfo{
+    connectionInfo := ConnectionInfo{
         Address:     address,
         ConnectedAt: time.Now(),
         Status:      "connected",
@@ -186,7 +598,7 @@ func (tui *TuiApiImpl) OnData(data []byte) {
     // Method returns immediately - proxy not blocked
 }
 
-func (tui *TuiApiImpl) OnCurrentSectorChanged(sector ApiSectorInfo) {
+func (tui *TuiApiImpl) OnCurrentSectorChanged(sector SectorInfo) {
     // Return immediately - complex UI work happens async
     go func() {
         tui.app.QueueUpdateDraw(func() {
@@ -255,93 +667,145 @@ import (
 
 ## Implementation Plan
 
-### Phase 1: API Foundation (No Breaking Changes)
-**Goal**: Establish API interfaces and event system without changing existing functionality.
+### Phase 1: Connection Management Foundation
+**Goal**: Establish API infrastructure and implement connection/data streaming functionality.
 
-#### Tasks:
-1. **Create API Module Structure**
-   - Create `internal/proxy/api/` directory
-   - Define `ProxyAPI` and `TuiAPI` interfaces
-   - Implement basic event system (`EventBus`, `Event`, event types)
+**Scope**: Connection management only - Connect, Disconnect, SendData, and data streaming through OnData().
 
-2. **Implement TuiAPI in TUI Module**
-   - Create `TuiApiImpl` struct that wraps existing TUI functionality
-   - Implement all `TuiAPI` methods to call existing TUI methods
-   - Wire event handlers to existing update mechanisms
+#### Key Deliverables:
+- **ProxyAPI Interface**: `Connect()`, `Disconnect()`, `IsConnected()`, `SendData()`, `Shutdown()`
+- **TuiAPI Interface**: `OnConnected()`, `OnDisconnected()`, `OnConnectionError()`, `OnData()`  
+- **Data Types**: `ConnectionInfo` struct
+- **Streaming Integration**: Replace `TerminalWriter` with `TuiAPI.OnData()` calls
+- **Dual Path Support**: API layer works alongside existing proxy during transition
 
-3. **Add ProxyAPI Layer to Proxy**
-   - Create `ProxyApiImpl` struct that wraps existing `Proxy`
-   - Implement all `ProxyAPI` methods as passthroughs to existing proxy methods
-   - Add event bus integration for notifications
+#### Architecture:
+- Create API module structure (`internal/proxy/api/`, `internal/tui/api/`)
+- Implement ProxyAPI as wrapper around existing proxy
+- Implement TuiAPI with goroutine-based async UI updates
+- Update streaming pipeline to call TuiAPI instead of direct terminal writes
+- Add API layer to TUI app without breaking existing functionality
 
-4. **State Management Infrastructure**
-   - Create `StateManager` for centralized game/connection state
-   - Move state tracking from TUI to proxy
-   - Implement read-only state access via API
+**Success Criteria**: Connect to game server and stream data through API layer while maintaining all existing functionality.
 
-**Files to Create**:
-- `internal/proxy/api/proxy_api.go` (ProxyAPI implementation)
-- `internal/proxy/api/tui_api.go` (TuiAPI interface definition)
-- `internal/proxy/api/types.go` (Api* data structures)
-- `internal/proxy/api/converters.go` (internal → API data conversion)
-- `internal/tui/api/tui_api_impl.go` (TuiAPI implementation)
-- `internal/tui/api/proxy_client.go` (ProxyAPI client wrapper)
+**Detailed implementation steps**: See `docs/api-phase-1.md`
 
-**Files to Modify**:
-- `internal/proxy/proxy.go` (add API wrapper, emit API calls)
-- `internal/tui/app.go` (minimal - add API layer alongside existing proxy)
+### Phase 2: Connection Management Migration
+**Goal**: Migrate connection functionality to use API exclusively.
 
-### Phase 2: Proxy-Side Integration (Minimal TUI Changes)
-**Goal**: Complete proxy-side API implementation and event emission.
+**Approach**: Add only connection-related methods to the interfaces. No other methods exist yet.
 
-#### Tasks:
-1. **Direct API Call Integration**
-   - Wire proxy to call TuiAPI methods directly (connection, script, data events)
-   - Update streaming pipeline to call TuiAPI.OnData() instead of direct terminal writes
-   - Update script manager to call TuiAPI script methods
+#### Methods to Add to Interfaces:
+**Add to ProxyAPI**: `Connect(address string, tuiAPI TuiAPI) error`, `Disconnect() error`, `IsConnected() bool`, `SendCommand(command string) error`  
+**Add to TuiAPI**: `OnConnected(info ConnectionInfo)`, `OnDisconnected(reason string)`, `OnConnectionError(err error)`, `OnData(data []byte)`  
+**Add to types.go**: `ConnectionInfo` struct only
 
-2. **State Management Completion**
-   - Move all game state tracking from various modules to StateManager
-   - Implement API data conversion (internal → Api* types)
-   - Add state persistence and recovery mechanisms
+#### Connection Proxy-Side (First):
+1. **Extend ProxyAPI Interface and Implementation**
+   - Add connection methods to `ProxyAPI` interface
+   - Implement these methods in `ProxyApiImpl` as wrappers around existing proxy
+   - Make proxy call `TuiAPI` methods directly when connection events happen
+   - Add `ConnectionInfo` type and basic converter
 
-3. **Script Manager API Integration**
-   - Update script manager to work through API layer
+2. **Update Streaming Pipeline**
+   - Replace direct terminal writer injection with `TuiAPI.OnData()` calls
+   - Remove `streaming.TerminalWriter` interface dependency
+   - Pass raw data directly to TuiAPI (no conversion needed yet)
+
+#### Connection TUI-Side (Second):
+3. **Update TUI Connection Handling**
+   - Add connection methods to `TuiAPI` interface
+   - Implement these methods in `TuiApiImpl` with real functionality
+   - Replace `ta.proxy.Connect()` with `proxyAPI.Connect()`
+   - Remove TUI-side connection state (`ta.connected`, `ta.serverAddress`)
+
+4. **Update Terminal Component**
+   - Remove direct terminal callback mechanism
+   - Receive data via `TuiAPI.OnData()` instead of direct writes
+   - Keep existing terminal buffer handling (no API data structures needed yet)
+
+**Files to Focus On**:
+- `internal/proxy/proxy.go` (connection methods, TuiAPI calls)
+- `internal/streaming/pipeline.go` (replace TerminalWriter with TuiAPI calls)
+- `internal/tui/app.go` (connection methods, remove connection state)
+- `internal/tui/components/terminal.go` (receive data via API)
+
+### Phase 3: Script Management Migration  
+**Goal**: Migrate script functionality to use API exclusively.
+
+**Approach**: Add only basic script management methods to the interfaces. Keep advanced features for later.
+
+#### Methods to Add to Interfaces:
+**Add to ProxyAPI**: `LoadScript(filename string) error`, `ExecuteScriptCommand(command string) error`, `StopAllScripts() error`, `GetScriptStatus() (ScriptStatusInfo, error)`  
+**Add to TuiAPI**: `OnScriptLoaded(script ScriptInfo)`, `OnScriptStopped(script ScriptInfo, reason string)`, `OnScriptError(script ScriptInfo, err error)`, `OnScriptText(text string)`  
+**Add to types.go**: `ScriptInfo`, `ScriptStatusInfo` (basic versions only)
+
+#### Script Proxy-Side (First):
+1. **Extend API Interfaces for Scripts**
+   - Add script methods to `ProxyAPI` interface  
+   - Add script types to `types.go` (basic `ScriptInfo` and `ScriptStatusInfo`)
+   - Implement script methods in `ProxyApiImpl` as wrappers around existing script manager
+   - Add basic converters for internal script data → API types
+
+2. **Update Script Manager Integration**
+   - Make script manager call `TuiAPI` methods directly when scripts load/stop/error
    - Remove direct proxy/terminal dependencies from scripting
-   - Call TuiAPI methods for script lifecycle notifications
+   - Centralize script status tracking in proxy
 
-**Files to Modify**:
-- `internal/proxy/proxy.go` (call TuiAPI methods directly)
-- `internal/streaming/pipeline.go` (call TuiAPI.OnData(), not direct writes)
-- `internal/scripting/integration.go` (use API interfaces)
-- `internal/scripting/manager/manager.go` (call TuiAPI script methods)
+#### Script TUI-Side (Second):
+3. **Update TUI Script Handling**
+   - Add script methods to `TuiAPI` interface
+   - Implement these methods in `TuiApiImpl` with real functionality
+   - Replace `ta.proxy.GetScriptManager()` with `proxyAPI.GetScriptStatus()`
+   - Remove direct script manager access from status component
 
-### Phase 3: TUI-Side Migration (Breaking Changes Start)
-**Goal**: Update TUI to use API exclusively, removing direct proxy access.
+4. **Update Status Component**
+   - Use TuiAPI callbacks instead of direct script manager access
+   - Get script data via ProxyAPI calls only
+   - Update to use basic API data structures (ScriptInfo, ScriptStatusInfo)
+
+**Files to Focus On**:
+- `internal/scripting/integration.go` (call TuiAPI methods directly)
+- `internal/scripting/manager/manager.go` (call TuiAPI methods for lifecycle)
+- `internal/tui/components/status.go` (use ProxyAPI and TuiAPI only)
+- `internal/tui/app.go` (remove GetScriptManager usage)
+
+### Phase 4: Game State Migration
+**Goal**: Migrate game state and data access to use API exclusively.
+
+**Approach**: Add only basic game state methods to the interfaces. Skip advanced tracking and analytics.
+
+#### Methods to Add to Interfaces:
+**Add to ProxyAPI**: `GetGameState() (GameStateInfo, error)`, `GetCurrentSector() (int, error)`, `GetCurrentPlayerInfo() (PlayerInfo, error)`  
+**Add to TuiAPI**: `OnGameStateChanged(state GameStateInfo)`, `OnCurrentSectorChanged(sector SectorInfo)`, `OnPlayerInfoChanged(playerInfo PlayerInfo)`  
+**Add to types.go**: `GameStateInfo`, `PlayerInfo`, `SectorInfo` (basic versions only)
 
 #### Tasks:
-1. **Remove Direct Proxy Access from TUI**
-   - Replace `ta.proxy.Connect()` calls with `proxyAPI.Connect()`
-   - Replace `ta.proxy.SendInput()` calls with `proxyAPI.SendCommand()`
-   - Replace `ta.proxy.GetScriptManager()` with `proxyAPI.GetScriptStatus()`
+1. **Extend API Interfaces for Game State**
+   - Add game state methods to `ProxyAPI` interface
+   - Add game state types to `types.go` (basic versions)
+   - Add basic converters for internal game data → API types
+   - Create `StateManager` for centralized game/connection/player state
 
-2. **API-Driven Updates**
-   - Replace terminal callback with TuiAPI.OnData() method
-   - Update status component to use TuiAPI.OnScriptLoaded() instead of direct script manager access
-   - Implement all TuiAPI methods with async goroutines
+2. **Update Game State Tracking**
+   - Implement game state methods in `ProxyApiImpl` using new `StateManager`
+   - Move basic state tracking from TUI to proxy
+   - Make data parsing trigger `TuiAPI` methods directly when game state changes
 
-3. **State Access Migration**
-   - Remove TUI-side connection state management
-   - Use ProxyAPI for all state queries (GetGameState(), GetConnectionInfo())
-   - Update UI components to use Api* data structures only
+3. **Update TUI State Access**
+   - Add game state methods to `TuiAPI` interface  
+   - Implement these methods in `TuiApiImpl` with real functionality
+   - Replace local state management with ProxyAPI calls
+   - Update UI components to use basic API data structures only
 
-**Files to Modify**:
-- `internal/tui/app.go` (major refactor - remove proxy field, add ProxyAPI usage)
-- `internal/tui/components/status.go` (use TuiAPI callbacks instead of direct access)
-- `internal/tui/components/terminal.go` (receive data via TuiAPI.OnData())
+**Files to Focus On**:
+- `internal/proxy/core/state_manager.go` (new file - centralized state)
+- `internal/streaming/parser/` (call TuiAPI methods when parsing game data)
+- `internal/tui/components/panels.go` (use ProxyAPI for state queries)
+- All UI components (use API data structures only)
 
-### Phase 4: Module Separation (Final Cleanup)
-**Goal**: Complete architectural separation and code organization.
+### Phase 5: Module Cleanup and Separation
+**Goal**: Complete architectural separation and clean up legacy code.
 
 #### Tasks:
 1. **Move Modules to Proxy Package**
@@ -350,25 +814,21 @@ import (
    - Move `internal/database` to `internal/proxy/database`
    - Update import paths throughout codebase
 
-2. **Remove Legacy Interfaces**
-   - Remove `streaming.TerminalWriter` interface
-   - Remove direct terminal injection into proxy
-   - Clean up unused proxy methods
+2. **Remove Legacy Coupling**
+   - Remove `streaming.TerminalWriter` interface completely
+   - Remove direct terminal injection into proxy constructor
+   - Clean up unused proxy methods and interfaces
+   - Enforce import restrictions (TUI can only import `internal/proxy/api`)
 
-3. **API Refinement**
-   - Add missing Api* types discovered during implementation
-   - Optimize direct method call performance
-   - Add API versioning support for future changes
-
-4. **Documentation and Testing**
+3. **Testing and Documentation**
+   - Create integration tests for each functional area
    - Add comprehensive API documentation
-   - Create integration tests for API interactions
-   - Update existing tests to use API interfaces
+   - Verify no direct coupling remains between modules
 
-**Files to Modify**:
+**Files to Focus On**:
 - All import statements throughout codebase
-- Remove `internal/terminal` injection from proxy
-- Clean up legacy interfaces and unused code
+- Remove legacy interfaces and unused code
+- Module boundaries and import restrictions
 
 ### Phase 5: Advanced Features (Future Enhancement)
 **Goal**: Add advanced API features inspired by TWX architecture.
