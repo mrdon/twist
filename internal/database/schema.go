@@ -6,7 +6,6 @@ import (
 
 // createSchema creates the TWX-compatible SQLite schema
 func (d *SQLiteDatabase) createSchema() error {
-	d.logger.Printf("Creating database schema")
 	
 	// Main sectors table matching TWX TSector exactly
 	sectorsTable := `
@@ -217,7 +216,6 @@ func (d *SQLiteDatabase) createSchema() error {
 		}
 	}
 	
-	d.logger.Printf("Database schema created successfully")
 	return nil
 }
 

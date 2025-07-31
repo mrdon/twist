@@ -84,6 +84,34 @@ func LogState(component, state string, details ...interface{}) {
 	}
 }
 
+// LogDataChunk logs raw data chunks to a separate file for debugging network/terminal issues
+func LogDataChunk(source string, data []byte) {
+	if logFile, err := os.OpenFile("twist_data_chunks.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+		// Use %q to encode escapes, then strip the outer quotes
+		encoded := fmt.Sprintf("%q", string(data))
+		// Remove the first and last quote characters
+		if len(encoded) >= 2 {
+			encoded = encoded[1 : len(encoded)-1]
+		}
+		
+		fmt.Fprintf(logFile, "%s chunk (%d bytes):\n%s", source, len(data), encoded)
+		
+		// Insert extra newline if we detect \r\n (to separate chunks visually)
+		dataStr := string(data)
+		if len(dataStr) > 0 && (dataStr[len(dataStr)-1] == '\n' || dataStr[len(dataStr)-1] == '\r') {
+			fmt.Fprintf(logFile, "\n")
+		} else {
+			fmt.Fprintf(logFile, "\n")
+		}
+		
+		logFile.Close()
+	} else {
+		// Fallback to regular debug log if we can't open the data chunks file
+		Log("ERROR: Could not open data chunks log: %v", err)
+		Log("%s chunk (%d bytes): %q", source, len(data), string(data))
+	}
+}
+
 // Close closes the debug logger file
 func Close() {
 	if globalLogger != nil && globalLogger.file != os.Stdout {

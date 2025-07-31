@@ -1,9 +1,6 @@
 package telnet
 
-import (
-	"log"
-	"os"
-)
+import ()
 
 // Telnet command constants
 const (
@@ -27,7 +24,6 @@ const (
 // Handler manages telnet protocol negotiation
 type Handler struct {
 	writer func([]byte) error
-	logger *log.Logger
 	
 	// SAUCE detection state
 	sauceBuffer  []byte
@@ -36,24 +32,14 @@ type Handler struct {
 
 // NewHandler creates a new telnet protocol handler
 func NewHandler(writer func([]byte) error) *Handler {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	
-	logger := log.New(logFile, "[TELNET] ", log.LstdFlags|log.Lshortfile)
-	
 	return &Handler{
 		writer: writer,
-		logger: logger,
 		sauceTarget: []byte{0x1A, 'S', 'A', 'U', 'C', 'E', '0', '0'},
 	}
 }
 
 // SendInitialNegotiation sends the initial telnet option negotiations
 func (h *Handler) SendInitialNegotiation() error {
-	h.logger.Println("Sending initial telnet negotiation")
 	
 	// Send basic telnet client capabilities
 	commands := [][]byte{
@@ -65,7 +51,6 @@ func (h *Handler) SendInitialNegotiation() error {
 	}
 	
 	for _, cmd := range commands {
-		h.logger.Printf("Sending: IAC %02x %02x", cmd[1], cmd[2])
 		if err := h.writer(cmd); err != nil {
 			return err
 		}
@@ -82,7 +67,6 @@ func (h *Handler) ProcessData(data []byte) []byte {
 	for i < len(data) {
 		if data[i] == IAC && i+1 < len(data) {
 			cmd := data[i+1]
-			h.logger.Printf("Received telnet command: IAC %02x", cmd)
 			
 			switch cmd {
 			case DONT, DO, WONT, WILL:
@@ -118,7 +102,6 @@ func (h *Handler) ProcessData(data []byte) []byte {
 				
 			default:
 				// Other two-byte commands
-				h.logger.Printf("Unknown telnet command: %02x", cmd)
 				i += 2
 			}
 		} else {
@@ -131,9 +114,6 @@ func (h *Handler) ProcessData(data []byte) []byte {
 	// Filter out SAUCE records (ANSI art metadata)
 	result = h.filterSAUCE(result)
 	
-	if len(result) > 0 {
-		h.logger.Printf("Filtered data: %q", string(result))
-	}
 	
 	return result
 }
@@ -153,8 +133,7 @@ func (h *Handler) filterSAUCE(data []byte) []byte {
 				// Byte matches, continue building
 				if len(h.sauceBuffer) == len(h.sauceTarget) {
 					// Complete SAUCE header detected - drop everything in buffer
-					h.logger.Printf("Complete SAUCE header detected, dropping %d bytes", len(h.sauceBuffer))
-					h.sauceBuffer = nil
+						h.sauceBuffer = nil
 					// From here on, drop all remaining data (SAUCE record continues)
 					return result
 				}
@@ -177,7 +156,6 @@ func (h *Handler) filterSAUCE(data []byte) []byte {
 
 // handleNegotiation processes telnet option negotiations
 func (h *Handler) handleNegotiation(cmd byte, option byte) {
-	h.logger.Printf("Negotiation: %02x %02x", cmd, option)
 	
 	var response []byte
 	
@@ -224,9 +202,8 @@ func (h *Handler) handleNegotiation(cmd byte, option byte) {
 	}
 	
 	if response != nil {
-		h.logger.Printf("Responding: IAC %02x %02x", response[1], response[2])
 		if err := h.writer(response); err != nil {
-			h.logger.Printf("Failed to send response: %v", err)
+			// Failed to send response
 		}
 	}
 }

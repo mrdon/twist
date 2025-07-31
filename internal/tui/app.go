@@ -1,7 +1,6 @@
 package tui
 
 import (
-	"twist/internal/ansi"
 	"twist/internal/proxy"
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
@@ -10,7 +9,6 @@ import (
 	twistComponents "twist/internal/components"
 	"twist/internal/tui/api"
 	proxyapi "twist/internal/proxy/api"
-	"twist/internal/debug"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -31,10 +29,10 @@ type TwistApp struct {
 	mainGrid     *tview.Grid
 
 	// UI Components
-	menuComponent     *components.MenuComponent
-	terminalComponent *components.TerminalComponent
-	panelComponent    *components.PanelComponent
-	statusComponent   *components.StatusComponent
+	menuComponent      *components.MenuComponent
+	terminalComponent  *components.TerminalComponent
+	panelComponent     *components.PanelComponent
+	statusComponent    *components.StatusComponent
 
 	// Input handling
 	inputHandler        *handlers.InputHandler
@@ -51,25 +49,16 @@ type TwistApp struct {
 
 // NewApplication creates and configures the tview application
 func NewApplication() *TwistApp {
-	debug.Log("=== NewApplication called ===")
 
-	// Create the simplified color converter
-	ansiConverter := ansi.NewColorConverter()
-	
-	// Initialize terminal buffer with ANSI converter
-	term := terminal.NewTerminalWithConverter(80, 50, ansiConverter)
-
-	// Initialize proxy with the terminal as a writer
-	debug.Log("Creating legacy proxy instance (should not be used for connections)")
-	proxyInstance := proxy.New(term)
-	debug.Log("Legacy proxy created, ensuring it's not connected")
+	// Initialize proxy without terminal buffer - we'll connect it to TerminalComponent later
+	proxyInstance := proxy.New(nil)
 
 	// Create the main application
 	app := tview.NewApplication()
 
 	// Create UI components
 	menuComp := components.NewMenuComponent()
-	terminalComp := components.NewTerminalComponent(term)
+	terminalComp := components.NewTerminalComponent()
 	panelComp := components.NewPanelComponent()
 	statusComp := components.NewStatusComponent()
 
@@ -79,7 +68,7 @@ func NewApplication() *TwistApp {
 	twistApp := &TwistApp{
 		app:                app,
 		proxy:              proxyInstance,
-		terminal:           term,
+		terminal:           nil, // No longer using terminal buffer
 		connected:          false,
 		serverAddress:      "twgs.geekm0nkey.com:23",
 		terminalUpdateChan: make(chan struct{}, 100),
@@ -95,13 +84,8 @@ func NewApplication() *TwistApp {
 	twistApp.proxyClient = api.NewProxyClient()
 	twistApp.tuiAPI = api.NewTuiAPI(twistApp)
 
-	// Set up terminal update callback
-	term.SetUpdateCallback(func() {
-		select {
-		case twistApp.terminalUpdateChan <- struct{}{}:
-		default:
-		}
-
+	// Set up terminal update callback for TerminalComponent
+	terminalComp.SetChangedFunc(func() {
 		// Trigger UI update
 		app.QueueUpdateDraw(func() {
 			twistApp.updateTerminalView()
@@ -151,7 +135,7 @@ func (ta *TwistApp) setupUI() {
 	ta.app.SetRoot(ta.pages, true)
 	
 	// Always keep terminal focused and in terminal input mode
-	ta.app.SetFocus(ta.terminalComponent.GetWrapper())
+	ta.app.SetFocus(ta.terminalComponent.GetView())
 	ta.inputHandler.SetInputMode(handlers.InputModeTerminal)
 }
 
@@ -214,19 +198,15 @@ func (ta *TwistApp) Run() error {
 
 // connect establishes connection to the game server
 func (ta *TwistApp) connect(address string) {
-	defer debug.LogFunction("TwistApp.connect")()
-	debug.Log("Connect requested to address: %s", address)
 	
 	// Use API layer exclusively - connection state updated via callbacks
 	if err := ta.proxyClient.Connect(address, ta.tuiAPI); err != nil {
-		debug.LogError(err, "proxyClient.Connect immediate failure")
 		// Handle immediate validation errors
 		ta.connected = false
 		ta.serverAddress = ""
 		ta.menuComponent.SetDisconnectedMenu()
 		return
 	}
-	debug.Log("ProxyClient.Connect returned successfully, waiting for callbacks")
 	// Connection state will be updated via OnConnected/OnConnectionError callbacks
 }
 
@@ -252,21 +232,15 @@ func (ta *TwistApp) sendCommand(command string) {
 
 // updateTerminalView updates the terminal display
 func (ta *TwistApp) updateTerminalView() {
-	debug.Log("updateTerminalView called")
 	if ta.terminalComponent == nil {
-		debug.Log("ERROR: terminalComponent is nil")
 		return
 	}
-	debug.Log("Calling terminalComponent.UpdateContent()")
 	ta.terminalComponent.UpdateContent()
-	debug.Log("terminalComponent.UpdateContent() completed")
 }
 
 // TuiAPI handler methods - called by API layer
 func (ta *TwistApp) HandleConnectionEstablished(info proxyapi.ConnectionInfo) {
-	debug.Log("HandleConnectionEstablished called with: %+v", info)
 	ta.app.QueueUpdateDraw(func() {
-		debug.LogState("TUI", "connection established", info.Address)
 		ta.connected = true
 		ta.serverAddress = info.Address
 		ta.menuComponent.SetConnectedMenu()
@@ -275,26 +249,19 @@ func (ta *TwistApp) HandleConnectionEstablished(info proxyapi.ConnectionInfo) {
 		if ta.modalVisible {
 			ta.closeModal()
 		}
-		
-		debug.Log("UI updated to connected state")
 	})
 }
 
 func (ta *TwistApp) HandleDisconnection(reason string) {
-	debug.Log("HandleDisconnection called with reason: %s", reason)
 	ta.app.QueueUpdateDraw(func() {
-		debug.LogState("TUI", "disconnection", reason)
 		ta.connected = false
 		ta.serverAddress = ""
 		ta.menuComponent.SetDisconnectedMenu()
-		debug.Log("UI updated to disconnected state")
 	})
 }
 
 func (ta *TwistApp) HandleConnectionError(err error) {
-	debug.LogError(err, "HandleConnectionError")
 	ta.app.QueueUpdateDraw(func() {
-		debug.LogState("TUI", "connection error", err.Error())
 		ta.connected = false
 		ta.serverAddress = ""
 		ta.menuComponent.SetDisconnectedMenu()
@@ -305,89 +272,23 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 		}
 		
 		// TODO: Show error modal: ta.showErrorModal(err)
-		debug.Log("UI updated to disconnected state due to error")
 	})
 }
 
 func (ta *TwistApp) HandleTerminalData(data []byte) {
-	// Log raw chunk data for debugging ANSI and boundary issues
-	ta.logChunkDebug(data)
-	
-	debug.Log("HandleTerminalData called with %d bytes: %q", len(data), string(data))
-	
-	// Try direct processing first to see if QueueUpdateDraw is the issue
-	debug.Log("Processing terminal data directly (bypassing QueueUpdateDraw temporarily)")
 	
 	// Add error recovery to catch any panics in terminal processing
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in HandleTerminalData: %v", r)
 		}
 	}()
 	
-	debug.Log("Writing to terminal buffer directly")
-	ta.terminal.Write(data)
-	debug.Log("Terminal.Write completed")
+	// Write directly to the TerminalComponent
+	ta.terminalComponent.Write(data)
 	
-	// Now try the QueueUpdateDraw for UI refresh
-	ta.app.QueueUpdateDraw(func() {
-		debug.Log("In QueueUpdateDraw callback for UI refresh")
-		ta.updateTerminalView()
-		debug.Log("updateTerminalView() completed")
-	})
-	
-	debug.Log("HandleTerminalData completed")
+	// UI refresh is handled by the TerminalView's change callback
 }
 
-func (ta *TwistApp) logChunkDebug(data []byte) {
-	// Count visible characters (excluding ANSI sequences) in the entire chunk
-	visibleChars := 0
-	inEscape := false
-	for _, b := range data {
-		if b == 0x1B {
-			inEscape = true
-		} else if inEscape && (b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z') {
-			inEscape = false
-		} else if !inEscape {
-			visibleChars++
-		}
-	}
-	
-	debug.Log("CHUNK [len=%d, visible=%d]: %q", len(data), visibleChars, string(data))
-	debug.Log("CHUNK hex: %x", data)
-	
-	if visibleChars > 80 {
-		debug.Log("*** WARNING: Chunk has %d visible chars > 80 ***", visibleChars)
-	}
-	
-	// Check for partial ANSI sequences at chunk boundaries
-	if len(data) > 0 {
-		if data[0] == 0x1B {
-			debug.Log("*** CHUNK STARTS WITH ESC - possible continuation ***")
-		}
-		if data[len(data)-1] == 0x1B {
-			debug.Log("*** CHUNK ENDS WITH ESC - likely incomplete sequence ***")
-		}
-		
-		// Look for incomplete ANSI sequences at the end
-		for i := len(data) - 1; i >= 0 && i >= len(data)-10; i-- {
-			if data[i] == 0x1B && i+1 < len(data) && data[i+1] == '[' {
-				// Check if this escape sequence is complete
-				complete := false
-				for j := i + 2; j < len(data); j++ {
-					if (data[j] >= 'a' && data[j] <= 'z') || (data[j] >= 'A' && data[j] <= 'Z') {
-						complete = true
-						break
-					}
-				}
-				if !complete {
-					debug.Log("*** INCOMPLETE ANSI at end: %q ***", string(data[i:]))
-				}
-				break
-			}
-		}
-	}
-}
 
 // showMenuModal displays a modal menu
 func (ta *TwistApp) showMenuModal(title string, options []string, callback func(string)) {
@@ -447,6 +348,23 @@ func (ta *TwistApp) startUpdateWorker() {
 
 // handleGlobalKeys handles global key events
 func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
+	// Ctrl+C - exit the application (check multiple ways)
+	if event.Key() == tcell.KeyCtrlC {
+		ta.exit()
+		return nil
+	}
+	
+	// Also check for Ctrl+C via rune and modifiers
+	if event.Rune() == 'c' && event.Modifiers()&tcell.ModCtrl != 0 {
+		ta.exit()
+		return nil
+	}
+	
+	// Also check for key code 3 (ETX) which is the ASCII value for Ctrl+C
+	if event.Key() == tcell.KeyETX {
+		ta.exit()
+		return nil
+	}
 	
 	// Check global shortcuts first (including menu shortcuts like Alt+Q)
 	if ta.globalShortcuts.HandleKeyEvent(event) {
@@ -464,6 +382,7 @@ func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 		ta.showHelpModal()
 		return nil
 	}
+	
 	
 	// Pass to input handler for menu Alt+keys and other keys
 	return ta.inputHandler.HandleKeyEvent(event)
@@ -661,13 +580,11 @@ func (ta *TwistApp) showConnectionDialog() {
 	// Create connection dialog
 	connectionDialog := components.NewConnectionDialog(
 		func(address string) {
-			debug.Log("Connection dialog submitted with address: %s", address)
-			ta.connect(address)
+				ta.connect(address)
 			// Don't close modal immediately - let connection callbacks handle it
 		},
 		func() {
-			debug.Log("Connection dialog cancelled")
-			ta.closeModal()
+				ta.closeModal()
 		},
 	)
 
@@ -679,6 +596,8 @@ func (ta *TwistApp) showConnectionDialog() {
 	ta.pages.AddPage("connection-dialog", connectionDialog.GetView(), true, true)
 	ta.app.SetFocus(connectionDialog.GetForm())
 }
+
+
 
 // updatePanels updates the information panels
 func (ta *TwistApp) updatePanels() {

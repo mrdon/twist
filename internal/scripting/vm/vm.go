@@ -85,8 +85,7 @@ func (vm *VirtualMachine) LoadScript(ast *parser.ASTNode, script types.ScriptInt
 	// Restore call stack from database if script is provided
 	if script != nil {
 		if err := vm.restoreCallStack(script.GetID()); err != nil {
-			// Log error but don't fail - just start with empty call stack
-			fmt.Printf("Warning: failed to restore call stack for script %s: %v\n", script.GetID(), err)
+			// Failed to restore call stack - just start with empty call stack
 		}
 	}
 	
@@ -156,8 +155,7 @@ func (vm *VirtualMachine) Gosub(label string) error {
 	// Save call stack to database for persistence across VM instances
 	if vm.script != nil {
 		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
-			// Log error but don't fail the GOSUB
-			fmt.Printf("Warning: failed to save call stack for script %s: %v\n", vm.script.GetID(), err)
+			// Failed to save call stack - continue with GOSUB
 		}
 	}
 	
@@ -175,8 +173,7 @@ func (vm *VirtualMachine) Return() error {
 	// Save updated call stack to database for persistence across VM instances
 	if vm.script != nil {
 		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
-			// Log error but don't fail the RETURN
-			fmt.Printf("Warning: failed to save call stack for script %s: %v\n", vm.script.GetID(), err)
+			// Failed to save call stack - continue with RETURN
 		}
 	}
 	

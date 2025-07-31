@@ -1,8 +1,6 @@
 package parser
 
 import (
-	"log"
-	"os"
 	"strings"
 	"twist/internal/database"
 )
@@ -17,22 +15,7 @@ type SectorParser struct {
 
 // NewSectorParser creates a new sector parser with database
 func NewSectorParser(db database.Database) *SectorParser {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-
-	// Set up data logging
-	dataLogFile, err := os.OpenFile("data.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open data log file: %v", err)
-	}
-
-	logger := log.New(logFile, "[SECTOR_PARSER] ", log.LstdFlags|log.Lshortfile)
-	dataLog := log.New(dataLogFile, "", log.LstdFlags)
-
-	ctx := NewParserContext(db, logger, dataLog)
+	ctx := NewParserContext(db, nil, nil)
 	
 	return &SectorParser{
 		ctx:             ctx,
@@ -44,7 +27,6 @@ func NewSectorParser(db database.Database) *SectorParser {
 
 // ProcessLine processes a single line of game text
 func (sp *SectorParser) ProcessLine(line string) {
-	sp.ctx.Logger.Printf("Processing line: %s", line)
 	
 	// Determine display state based on line content
 	sp.determineDisplayState(line)
@@ -102,22 +84,22 @@ func (sp *SectorParser) determineDisplayState(line string) {
 
 // processDensityLine processes density scan information
 func (sp *SectorParser) processDensityLine(line string) {
-	sp.ctx.Logger.Printf("Processing density line: %s", line)
+	// Process density scan information
 }
 
 // processWarpLine processes warp lane information
 func (sp *SectorParser) processWarpLine(line string) {
-	sp.ctx.Logger.Printf("Processing warp line: %s", line)
+	// Process warp lane information
 }
 
 // processCIMLine processes computer information
 func (sp *SectorParser) processCIMLine(line string) {
-	sp.ctx.Logger.Printf("Processing CIM line: %s", line)
+	// Process computer information
 }
 
 // processFigScanLine processes fighter scan information
 func (sp *SectorParser) processFigScanLine(line string) {
-	sp.ctx.Logger.Printf("Processing fig scan line: %s", line)
+	// Process fighter scan information
 }
 
 // ParseText processes multiple lines of text

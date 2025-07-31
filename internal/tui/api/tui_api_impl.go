@@ -2,7 +2,6 @@ package api
 
 import (
 	proxyapi "twist/internal/proxy/api"
-	"twist/internal/debug"
 )
 
 // Forward declaration - will be defined when we update app.go
@@ -15,37 +14,70 @@ type TwistApp interface {
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
 type TuiApiImpl struct {
-	app TwistApp
+	app        TwistApp
+	dataChan   chan []byte
+	shutdownCh chan struct{}
 }
 
 // NewTuiAPI creates a new TuiAPI implementation
 func NewTuiAPI(app TwistApp) proxyapi.TuiAPI {
-	return &TuiApiImpl{
-		app: app,
+	impl := &TuiApiImpl{
+		app:        app,
+		dataChan:   make(chan []byte, 100), // Buffered channel for data
+		shutdownCh: make(chan struct{}),
 	}
+	
+	// Start single processing goroutine
+	go impl.processDataLoop()
+	
+	return impl
 }
 
 // Thin orchestration methods - all one-liners calling app directly
 // All methods MUST return immediately using goroutines for async work
 func (tui *TuiApiImpl) OnConnected(info proxyapi.ConnectionInfo) {
-	debug.Log("TuiAPI.OnConnected called with info: %+v", info)
 	go tui.app.HandleConnectionEstablished(info)
-	debug.Log("TuiAPI.OnConnected dispatched to app handler")
 }
 
 func (tui *TuiApiImpl) OnDisconnected(reason string) {
-	debug.Log("TuiAPI.OnDisconnected called with reason: %s", reason)
 	go tui.app.HandleDisconnection(reason)
-	debug.Log("TuiAPI.OnDisconnected dispatched to app handler")
 }
 
 func (tui *TuiApiImpl) OnConnectionError(err error) {
-	debug.LogError(err, "TuiAPI.OnConnectionError")
 	go tui.app.HandleConnectionError(err)
-	debug.Log("TuiAPI.OnConnectionError dispatched to app handler")
 }
 
 func (tui *TuiApiImpl) OnData(data []byte) {
-	debug.Log("TuiAPI.OnData called with %d bytes", len(data))
-	go tui.app.HandleTerminalData(data)
+	
+	// Copy data and send to processing channel
+	dataCopy := make([]byte, len(data))
+	copy(dataCopy, data)
+	
+	// Non-blocking send to avoid blocking network thread
+	select {
+	case tui.dataChan <- dataCopy:
+	default:
+		// Channel full - could log warning or handle differently
+	}
+}
+
+// processDataLoop runs in a single goroutine to process all terminal data sequentially
+func (tui *TuiApiImpl) processDataLoop() {
+	
+	for {
+		select {
+		case data := <-tui.dataChan:
+				// Process data sequentially - no race conditions possible
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						}
+				}()
+				tui.app.HandleTerminalData(data)
+			}()
+			
+		case <-tui.shutdownCh:
+			return
+		}
+	}
 }

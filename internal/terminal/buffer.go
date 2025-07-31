@@ -2,14 +2,11 @@ package terminal
 
 import (
 	"fmt"
-	"log"
-	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 	"twist/internal/ansi"
-	"twist/internal/debug"
 	"unicode/utf8"
 )
 
@@ -41,15 +38,14 @@ type Terminal struct {
 	ansiConverter *ansi.ColorConverter
 
 
-	// Partial escape sequence buffer for streaming
-	partialEscape []byte
+	// Fixed-size buffer for streaming data processing
+	buffer    [8192]byte // 8KB fixed buffer
+	bufferLen int        // Current length of data in buffer
 
 	// Update tracking
 	dirty      bool
 	lastUpdate time.Time
 
-	// Logger
-	logger *log.Logger
 
 	// Update callback for UI notifications
 	onUpdate func()
@@ -70,14 +66,7 @@ func NewTerminalWithConverter(width, height int, converter *ansi.ColorConverter)
 }
 
 // NewTerminalWithConverterAndLogger creates a new terminal buffer with an ANSI converter and shared logger
-func NewTerminalWithConverterAndLogger(width, height int, converter *ansi.ColorConverter, pvpLogger *log.Logger) *Terminal {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-
-	logger := log.New(logFile, "[TERM] ", log.LstdFlags|log.Lshortfile)
+func NewTerminalWithConverterAndLogger(width, height int, converter *ansi.ColorConverter, pvpLogger interface{}) *Terminal {
 
 	t := &Terminal{
 		width:         width,
@@ -90,7 +79,6 @@ func NewTerminalWithConverterAndLogger(width, height int, converter *ansi.ColorC
 		scrollTop:     0,
 		scrollBot:     height - 1,
 		currentColorTag: "[#c0c0c0:#000000]", // Default color tag
-		logger:        logger,
 		ansiConverter: converter,
 	}
 
@@ -179,15 +167,12 @@ func extractContext(data []byte, target string) string {
 
 // Write processes incoming data and updates the terminal buffer
 func (t *Terminal) Write(data []byte) {
-	debug.Log("Terminal.Write called with %d bytes: %q", len(data), string(data))
 
 	// Store new data for incremental updates
 	t.newDataMutex.Lock()
 	t.newDataBuffer = append(t.newDataBuffer, data...)
 	t.newDataMutex.Unlock()
 
-	// Use centralized debug logging instead of separate files
-	debug.Log("Terminal processing %d bytes, hex: %x", len(data), data)
 
 	// Process ANSI escape sequences first, then handle remaining characters
 	t.processDataWithANSI(data)
@@ -198,97 +183,103 @@ func (t *Terminal) Write(data []byte) {
 	// Notify UI of update
 	if t.onUpdate != nil {
 		t.onUpdate()
-	} else {
 	}
 }
 
 
-// processDataWithANSI processes input data by handling ANSI sequences at the correct positions
+// processDataWithANSI processes input data with fixed-size buffer
 func (t *Terminal) processDataWithANSI(data []byte) {
-
-	// Combine any partial escape from previous write with new data
-	fullData := append(t.partialEscape, data...)
-	if len(t.partialEscape) > 0 {
-	}
-	t.partialEscape = t.partialEscape[:0] // Clear the buffer
-
-	// Process data sequentially, but handle ANSI sequences completely before continuing
-	i := 0
-	for i < len(fullData) {
-		if fullData[i] == '\x1b' {
-			// Check if we have a complete \x1b[ sequence
-			if i+1 < len(fullData) && fullData[i+1] == '[' {
-			// Found ANSI escape sequence - find the end and process it
-			start := i
-			i += 2 // Skip \x1b[
-
-
-			// Find the end of the escape sequence (letter that terminates it)
-			for i < len(fullData) && !((fullData[i] >= 'a' && fullData[i] <= 'z') || (fullData[i] >= 'A' && fullData[i] <= 'Z')) {
-				i++
-			}
-
-			if i < len(fullData) {
-				// Include the terminating letter
-				i++
-				// Process the complete ANSI sequence immediately
-				sequence := fullData[start:i]
-
-
-
-				t.processANSISequence(sequence)
+	// Add new data to buffer (handle case where data is larger than remaining buffer space)
+	for len(data) > 0 {
+		// How much space is left in buffer?
+		spaceLeft := len(t.buffer) - t.bufferLen
+		
+		// How much can we add this iteration?
+		toAdd := len(data)
+		if toAdd > spaceLeft {
+			toAdd = spaceLeft
+		}
+		
+		// Add data to buffer
+		copy(t.buffer[t.bufferLen:], data[:toAdd])
+		t.bufferLen += toAdd
+		data = data[toAdd:]
+		
+		// Process everything we can from the buffer
+		consumed := 0
+		for consumed < t.bufferLen {
+			// Try to consume starting from current position
+			bytesConsumed := t.tryConsumeSequence(t.buffer[consumed:t.bufferLen])
+			
+			if bytesConsumed > 0 {
+				// Successfully consumed some bytes
+				consumed += bytesConsumed
 			} else {
-				// Incomplete escape sequence at end of data - save for next write
-				incomplete := fullData[start:]
-				t.partialEscape = append(t.partialEscape, incomplete...)
+				// Couldn't consume anything - incomplete sequence
+				// Leave unconsumed data in buffer
 				break
 			}
-			} else {
-				// We have \x1b but not \x1b[ - could be incomplete \x1b at end or other escape
-				if i+1 >= len(fullData) {
-					// \x1b at very end of data - save for next write
-					t.partialEscape = append(t.partialEscape, fullData[i:]...)
-					break
-				} else {
-					// \x1b followed by something other than [ - treat as regular character
-					char, size := utf8.DecodeRune(fullData[i:])
-					t.processRune(char)
-					i += size
-				}
-			}
-		} else {
-			// Regular character - decode UTF-8 properly
-			char, size := utf8.DecodeRune(fullData[i:])
-			if char == utf8.RuneError && size == 1 {
-				// Invalid UTF-8, skip this byte
-				i++
-				continue
-			}
-
-			// Debug: catch potential ANSI fragments being processed as text
-			// Only warn if '[' or 'm' appears near escape characters (likely fragments)
-			if char == '[' || char == 'm' {
-				start := i - 5
-				if start < 0 {
-					start = 0
-				}
-				end := i + 5
-				if end > len(fullData) {
-					end = len(fullData)
-				}
-				context := string(fullData[start:end])
-				// Only log if this looks like a real ANSI fragment (has \x1b nearby)
-				if strings.Contains(context, "\x1b") && char == '[' {
-				}
-			}
-
-			// Debug logging for block drawing characters
-			if char == '▄' || char == '▀' || char == '█' {
-			}
-
-			t.processRune(char)
-			i += size // Advance by the number of bytes consumed
 		}
+		
+		// Remove consumed data from buffer, keep unconsumed data
+		if consumed > 0 {
+			copy(t.buffer[:], t.buffer[consumed:t.bufferLen])
+			t.bufferLen -= consumed
+		}
+		
+		// Safety check: if buffer is full and we couldn't consume anything, force consume one character
+		if t.bufferLen == len(t.buffer) && consumed == 0 {
+			char, size := utf8.DecodeRune(t.buffer[:])
+			t.processRune(char)
+			copy(t.buffer[:], t.buffer[size:t.bufferLen])
+			t.bufferLen -= size
+		}
+	}
+}
+
+// tryConsumeSequence attempts to consume data starting at the beginning of the slice
+// Returns number of bytes consumed, or 0 if incomplete sequence
+func (t *Terminal) tryConsumeSequence(data []byte) int {
+	if len(data) == 0 {
+		return 0
+	}
+	
+	if data[0] == '\x1b' {
+		// Try to consume escape sequence
+		if len(data) < 2 {
+			return 0 // Need more data
+		}
+		
+		if data[1] == '[' {
+			// ANSI escape sequence - find terminator
+			i := 2
+			for i < len(data) {
+				c := data[i]
+				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+					// Found terminator - consume complete sequence
+					i++ // include terminator
+					sequence := data[0:i]
+					t.processANSISequence(sequence)
+					return i
+				}
+				i++
+			}
+			// No terminator found - incomplete sequence
+			return 0
+		} else {
+			// \x1b followed by non-[ - treat as regular character
+			char, size := utf8.DecodeRune(data)
+			t.processRune(char)
+			return size
+		}
+	} else {
+		// Regular character
+		char, size := utf8.DecodeRune(data)
+		if char == utf8.RuneError && size == 1 {
+			return 1 // skip invalid byte
+		}
+		t.processRune(char)
+		return size
 	}
 }
 
@@ -570,17 +561,49 @@ func (t *Terminal) scroll() {
 	
 	// Update color changes: remove any that scrolled off the top, adjust Y coordinates
 	newColorChanges := make([]ColorChange, 0, len(t.colorChanges))
+	var lastColorBeforeScrollTop string = "[#c0c0c0:#000000]" // Default color
+	
+	// Sort color changes by Y, then X to process them in order
 	for _, change := range t.colorChanges {
-		if change.Y > t.scrollTop {
-			// Move this color change up one line
+		if change.Y < t.scrollTop {
+			// This color change scrolled off - track the last active color before scroll area
+			lastColorBeforeScrollTop = change.TViewTag
+		} else if change.Y == t.scrollTop {
+			// Color change at scroll line - moves up one line
+			newColorChanges = append(newColorChanges, ColorChange{
+				X:        change.X,
+				Y:        change.Y - 1,
+				TViewTag: change.TViewTag,
+			})
+		} else {
+			// Color change below scroll line - moves up one line
 			newColorChanges = append(newColorChanges, ColorChange{
 				X:        change.X,
 				Y:        change.Y - 1,
 				TViewTag: change.TViewTag,
 			})
 		}
-		// Color changes at scrollTop are discarded (scrolled off)
 	}
+	
+	// If we had color changes that scrolled off and the new top line doesn't start with the right color,
+	// add a color change at the beginning of the new top line to maintain color continuity
+	hasColorAtTopLeft := false
+	for _, change := range newColorChanges {
+		if change.Y == t.scrollTop && change.X == 0 {
+			hasColorAtTopLeft = true
+			break
+		}
+	}
+	
+	if !hasColorAtTopLeft && lastColorBeforeScrollTop != "[#c0c0c0:#000000]" {
+		// Add color change at top-left to maintain color from scrolled content
+		newColorChanges = append([]ColorChange{{
+			X:        0,
+			Y:        t.scrollTop,
+			TViewTag: lastColorBeforeScrollTop,
+		}}, newColorChanges...)
+	}
+	
 	t.colorChanges = newColorChanges
 }
 

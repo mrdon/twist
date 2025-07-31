@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 // runMigrations executes all pending migrations
 func (d *SQLiteDatabase) runMigrations() error {
-	d.logger.Printf("Checking for database migrations")
 	
 	// Ensure schema_version table exists
 	if err := d.ensureSchemaVersionTable(); err != nil {
@@ -48,22 +47,18 @@ func (d *SQLiteDatabase) runMigrations() error {
 		return fmt.Errorf("failed to get current schema version: %w", err)
 	}
 	
-	d.logger.Printf("Current schema version: %d", currentVersion)
 	
 	// Apply pending migrations
 	for _, migration := range migrations {
 		if migration.ID > currentVersion {
-			d.logger.Printf("Applying migration %d: %s", migration.ID, migration.Description)
 			
 			if err := d.applyMigration(migration); err != nil {
 				return fmt.Errorf("failed to apply migration %d: %w", migration.ID, err)
 			}
 			
-			d.logger.Printf("Successfully applied migration %d", migration.ID)
 		}
 	}
 	
-	d.logger.Printf("All migrations completed")
 	return nil
 }
 
@@ -156,9 +151,7 @@ func (d *SQLiteDatabase) applyFighterTypeMigration(migration Migration) error {
 		if _, err := tx.Exec(alterQuery); err != nil {
 			return fmt.Errorf("failed to add figs_type column: %w", err)
 		}
-		d.logger.Printf("Added figs_type column to sectors table")
 	} else {
-		d.logger.Printf("figs_type column already exists, skipping")
 	}
 	
 	// Record migration as applied
@@ -252,6 +245,5 @@ func (d *SQLiteDatabase) validateSchemaEnhanced() error {
 		return fmt.Errorf("database schema is invalid or incomplete (found columns: %v)", columnNames)
 	}
 	
-	d.logger.Printf("Schema validation passed with %d expected columns", columnCount)
 	return nil
 }

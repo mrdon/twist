@@ -3,9 +3,7 @@ package proxy
 import (
 	"bufio"
 	"fmt"
-	"log"
 	"net"
-	"os"
 	"strings"
 	"sync"
 
@@ -26,10 +24,6 @@ type Proxy struct {
 	inputChan  chan string
 	errorChan  chan error
 	
-	// Logger for debugging
-	logger     *log.Logger
-	rawLogger  *log.Logger // Logger for raw server data
-	pvpLogger  *log.Logger // Logger for NO PVP tracking
 	
 	// Streaming pipeline
 	pipeline   *streaming.Pipeline
@@ -40,34 +34,12 @@ type Proxy struct {
 }
 
 func New(terminalWriter streaming.TerminalWriter) *Proxy {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	
-	// Set up raw server data logging
-	rawLogFile, err := os.OpenFile("raw_server_data.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open raw server data log file: %v", err)
-	}
-	
-	// Set up NO PVP tracking log
-	pvpLogFile, err := os.OpenFile("no_pvp_tracking.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open NO PVP tracking log file: %v", err)
-	}
-	
-	logger := log.New(logFile, "[PROXY] ", log.LstdFlags|log.Lshortfile)
-	rawLogger := log.New(rawLogFile, "[RAW] ", log.LstdFlags|log.Lshortfile)
-	pvpLogger := log.New(pvpLogFile, "[PVP] ", log.LstdFlags|log.Lshortfile)
 	
 	// Initialize database
 	db := database.NewDatabase()
 	// Create or open database (TODO: make configurable)
 	if err := db.CreateDatabase("twist.db"); err != nil {
-		if err := db.OpenDatabase("twist.db"); err != nil {
-		}
+		db.OpenDatabase("twist.db")
 	}
 	
 	// Initialize script manager
@@ -78,26 +50,22 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 		inputChan:     make(chan string, 100),
 		errorChan:     make(chan error, 10),
 		connected:     false,
-		logger:        logger,
-		rawLogger:     rawLogger,
-		pvpLogger:     pvpLogger,
 		scriptManager: scriptManager,
 		db:            db,
 	}
 	
-	// Initialize streaming pipeline with script manager and shared logger
+	// Initialize streaming pipeline with script manager
 	p.pipeline = streaming.NewPipelineWithScriptManager(terminalWriter, func(data []byte) error {
 		if p.conn != nil {
 			_, err := p.conn.Write(data)
 			return err
 		}
 		return fmt.Errorf("not connected")
-	}, db, scriptManager, pvpLogger)
+	}, db, scriptManager, nil)
 	
 	// Setup script manager connections to proxy and terminal
 	if terminal, ok := terminalWriter.(scripting.TerminalInterface); ok {
 		scriptManager.SetupConnections(p, terminal)
-	} else {
 	}
 	
 	return p
@@ -140,8 +108,6 @@ func extractContext(data []byte, target string) string {
 func (p *Proxy) Connect(address string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-
 	if p.connected {
 		return fmt.Errorf("already connected")
 	}
@@ -190,8 +156,7 @@ func (p *Proxy) Disconnect() error {
 	
 	// Stop all scripts
 	if p.scriptManager != nil {
-		if err := p.scriptManager.Stop(); err != nil {
-		}
+		p.scriptManager.Stop()
 	}
 	
 	// Stop the streaming pipeline
@@ -243,8 +208,7 @@ func (p *Proxy) handleInput() {
 
 		// Process outgoing text through script manager
 		if p.scriptManager != nil {
-			if err := p.scriptManager.ProcessOutgoingText(input); err != nil {
-			}
+			p.scriptManager.ProcessOutgoingText(input)
 		}
 
 		_, err := p.writer.WriteString(input)
@@ -261,7 +225,6 @@ func (p *Proxy) handleInput() {
 }
 
 func (p *Proxy) handleOutput() {
-	
 	// Use a buffer for continuous reading
 	buffer := make([]byte, 4096)
 	
@@ -284,23 +247,7 @@ func (p *Proxy) handleOutput() {
 		}
 		
 		if n > 0 {
-			
 			rawData := buffer[:n]
-			
-			// Track NO PVP with color analysis
-			rawStr := string(rawData)
-			if strings.Contains(rawStr, "NO") && strings.Contains(rawStr, "PVP") {
-				// Extract the actual ANSI sequence around NO PVP
-				start := strings.Index(rawStr, "NO") - 10
-				if start < 0 { start = 0 }
-				end := strings.Index(rawStr, "PVP") + 10
-				if end > len(rawStr) { end = len(rawStr) }
-				context := rawStr[start:end]
-				// Escape for readability
-				context = strings.ReplaceAll(context, "\x1b", "\\x1b")
-			}
-			
-			// Also log hex dump for complete analysis
 			
 			// Send raw data directly to the streaming pipeline
 			p.pipeline.Write(rawData)

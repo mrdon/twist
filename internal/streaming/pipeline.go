@@ -1,8 +1,6 @@
 package streaming
 
 import (
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -46,9 +44,6 @@ type Pipeline struct {
 	// Metrics
 	bytesProcessed uint64
 	batchesProcessed uint64
-	
-	logger *log.Logger
-	pvpLogger *log.Logger
 }
 
 // TerminalWriter interface for writing to terminal buffer
@@ -62,14 +57,7 @@ func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db da
 }
 
 // NewPipelineWithScriptManager creates an optimized streaming pipeline with script support
-func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database, scriptManager ScriptManager, pvpLogger *log.Logger) *Pipeline {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	
-	logger := log.New(logFile, "[PIPELINE] ", log.LstdFlags|log.Lshortfile)
+func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database, scriptManager ScriptManager, pvpLogger interface{}) *Pipeline {
 	
 	p := &Pipeline{
 		rawDataChan:    make(chan []byte, 100), // Buffered for burst handling
@@ -81,8 +69,6 @@ func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]b
 		batchSize:      1,     // Process immediately - no batching
 		batchTimeout:   0,     // No timeout needed
 		stopChan:       make(chan struct{}),
-		logger:         logger,
-		pvpLogger:      pvpLogger,
 	}
 	
 	// Initialize telnet handler
@@ -94,13 +80,10 @@ func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]b
 // Start begins the streaming pipeline
 func (p *Pipeline) Start() {
 	p.running = true
-	p.logger.Println("Starting streaming pipeline")
 	
 	// Start the processing goroutine
 	p.wg.Add(1)
 	go p.batchProcessor()
-	
-	p.logger.Println("Pipeline started")
 }
 
 // Stop gracefully shuts down the pipeline
@@ -109,7 +92,6 @@ func (p *Pipeline) Stop() {
 		return
 	}
 	
-	p.logger.Println("Stopping pipeline")
 	p.running = false
 	close(p.stopChan)
 	
@@ -119,8 +101,6 @@ func (p *Pipeline) Stop() {
 	}
 	
 	p.wg.Wait()
-	p.logger.Printf("Pipeline stopped - processed %d bytes in %d batches", 
-		p.bytesProcessed, p.batchesProcessed)
 }
 
 // Write feeds raw data into the pipeline
@@ -129,18 +109,14 @@ func (p *Pipeline) Write(data []byte) {
 		return
 	}
 	
-	p.logger.Printf("Pipeline received %d bytes for processing", len(data))
-	
 	// Make a copy since the caller might reuse the buffer
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
 	
 	select {
 	case p.rawDataChan <- dataCopy:
-		p.logger.Printf("Data queued in pipeline channel")
 	default:
 		// Channel full - this shouldn't happen with proper sizing
-		p.logger.Printf("Warning: dropping %d bytes due to full channel", len(data))
 	}
 }
 
@@ -156,60 +132,31 @@ func (p *Pipeline) batchProcessor() {
 	for {
 		select {
 		case rawData := <-p.rawDataChan:
-			p.logger.Printf("Processing %d bytes immediately", len(rawData))
-			
 			// Process telnet commands immediately
 			cleanData := p.telnetHandler.ProcessData(rawData)
-			p.logger.Printf("Telnet processed %d bytes -> %d clean bytes", len(rawData), len(cleanData))
 			
 			if len(cleanData) > 0 {
-				// Track NO PVP after telnet processing
-				cleanStr := string(cleanData)
-				if strings.Contains(cleanStr, "NO") && strings.Contains(cleanStr, "PVP") {
-					start := strings.Index(cleanStr, "NO") - 10
-					if start < 0 { start = 0 }
-					end := strings.Index(cleanStr, "PVP") + 10
-					if end > len(cleanStr) { end = len(cleanStr) }
-					context := cleanStr[start:end]
-					context = strings.ReplaceAll(context, "\x1b", "\\x1b")
-					p.pvpLogger.Printf("STAGE 2 - TELNET: %s", context)
-				}
 				
 				// Process through script triggers EARLY with original ANSI codes intact
 				if p.scriptManager != nil {
 					if err := p.scriptManager.ProcessGameLine(string(cleanData)); err != nil {
-						p.logger.Printf("Script processing error: %v", err)
+						// Ignore script processing errors
 					}
 				}
 				
 				// Use standard CP437 to UTF-8 conversion
 				decoded, err := p.decoder.Bytes(cleanData)
 				if err != nil {
-					p.logger.Printf("CP437 decode error: %v, falling back to raw data", err)
 					decoded = cleanData
 				}
 				
-				// Track NO PVP after encoding
-				decodedStr := string(decoded)
-				if strings.Contains(decodedStr, "NO") && strings.Contains(decodedStr, "PVP") {
-					start := strings.Index(decodedStr, "NO") - 10
-					if start < 0 { start = 0 }
-					end := strings.Index(decodedStr, "PVP") + 10
-					if end > len(decodedStr) { end = len(decodedStr) }
-					context := decodedStr[start:end]
-					context = strings.ReplaceAll(context, "\x1b", "\\x1b")
-					p.pvpLogger.Printf("STAGE 3 - ENCODING: %s", context)
-				}
 				
 				// Parse the decoded text for sector information
 				p.sectorParser.ProcessData(decoded)
 				
-				p.logger.Printf("Sending %d converted bytes to terminal: %q", len(decoded), string(decoded))
 				p.terminalWriter.Write(decoded)
 				p.bytesProcessed += uint64(len(rawData))
 				p.batchesProcessed++
-			} else {
-				p.logger.Printf("No clean data after telnet processing - %d raw bytes filtered out", len(rawData))
 			}
 			
 		case <-p.stopChan:
@@ -269,13 +216,11 @@ func (p *Pipeline) flushBatchLocked(output chan<- []byte) {
 	
 	// Process telnet commands
 	cleanData := p.telnetHandler.ProcessData(p.batchBuffer)
-	p.logger.Printf("Telnet processed %d bytes -> %d clean bytes", len(p.batchBuffer), len(cleanData))
 	
 	if len(cleanData) > 0 {
 		// Decode character encoding
 		decoded, err := p.decoder.Bytes(cleanData)
 		if err != nil {
-			p.logger.Printf("Decode error: %v, using raw data", err)
 			decoded = cleanData
 		}
 		
@@ -283,10 +228,8 @@ func (p *Pipeline) flushBatchLocked(output chan<- []byte) {
 		select {
 		case output <- decoded:
 			p.batchesProcessed++
-			p.logger.Printf("Processed batch: %d bytes -> %d decoded bytes", 
-				len(p.batchBuffer), len(decoded))
 		default:
-			p.logger.Printf("Warning: terminal processor channel full")
+			// Channel full
 		}
 	}
 	

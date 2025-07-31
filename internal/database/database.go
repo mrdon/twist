@@ -3,8 +3,6 @@ package database
 import (
 	"database/sql"
 	"fmt"
-	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -45,8 +43,6 @@ type SQLiteDatabase struct {
 	dbOpen       bool
 	filename     string
 	sectors      int
-	logger       *log.Logger
-	dataLogger   *log.Logger // Data logging for parsing tracking
 	tx           *sql.Tx  // Current transaction
 	
 	// Prepared statements for performance
@@ -56,25 +52,7 @@ type SQLiteDatabase struct {
 
 // NewDatabase creates a new SQLite database instance
 func NewDatabase() *SQLiteDatabase {
-	// Set up debug logging
-	logFile, err := os.OpenFile("twist_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open log file: %v", err)
-	}
-	
-	// Set up data logging for parsing tracking
-	dataLogFile, err := os.OpenFile("data.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err != nil {
-		log.Fatalf("Failed to open data log file: %v", err)
-	}
-	
-	logger := log.New(logFile, "[DATABASE] ", log.LstdFlags|log.Lshortfile)
-	dataLogger := log.New(dataLogFile, "", log.LstdFlags)
-	
-	return &SQLiteDatabase{
-		logger:     logger,
-		dataLogger: dataLogger,
-	}
+	return &SQLiteDatabase{}
 }
 
 // OpenDatabase opens an existing SQLite database (matching TWX method)
@@ -82,8 +60,6 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	if d.dbOpen {
 		return fmt.Errorf("database already open")
 	}
-	
-	d.logger.Printf("Opening database: %s", filename)
 	
 	var err error
 	d.db, err = sql.Open("sqlite3", filename+"?_foreign_keys=on")
@@ -120,13 +96,11 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	d.filename = filename
 	d.dbOpen = true
 	
-	d.logger.Printf("Database opened successfully - %d sectors", d.sectors)
 	return nil
 }
 
 // CreateDatabase creates a new SQLite database with TWX-compatible schema
 func (d *SQLiteDatabase) CreateDatabase(filename string) error {
-	d.logger.Printf("Creating database: %s", filename)
 	
 	var err error
 	d.db, err = sql.Open("sqlite3", filename+"?_foreign_keys=on")
@@ -153,7 +127,6 @@ func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	d.dbOpen = true
 	d.sectors = 0
 	
-	d.logger.Printf("Database created successfully")
 	return nil
 }
 
@@ -180,7 +153,6 @@ func (d *SQLiteDatabase) CloseDatabase() error {
 	
 	d.dbOpen = false
 	d.filename = ""
-	d.logger.Printf("Database closed successfully")
 	return nil
 }
 
@@ -193,8 +165,6 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	if index <= 0 {
 		return NULLSector(), fmt.Errorf("invalid sector index: %d", index)
 	}
-	
-	d.logger.Printf("Loading sector %d", index)
 	
 	sector := NULLSector()
 	
@@ -252,8 +222,6 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		return fmt.Errorf("invalid sector index: %d", index)
 	}
 	
-	d.logger.Printf("Saving sector %d", index)
-	
 	// Start transaction if not already in one
 	shouldCommit := false
 	if d.tx == nil {
@@ -299,8 +267,6 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		return fmt.Errorf("failed to save related data for sector %d: %w", index, err)
 	}
 	
-	// Log all data being saved to data.log for parsing tracking
-	d.logSectorData(index, sector)
 	
 	if shouldCommit {
 		return d.CommitTransaction()
@@ -354,91 +320,6 @@ func (d *SQLiteDatabase) RollbackTransaction() error {
 	return err
 }
 
-// logSectorData logs comprehensive sector data to data.log for parsing tracking
-func (d *SQLiteDatabase) logSectorData(index int, sector TSector) {
-	// Convert warp array to slice for logging
-	var warps []int
-	for i := 0; i < sector.Warps; i++ {
-		warps = append(warps, sector.Warp[i])
-	}
-
-	// Log main sector data
-	d.dataLogger.Printf("SECTOR_SAVED: Number=%d, Warps=%v, NavHaz=%d%%, Constellation='%s', Beacon='%s', Density=%d, Anomaly=%t, Explored=%d, UpdateTime='%s'",
-		index,
-		warps,
-		sector.NavHaz,
-		sector.Constellation,
-		sector.Beacon,
-		sector.Density,
-		sector.Anomaly,
-		int(sector.Explored),
-		sector.UpDate.Format("2006-01-02 15:04:05"),
-	)
-
-	// Log port data if present
-	if sector.SPort.Name != "" || sector.SPort.ClassIndex >= 0 {
-		d.dataLogger.Printf("PORT_SAVED: Sector=%d, Name='%s', Dead=%t, Class=%d, BuildTime=%d, BuyProducts=[%t,%t,%t], Percentages=[%d%%,%d%%,%d%%], Amounts=[%d,%d,%d], UpdateTime='%s'",
-			index,
-			sector.SPort.Name,
-			sector.SPort.Dead,
-			sector.SPort.ClassIndex,
-			sector.SPort.BuildTime,
-			sector.SPort.BuyProduct[0], sector.SPort.BuyProduct[1], sector.SPort.BuyProduct[2],
-			sector.SPort.ProductPercent[0], sector.SPort.ProductPercent[1], sector.SPort.ProductPercent[2],
-			sector.SPort.ProductAmount[0], sector.SPort.ProductAmount[1], sector.SPort.ProductAmount[2],
-			sector.SPort.UpDate.Format("2006-01-02 15:04:05"),
-		)
-	}
-
-	// Log fighters if present
-	if sector.Figs.Quantity > 0 {
-		figTypeStr := "None"
-		switch sector.Figs.FigType {
-		case FtToll:
-			figTypeStr = "Toll"
-		case FtDefensive:
-			figTypeStr = "Defensive"
-		case FtOffensive:
-			figTypeStr = "Offensive"
-		}
-		d.dataLogger.Printf("FIGHTERS_SAVED: Sector=%d, Quantity=%d, Owner='%s', Type=%s",
-			index, sector.Figs.Quantity, sector.Figs.Owner, figTypeStr)
-	}
-
-	// Log mines if present
-	if sector.MinesArmid.Quantity > 0 {
-		d.dataLogger.Printf("MINES_SAVED: Sector=%d, Type=Armid, Quantity=%d, Owner='%s'",
-			index, sector.MinesArmid.Quantity, sector.MinesArmid.Owner)
-	}
-	if sector.MinesLimpet.Quantity > 0 {
-		d.dataLogger.Printf("MINES_SAVED: Sector=%d, Type=Limpet, Quantity=%d, Owner='%s'",
-			index, sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner)
-	}
-
-	// Log ships if present
-	for i, ship := range sector.Ships {
-		d.dataLogger.Printf("SHIP_SAVED: Sector=%d, Index=%d, Name='%s', Owner='%s', Type='%s', Fighters=%d",
-			index, i, ship.Name, ship.Owner, ship.ShipType, ship.Figs)
-	}
-
-	// Log traders if present
-	for i, trader := range sector.Traders {
-		d.dataLogger.Printf("TRADER_SAVED: Sector=%d, Index=%d, Name='%s', ShipType='%s', ShipName='%s', Fighters=%d",
-			index, i, trader.Name, trader.ShipType, trader.ShipName, trader.Figs)
-	}
-
-	// Log planets if present
-	for i, planet := range sector.Planets {
-		d.dataLogger.Printf("PLANET_SAVED: Sector=%d, Index=%d, Name='%s'",
-			index, i, planet.Name)
-	}
-
-	// Log sector variables if present
-	for i, sectorVar := range sector.Vars {
-		d.dataLogger.Printf("SECTOR_VAR_SAVED: Sector=%d, Index=%d, VarName='%s', Value='%s'",
-			index, i, sectorVar.VarName, sectorVar.Value)
-	}
-}
 
 // SaveScriptVariable saves a script variable to persistent storage
 func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) error {
@@ -487,8 +368,6 @@ func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) erro
 		return fmt.Errorf("failed to save script variable %s: %w", name, err)
 	}
 
-	d.logger.Printf("SCRIPT_VAR_SAVED: Name='%s', Type=%d, StringValue='%s', NumberValue=%f",
-		name, varType, stringValue, numberValue)
 
 	return nil
 }

@@ -65,7 +65,6 @@ func (sp *SectorProcessor) initializeSectorData(line string) {
 		if sectorNum > 0 {
 			sp.ctx.State.CurrentSectorIndex = sectorNum
 			sp.ctx.State.CurrentSector = &database.TSector{}
-			sp.ctx.Logger.Printf("Initialized sector %d", sectorNum)
 		}
 	}
 }
@@ -103,47 +102,38 @@ func (sp *SectorProcessor) processSectorClass(line string) {
 
 // addWarp adds a warp connection to the database
 func (sp *SectorProcessor) addWarp(fromSector, toSector int) {
-	// For now just log the warp - would need proper warp storage implementation
-	sp.ctx.Logger.Printf("Warp detected from sector %d to %d", fromSector, toSector)
+	// For now just note the warp - would need proper warp storage implementation
 }
 
 // processPortsSection processes the ports section
 func (sp *SectorProcessor) processPortsSection(line string) {
 	// Port parsing logic would go here
-	sp.ctx.Logger.Printf("Processing ports section: %s", line)
 }
 
 // processPlanetsSection processes the planets section
 func (sp *SectorProcessor) processPlanetsSection(line string) {
 	// Planet parsing logic would go here
-	sp.ctx.Logger.Printf("Processing planets section: %s", line)
 }
 
 // processShipsSection processes the ships section
 func (sp *SectorProcessor) processShipsSection(line string) {
 	// Ship parsing logic would go here
-	sp.ctx.Logger.Printf("Processing ships section: %s", line)
 }
 
 // processMinesSection processes the mines section
 func (sp *SectorProcessor) processMinesSection(line string) {
 	// Mine parsing logic would go here
-	sp.ctx.Logger.Printf("Processing mines section: %s", line)
 }
 
 // processTradersSection processes the traders section
 func (sp *SectorProcessor) processTradersSection(line string) {
 	// Trader parsing logic would go here
-	sp.ctx.Logger.Printf("Processing traders section: %s", line)
 }
 
 // SectorCompleted finalizes the current sector data
 func (sp *SectorProcessor) SectorCompleted() {
 	if sp.ctx.State.CurrentSector != nil && !sp.ctx.State.SectorSaved {
-		if err := sp.ctx.DB.SaveSector(*sp.ctx.State.CurrentSector, sp.ctx.State.CurrentSectorIndex); err != nil {
-			sp.ctx.Logger.Printf("Error saving sector %d: %v", sp.ctx.State.CurrentSectorIndex, err)
-		} else {
-			sp.ctx.Logger.Printf("Saved sector %d", sp.ctx.State.CurrentSectorIndex)
+		if err := sp.ctx.DB.SaveSector(*sp.ctx.State.CurrentSector, sp.ctx.State.CurrentSectorIndex); err == nil {
 			sp.ctx.State.SectorSaved = true
 		}
 	}

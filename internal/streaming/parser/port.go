@@ -35,7 +35,6 @@ func (pp *PortProcessor) ProcessPortLine(line string) {
 // processPortHeader processes port header information
 func (pp *PortProcessor) processPortHeader(line string) {
 	// Initialize port data structure
-	pp.ctx.Logger.Printf("Processing port header: %s", line)
 }
 
 // parseProductLine parses product trading information
@@ -52,7 +51,6 @@ func (pp *PortProcessor) parseProductLine(line string) {
 		return
 	}
 	
-	pp.ctx.Logger.Printf("Processing product line for %v: %s", productType, line)
 	
 	// Parse product details (amount, price, etc.)
 	fields := strings.Fields(line)
@@ -69,21 +67,22 @@ func (pp *PortProcessor) extractProductInfo(fields []string, productType databas
 	for i, field := range fields {
 		if field == "buying" && i+2 < len(fields) && fields[i+1] == "at" {
 			price := pp.utils.StrToIntSafe(fields[i+2])
-			pp.ctx.Logger.Printf("Product %v buying at price %d", productType, price)
+			// Process buying price
+			_ = price
 		} else if field == "selling" && i+2 < len(fields) && fields[i+1] == "for" {
 			price := pp.utils.StrToIntSafe(fields[i+2])
-			pp.ctx.Logger.Printf("Product %v selling for price %d", productType, price)
+			// Process selling price
+			_ = price
 		}
 	}
 }
 
 // processPortInfo processes general port information
 func (pp *PortProcessor) processPortInfo(line string) {
-	pp.ctx.Logger.Printf("Processing port info: %s", line)
+	// Process general port information
 }
 
 // FinalizePortData saves the current port data to database
 func (pp *PortProcessor) FinalizePortData() {
-	pp.ctx.Logger.Printf("Finalizing port data for sector %d", pp.ctx.State.CurrentSectorIndex)
 	// Save port data to database
 }
