@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"twist/internal/ansi"
+	"twist/internal/debug"
 	"unicode/utf8"
 )
 
@@ -178,47 +179,15 @@ func extractContext(data []byte, target string) string {
 
 // Write processes incoming data and updates the terminal buffer
 func (t *Terminal) Write(data []byte) {
-
+	debug.Log("Terminal.Write called with %d bytes: %q", len(data), string(data))
 
 	// Store new data for incremental updates
 	t.newDataMutex.Lock()
 	t.newDataBuffer = append(t.newDataBuffer, data...)
 	t.newDataMutex.Unlock()
 
-	// Log raw input to separate file for debugging
-	rawLogFile, err := os.OpenFile("raw_input.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err == nil {
-		rawLogFile.WriteString(fmt.Sprintf("=== %s ===\n", time.Now().Format("15:04:05.000")))
-		rawLogFile.WriteString(fmt.Sprintf("Raw bytes (%d): %q\n", len(data), string(data)))
-		rawLogFile.WriteString(fmt.Sprintf("Hex: %x\n", data))
-		rawLogFile.WriteString("---\n")
-		rawLogFile.Close()
-	}
-
-	// Log chunk content before ANSI processing
-	chunkDebugFile, err := os.OpenFile("chunk_debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
-	if err == nil {
-		// Count visible characters (excluding ANSI sequences) in the entire chunk
-		visibleChars := 0
-		inEscape := false
-		for _, b := range data {
-			if b == 0x1B {
-				inEscape = true
-			} else if inEscape && (b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z') {
-				inEscape = false
-			} else if !inEscape {
-				visibleChars++
-			}
-		}
-		
-		chunkDebugFile.WriteString(fmt.Sprintf("=== CHUNK %s ===\n", time.Now().Format("15:04:05.000")))
-		chunkDebugFile.WriteString(fmt.Sprintf("CHUNK [len=%d, visible=%d]: %q\n", len(data), visibleChars, string(data)))
-		if visibleChars > 80 {
-			chunkDebugFile.WriteString(fmt.Sprintf("*** WARNING: Chunk has %d visible chars > 80 ***\n", visibleChars))
-		}
-		chunkDebugFile.WriteString("---\n")
-		chunkDebugFile.Close()
-	}
+	// Use centralized debug logging instead of separate files
+	debug.Log("Terminal processing %d bytes, hex: %x", len(data), data)
 
 	// Process ANSI escape sequences first, then handle remaining characters
 	t.processDataWithANSI(data)

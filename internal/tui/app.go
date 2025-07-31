@@ -8,6 +8,9 @@ import (
 	"twist/internal/tui/handlers"
 	"twist/internal/theme"
 	twistComponents "twist/internal/components"
+	"twist/internal/tui/api"
+	proxyapi "twist/internal/proxy/api"
+	"twist/internal/debug"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -17,6 +20,10 @@ import (
 type TwistApp struct {
 	app    *tview.Application
 	proxy  *proxy.Proxy
+
+	// API layer (alongside existing proxy for now)
+	proxyClient *api.ProxyClient
+	tuiAPI      proxyapi.TuiAPI
 
 	// Core components
 	terminal     *terminal.Terminal
@@ -44,6 +51,7 @@ type TwistApp struct {
 
 // NewApplication creates and configures the tview application
 func NewApplication() *TwistApp {
+	debug.Log("=== NewApplication called ===")
 
 	// Create the simplified color converter
 	ansiConverter := ansi.NewColorConverter()
@@ -52,7 +60,9 @@ func NewApplication() *TwistApp {
 	term := terminal.NewTerminalWithConverter(80, 50, ansiConverter)
 
 	// Initialize proxy with the terminal as a writer
+	debug.Log("Creating legacy proxy instance (should not be used for connections)")
 	proxyInstance := proxy.New(term)
+	debug.Log("Legacy proxy created, ensuring it's not connected")
 
 	// Create the main application
 	app := tview.NewApplication()
@@ -80,6 +90,10 @@ func NewApplication() *TwistApp {
 		inputHandler:       inputHandler,
 		globalShortcuts:    twistComponents.NewGlobalShortcutManager(),
 	}
+
+	// Create API layer - proxy instances created per connection via static Connect()
+	twistApp.proxyClient = api.NewProxyClient()
+	twistApp.tuiAPI = api.NewTuiAPI(twistApp)
 
 	// Set up terminal update callback
 	term.SetUpdateCallback(func() {
@@ -200,23 +214,27 @@ func (ta *TwistApp) Run() error {
 
 // connect establishes connection to the game server
 func (ta *TwistApp) connect(address string) {
+	defer debug.LogFunction("TwistApp.connect")()
+	debug.Log("Connect requested to address: %s", address)
 	
-	if err := ta.proxy.Connect(address); err != nil {
+	// Use API layer exclusively - connection state updated via callbacks
+	if err := ta.proxyClient.Connect(address, ta.tuiAPI); err != nil {
+		debug.LogError(err, "proxyClient.Connect immediate failure")
+		// Handle immediate validation errors
+		ta.connected = false
+		ta.serverAddress = ""
+		ta.menuComponent.SetDisconnectedMenu()
 		return
 	}
-	
-	ta.connected = true
-	ta.serverAddress = address
-	ta.menuComponent.SetConnectedMenu()
+	debug.Log("ProxyClient.Connect returned successfully, waiting for callbacks")
+	// Connection state will be updated via OnConnected/OnConnectionError callbacks
 }
 
 // disconnect closes the connection to the game server
 func (ta *TwistApp) disconnect() {
-	if ta.connected {
-		ta.proxy.Disconnect()
-		ta.connected = false
-		ta.menuComponent.SetDisconnectedMenu()
-	}
+	// Use API layer exclusively
+	ta.proxyClient.Disconnect()
+	// Disconnection state will be updated via OnDisconnected callback
 }
 
 // exit shuts down the application
@@ -227,17 +245,148 @@ func (ta *TwistApp) exit() {
 
 // sendCommand sends a command to the game server
 func (ta *TwistApp) sendCommand(command string) {
-	if ta.connected {
-		ta.proxy.SendInput(command)
+	if ta.proxyClient.IsConnected() {
+		ta.proxyClient.SendData([]byte(command))
 	}
 }
 
 // updateTerminalView updates the terminal display
 func (ta *TwistApp) updateTerminalView() {
+	debug.Log("updateTerminalView called")
 	if ta.terminalComponent == nil {
+		debug.Log("ERROR: terminalComponent is nil")
 		return
 	}
+	debug.Log("Calling terminalComponent.UpdateContent()")
 	ta.terminalComponent.UpdateContent()
+	debug.Log("terminalComponent.UpdateContent() completed")
+}
+
+// TuiAPI handler methods - called by API layer
+func (ta *TwistApp) HandleConnectionEstablished(info proxyapi.ConnectionInfo) {
+	debug.Log("HandleConnectionEstablished called with: %+v", info)
+	ta.app.QueueUpdateDraw(func() {
+		debug.LogState("TUI", "connection established", info.Address)
+		ta.connected = true
+		ta.serverAddress = info.Address
+		ta.menuComponent.SetConnectedMenu()
+		
+		// Ensure modal is closed if it's still open
+		if ta.modalVisible {
+			ta.closeModal()
+		}
+		
+		debug.Log("UI updated to connected state")
+	})
+}
+
+func (ta *TwistApp) HandleDisconnection(reason string) {
+	debug.Log("HandleDisconnection called with reason: %s", reason)
+	ta.app.QueueUpdateDraw(func() {
+		debug.LogState("TUI", "disconnection", reason)
+		ta.connected = false
+		ta.serverAddress = ""
+		ta.menuComponent.SetDisconnectedMenu()
+		debug.Log("UI updated to disconnected state")
+	})
+}
+
+func (ta *TwistApp) HandleConnectionError(err error) {
+	debug.LogError(err, "HandleConnectionError")
+	ta.app.QueueUpdateDraw(func() {
+		debug.LogState("TUI", "connection error", err.Error())
+		ta.connected = false
+		ta.serverAddress = ""
+		ta.menuComponent.SetDisconnectedMenu()
+		
+		// Ensure modal is closed if it's still open
+		if ta.modalVisible {
+			ta.closeModal()
+		}
+		
+		// TODO: Show error modal: ta.showErrorModal(err)
+		debug.Log("UI updated to disconnected state due to error")
+	})
+}
+
+func (ta *TwistApp) HandleTerminalData(data []byte) {
+	// Log raw chunk data for debugging ANSI and boundary issues
+	ta.logChunkDebug(data)
+	
+	debug.Log("HandleTerminalData called with %d bytes: %q", len(data), string(data))
+	
+	// Try direct processing first to see if QueueUpdateDraw is the issue
+	debug.Log("Processing terminal data directly (bypassing QueueUpdateDraw temporarily)")
+	
+	// Add error recovery to catch any panics in terminal processing
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in HandleTerminalData: %v", r)
+		}
+	}()
+	
+	debug.Log("Writing to terminal buffer directly")
+	ta.terminal.Write(data)
+	debug.Log("Terminal.Write completed")
+	
+	// Now try the QueueUpdateDraw for UI refresh
+	ta.app.QueueUpdateDraw(func() {
+		debug.Log("In QueueUpdateDraw callback for UI refresh")
+		ta.updateTerminalView()
+		debug.Log("updateTerminalView() completed")
+	})
+	
+	debug.Log("HandleTerminalData completed")
+}
+
+func (ta *TwistApp) logChunkDebug(data []byte) {
+	// Count visible characters (excluding ANSI sequences) in the entire chunk
+	visibleChars := 0
+	inEscape := false
+	for _, b := range data {
+		if b == 0x1B {
+			inEscape = true
+		} else if inEscape && (b >= 'a' && b <= 'z' || b >= 'A' && b <= 'Z') {
+			inEscape = false
+		} else if !inEscape {
+			visibleChars++
+		}
+	}
+	
+	debug.Log("CHUNK [len=%d, visible=%d]: %q", len(data), visibleChars, string(data))
+	debug.Log("CHUNK hex: %x", data)
+	
+	if visibleChars > 80 {
+		debug.Log("*** WARNING: Chunk has %d visible chars > 80 ***", visibleChars)
+	}
+	
+	// Check for partial ANSI sequences at chunk boundaries
+	if len(data) > 0 {
+		if data[0] == 0x1B {
+			debug.Log("*** CHUNK STARTS WITH ESC - possible continuation ***")
+		}
+		if data[len(data)-1] == 0x1B {
+			debug.Log("*** CHUNK ENDS WITH ESC - likely incomplete sequence ***")
+		}
+		
+		// Look for incomplete ANSI sequences at the end
+		for i := len(data) - 1; i >= 0 && i >= len(data)-10; i-- {
+			if data[i] == 0x1B && i+1 < len(data) && data[i+1] == '[' {
+				// Check if this escape sequence is complete
+				complete := false
+				for j := i + 2; j < len(data); j++ {
+					if (data[j] >= 'a' && data[j] <= 'z') || (data[j] >= 'A' && data[j] <= 'Z') {
+						complete = true
+						break
+					}
+				}
+				if !complete {
+					debug.Log("*** INCOMPLETE ANSI at end: %q ***", string(data[i:]))
+				}
+				break
+			}
+		}
+	}
 }
 
 // showMenuModal displays a modal menu
@@ -512,10 +661,12 @@ func (ta *TwistApp) showConnectionDialog() {
 	// Create connection dialog
 	connectionDialog := components.NewConnectionDialog(
 		func(address string) {
+			debug.Log("Connection dialog submitted with address: %s", address)
 			ta.connect(address)
-			ta.closeModal()
+			// Don't close modal immediately - let connection callbacks handle it
 		},
 		func() {
+			debug.Log("Connection dialog cancelled")
 			ta.closeModal()
 		},
 	)

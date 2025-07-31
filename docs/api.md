@@ -709,8 +709,10 @@ import (
 
 2. **Update Streaming Pipeline**
    - Replace direct terminal writer injection with `TuiAPI.OnData()` calls
-   - Remove `streaming.TerminalWriter` interface dependency
-   - Pass raw data directly to TuiAPI (no conversion needed yet)
+   - **Remove `streaming.TerminalWriter` interface completely** - this interface creates tight coupling and should be eliminated entirely
+   - Update pipeline constructor to accept `TuiAPI` parameter instead of `TerminalWriter`
+   - Replace `p.terminalWriter.Write(decoded)` with direct `p.tuiAPI.OnData(decoded)` calls
+   - Handle scripting integration dependency on `TerminalInterface` (scripts need `GetLines()` access)
 
 #### Connection TUI-Side (Second):
 3. **Update TUI Connection Handling**
@@ -725,10 +727,17 @@ import (
    - Keep existing terminal buffer handling (no API data structures needed yet)
 
 **Files to Focus On**:
-- `internal/proxy/proxy.go` (connection methods, TuiAPI calls)
-- `internal/streaming/pipeline.go` (replace TerminalWriter with TuiAPI calls)
+- `internal/proxy/proxy.go` (update constructor to accept TuiAPI, handle scripting integration)
+- `internal/streaming/pipeline.go` (**remove TerminalWriter interface**, update constructors, replace Write calls)
 - `internal/tui/app.go` (connection methods, remove connection state)
 - `internal/tui/components/terminal.go` (receive data via API)
+
+**Critical TerminalWriter Removal Tasks**:
+- Remove `TerminalWriter` interface definition from `pipeline.go`
+- Update `NewPipeline()` and `NewPipelineWithScriptManager()` signatures
+- Replace `p.terminalWriter.Write(decoded)` with `p.tuiAPI.OnData(decoded)`
+- Solve scripting integration: either extend `TuiAPI` with `GetLines()` or pass separate terminal reference
+- Remove `GetTerminalWriter()` method (unused)
 
 ### Phase 3: Script Management Migration  
 **Goal**: Migrate script functionality to use API exclusively.
