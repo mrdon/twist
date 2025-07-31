@@ -7,6 +7,7 @@ package api
 // through tview's QueueUpdateDraw mechanism.
 type TuiAPI interface {
 	// Connection Events - all must return immediately
+	OnConnecting(address string)
 	OnConnected(info ConnectionInfo)
 	OnDisconnected(reason string)
 	OnConnectionError(err error)

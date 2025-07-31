@@ -179,8 +179,8 @@ func (tc *ThemedComponents) NewForm() *tview.Form {
 	colors := tc.theme.DialogColors()
 	
 	form.SetBackgroundColor(colors.Background)
-	form.SetFieldBackgroundColor(colors.Background)
-	form.SetFieldTextColor(colors.Foreground)
+	form.SetFieldBackgroundColor(colors.FieldBg)
+	form.SetFieldTextColor(colors.FieldFg)
 	form.SetLabelColor(colors.Foreground)
 	form.SetButtonBackgroundColor(colors.ButtonBg)
 	form.SetButtonTextColor(colors.ButtonFg)

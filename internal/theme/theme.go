@@ -17,6 +17,8 @@ type DialogColors struct {
 	SelectedFg      tcell.Color
 	ButtonBg        tcell.Color
 	ButtonFg        tcell.Color
+	FieldBg         tcell.Color  // Input field background
+	FieldFg         tcell.Color  // Input field text
 }
 
 // MenuColors defines color scheme for menus
@@ -51,6 +53,9 @@ type StatusColors struct {
 	HighlightFg     tcell.Color
 	ErrorBg         tcell.Color
 	ErrorFg         tcell.Color
+	ConnectedFg     tcell.Color
+	ConnectingFg    tcell.Color
+	DisconnectedFg  tcell.Color
 }
 
 // PanelColors defines color scheme for side panels

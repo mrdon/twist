@@ -2,11 +2,13 @@ package api
 
 import (
 	"fmt"
+	"twist/internal/debug"
 	proxyapi "twist/internal/proxy/api"
 )
 
 // Forward declaration - will be defined when we update app.go
 type TwistApp interface {
+	HandleConnecting(address string)
 	HandleConnectionEstablished(info proxyapi.ConnectionInfo)
 	HandleDisconnection(reason string)
 	HandleConnectionError(err error)
@@ -36,6 +38,11 @@ func NewTuiAPI(app TwistApp) proxyapi.TuiAPI {
 
 // Thin orchestration methods - all one-liners calling app directly
 // All methods MUST return immediately using goroutines for async work
+func (tui *TuiApiImpl) OnConnecting(address string) {
+	debug.Log("TUI_API: OnConnecting called with address: %s", address)
+	go tui.app.HandleConnecting(address)
+}
+
 func (tui *TuiApiImpl) OnConnected(info proxyapi.ConnectionInfo) {
 	go tui.app.HandleConnectionEstablished(info)
 }

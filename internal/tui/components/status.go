@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/scripting"
+	"twist/internal/theme"
 
 	"github.com/rivo/tview"
 )
@@ -12,6 +13,8 @@ import (
 type StatusComponent struct {
 	wrapper       *tview.TextView
 	scriptManager ScriptManagerInterface
+	connected     bool
+	serverAddress string
 }
 
 // ScriptManagerInterface defines the interface for script management
@@ -53,6 +56,13 @@ func (sc *StatusComponent) SetScriptManager(sm ScriptManagerInterface) {
 	sc.UpdateStatus()
 }
 
+// SetConnectionStatus sets the connection status
+func (sc *StatusComponent) SetConnectionStatus(connected bool, serverAddress string) {
+	sc.connected = connected
+	sc.serverAddress = serverAddress
+	sc.UpdateStatus()
+}
+
 // UpdateStatus updates the status bar display
 func (sc *StatusComponent) UpdateStatus() {
 	if sc.scriptManager == nil {
@@ -73,8 +83,27 @@ func (sc *StatusComponent) UpdateStatus() {
 	runningCount := len(runningScripts)
 	
 	var statusText strings.Builder
-	statusText.WriteString(" Scripts: ")
 	
+	// Get theme colors
+	currentTheme := theme.Current()
+	statusColors := currentTheme.StatusColors()
+	
+	// Convert colors to hex for tview tags
+	connectedHex := fmt.Sprintf("#%06x", statusColors.ConnectedFg.Hex())
+	disconnectedHex := fmt.Sprintf("#%06x", statusColors.DisconnectedFg.Hex())
+	foregroundHex := fmt.Sprintf("#%06x", statusColors.Foreground.Hex())
+	
+	// Connection status first
+	statusText.WriteString(" ")
+	if sc.connected {
+		statusText.WriteString(fmt.Sprintf("[%s]Connected[%s] to %s", connectedHex, foregroundHex, sc.serverAddress))
+	} else if sc.serverAddress != "" {
+		statusText.WriteString(fmt.Sprintf("[%s]%s[%s]", foregroundHex, sc.serverAddress, foregroundHex))
+	} else {
+		statusText.WriteString(fmt.Sprintf("[%s]Disconnected[%s]", disconnectedHex, foregroundHex))
+	}
+	
+	statusText.WriteString(" | Scripts: ")
 	statusText.WriteString(fmt.Sprintf("%d active", runningCount))
 	
 	if totalCount > runningCount {

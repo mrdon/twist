@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"twist/internal/debug"
 	"twist/internal/proxy"
 )
 
@@ -33,25 +34,45 @@ func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
 	proxyInstance := proxy.New(impl)
 	impl.proxy = proxyInstance
 	
-	// Attempt connection asynchronously to avoid blocking
+	// Notify TUI that connection is starting
+	debug.Log("PROXY: Calling OnConnecting(%s)", address)
+	tuiAPI.OnConnecting(address)
+	
+	// Attempt connection asynchronously to avoid blocking with 5-second timeout
 	go func() {
-		err := proxyInstance.Connect(address)
-		if err != nil {
-			// Connection failure -> call TuiAPI error callback
-			tuiAPI.OnConnectionError(err)
-			return
-		}
+		// Create a channel for the connection result
+		resultChan := make(chan error, 1)
 		
-		// Success -> call TuiAPI success callback
-		connectionInfo := ConnectionInfo{
-			Address:     address,
-			ConnectedAt: time.Now(),
-			Status:      ConnectionStatusConnected,
-		}
-		tuiAPI.OnConnected(connectionInfo)
+		// Start connection attempt in another goroutine
+		go func() {
+			err := proxyInstance.Connect(address)
+			resultChan <- err
+		}()
 		
-		// Start monitoring for network disconnections
-		go impl.monitorConnection()
+		// Wait for either connection result or timeout
+		select {
+		case err := <-resultChan:
+			if err != nil {
+				// Connection failure -> call TuiAPI error callback
+				tuiAPI.OnConnectionError(err)
+				return
+			}
+			
+			// Success -> call TuiAPI success callback
+			connectionInfo := ConnectionInfo{
+				Address:     address,
+				ConnectedAt: time.Now(),
+				Status:      ConnectionStatusConnected,
+			}
+			tuiAPI.OnConnected(connectionInfo)
+			
+			// Start monitoring for network disconnections
+			go impl.monitorConnection()
+			
+		case <-time.After(5 * time.Second):
+			// Timeout -> call TuiAPI error callback
+			tuiAPI.OnConnectionError(errors.New("connection timeout after 5 seconds"))
+		}
 	}()
 	
 	// Return connected ProxyAPI instance immediately

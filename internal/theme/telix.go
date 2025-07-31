@@ -53,14 +53,16 @@ func (t *TelixTheme) DefaultColors() DefaultColors {
 // DialogColors returns the dialog color scheme
 func (t *TelixTheme) DialogColors() DialogColors {
 	return DialogColors{
-		Background:  DOSBlue,
-		Foreground:  DOSWhite,
-		Border:      DOSWhite,
-		Title:       DOSWhite,
-		SelectedBg:  DOSWhite,
-		SelectedFg:  DOSBlack,
-		ButtonBg:    DOSBlue,
-		ButtonFg:    DOSWhite,
+		Background:  DOSBlue,                            // Main dialog background
+		Foreground:  DOSWhite,                           // Text and labels
+		Border:      DOSWhite,                           // Border lines
+		Title:       DOSWhite,                           // Dialog title
+		SelectedBg:  DOSWhite,                           // Selected item background
+		SelectedFg:  DOSBlack,                           // Selected item text
+		ButtonBg:    DOSLightGray,                       // Button background (light gray)
+		ButtonFg:    DOSBlack,                           // Button text (black)
+		FieldBg:     tcell.NewHexColor(0x000040),        // Input field background (darker blue)
+		FieldFg:     DOSWhite,                           // Input field text (white)
 	}
 }
 
@@ -89,12 +91,15 @@ func (t *TelixTheme) TerminalColors() TerminalColors {
 // StatusColors returns the status bar color scheme (menu bar)
 func (t *TelixTheme) StatusColors() StatusColors {
 	return StatusColors{
-		Background:  DOSBlue,        // Use blue #000080 for menu bar background
-		Foreground:  DOSLightGray,   // Light gray text on blue background (normal items)
-		HighlightBg: DOSRed,         // Red background for selected menu items (like reference)
-		HighlightFg: DOSWhite,       // White text on red background
-		ErrorBg:     DOSRed,
-		ErrorFg:     DOSWhite,
+		Background:     DOSBlue,        // Use blue #000080 for menu bar background
+		Foreground:     DOSLightGray,   // Light gray text on blue background (normal items)
+		HighlightBg:    DOSRed,         // Red background for selected menu items (like reference)
+		HighlightFg:    DOSWhite,       // White text on red background
+		ErrorBg:        DOSRed,
+		ErrorFg:        DOSWhite,
+		ConnectedFg:    DOSLightGreen,  // Bright green for connected status
+		ConnectingFg:   DOSYellow,      // Yellow for connecting status
+		DisconnectedFg: DOSLightRed,    // Bright red for disconnected status
 	}
 }
 

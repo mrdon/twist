@@ -33,11 +33,12 @@ func (cd *ConnectionDialog) setupComponents() {
 	cd.form.SetTitle(" Connect to Server ")
 	cd.form.SetTitleAlign(tview.AlignCenter)
 	cd.form.SetBorder(true)
+	cd.form.SetBorderPadding(2, 2, 2, 2) // top, bottom, left, right padding
 
 	// Add server address field with default value
 	cd.form.AddInputField("Server Address:", "twgs.geekm0nkey.com:23", 40, nil, nil)
 
-	// Add buttons
+	// Add buttons (Connect first for easy tab access, Cancel second)
 	cd.form.AddButton("Connect", func() {
 		serverAddress := cd.form.GetFormItem(0).(*tview.InputField).GetText()
 		if cd.callback != nil {
@@ -50,6 +51,9 @@ func (cd *ConnectionDialog) setupComponents() {
 			cd.cancelCallback()
 		}
 	})
+
+	// Center the buttons
+	cd.form.SetButtonsAlign(tview.AlignCenter)
 
 	// Set focus to the input field
 	cd.form.SetFocus(0)
@@ -64,12 +68,12 @@ func (cd *ConnectionDialog) GetView() tview.Primitive {
 		AddItem(tview.NewFlex().
 			AddItem(nil, 0, 1, false). // Left spacer (proportional)
 			AddItem(cd.form, 60, 0, true). // Fixed width for form (60 chars)
-			AddItem(nil, 0, 1, false), 8, 0, true). // Fixed height (8 rows)
+			AddItem(nil, 0, 1, false), 10, 0, true). // Fixed height (10 rows)
 		AddItem(nil, 0, 1, false) // Bottom spacer (proportional)
 
 	// Apply theme colors for modal overlay effect
 	currentTheme := theme.Current()
-	flex.SetBackgroundColor(currentTheme.TerminalColors().Background)
+	flex.SetBackgroundColor(currentTheme.DialogColors().Background)
 	
 	return flex
 }
