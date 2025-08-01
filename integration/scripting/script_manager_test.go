@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"twist/internal/scripting/manager"
+	"twist/internal/proxy/scripting/manager"
 )
 
 // TestScriptManager_LoadScript_RealIntegration tests script loading with real database

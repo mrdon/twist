@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	coreapi "twist/internal/api"
-	"twist/internal/proxy"
 )
 
 // ProxyClient manages ProxyAPI connections for TUI
@@ -21,7 +20,7 @@ func NewProxyClient() *ProxyClient {
 func (pc *ProxyClient) Connect(address string, tuiAPI coreapi.TuiAPI) error {
 	// Use static Connect function to create new ProxyAPI instance
 	// Static function never returns errors - all failures go via callbacks
-	proxyAPI := proxy.Connect(address, tuiAPI)
+	proxyAPI := coreapi.Connect(address, tuiAPI)
 
 	// Store the connected API instance
 	pc.currentAPI = proxyAPI

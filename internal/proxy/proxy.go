@@ -7,9 +7,9 @@ import (
 	"strings"
 	"sync"
 
-	"twist/internal/streaming"
-	"twist/internal/database"
-	"twist/internal/scripting"
+	"twist/internal/proxy/streaming"
+	"twist/internal/proxy/database"
+	"twist/internal/proxy/scripting"
 	"twist/internal/api"
 	// "twist/internal/debug" // Keep for future debugging
 )

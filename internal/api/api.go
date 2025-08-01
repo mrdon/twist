@@ -84,3 +84,4 @@ type SectorInfo struct {
 	Constellation string `json:"constellation"`  // Constellation name
 	Beacon        string `json:"beacon"`         // Beacon text
 }
+

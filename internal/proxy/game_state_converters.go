@@ -2,7 +2,7 @@ package proxy
 
 import (
 	"twist/internal/api"
-	"twist/internal/database"
+	"twist/internal/proxy/database"
 )
 
 // convertDatabaseSectorToAPI converts database TSector to API SectorInfo

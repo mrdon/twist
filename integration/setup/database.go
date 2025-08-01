@@ -5,9 +5,9 @@ package setup
 import (
 	"path/filepath"
 	"testing"
-	"twist/internal/database"
-	"twist/internal/scripting"
-	"twist/internal/scripting/types"
+	"twist/internal/proxy/database"
+	"twist/internal/proxy/scripting"
+	"twist/internal/proxy/scripting/types"
 )
 
 // DatabaseTestSetup provides database-specific test utilities

@@ -5,7 +5,7 @@ package scripting
 import (
 	"testing"
 	"twist/integration/setup"
-	"twist/internal/scripting/types"
+	"twist/internal/proxy/scripting/types"
 )
 
 // TestSimpleArrayAccess tests basic array variable access

@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/mattn/go-isatty"
+	_ "twist/internal/proxy" // Import proxy package to register Connect implementation
 	"twist/internal/tui"
 )
 

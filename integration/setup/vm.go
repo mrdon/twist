@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"twist/internal/database"
-	"twist/internal/scripting"
-	"twist/internal/scripting/types"
-	"twist/internal/scripting/vm"
+	"twist/internal/proxy/database"
+	"twist/internal/proxy/scripting"
+	"twist/internal/proxy/scripting/types"
+	"twist/internal/proxy/scripting/vm"
 )
 
 // IntegrationTestSetup provides real components for integration testing

@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 	"twist/integration/setup"
-	"twist/internal/database"
-	"twist/internal/scripting"
-	"twist/internal/scripting/include"
-	"twist/internal/scripting/parser"
-	"twist/internal/scripting/vm"
+	"twist/internal/proxy/database"
+	"twist/internal/proxy/scripting"
+	"twist/internal/proxy/scripting/include"
+	"twist/internal/proxy/scripting/parser"
+	"twist/internal/proxy/scripting/vm"
 )
 
 // IntegrationTestResult captures the output from a script execution  

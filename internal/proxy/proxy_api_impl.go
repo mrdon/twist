@@ -7,14 +7,20 @@ import (
 	"twist/internal/api"
 )
 
+func init() {
+	// Register the Connect implementation with the API package
+	api.SetConnectImpl(connect)
+}
+
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
 type ProxyApiImpl struct {
 	proxy  *Proxy  // Active proxy instance
 	tuiAPI api.TuiAPI        // TuiAPI reference for callbacks
 }
 
-// Connect creates a new proxy instance and returns a connected ProxyAPI
-func Connect(address string, tuiAPI api.TuiAPI) api.ProxyAPI {
+// connect creates a new proxy instance and returns a connected ProxyAPI
+// This is the internal implementation registered with the API package
+func connect(address string, tuiAPI api.TuiAPI) api.ProxyAPI {
 	// Never return errors - all failures go via callbacks
 	// Even nil tuiAPI or empty address should be handled gracefully via callbacks
 	if tuiAPI == nil {

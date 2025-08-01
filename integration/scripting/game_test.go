@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 	"time"
-	"twist/internal/database"
+	"twist/internal/proxy/database"
 )
 
 // TestSendCommand_RealIntegration tests SEND command with real VM and database
