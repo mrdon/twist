@@ -2,12 +2,13 @@ package api
 
 import (
 	"errors"
-	proxyapi "twist/internal/proxy/api"
+	coreapi "twist/internal/api"
+	"twist/internal/proxy"
 )
 
 // ProxyClient manages ProxyAPI connections for TUI
 type ProxyClient struct {
-	currentAPI proxyapi.ProxyAPI // Current active connection (nil if disconnected)
+	currentAPI coreapi.ProxyAPI // Current active connection (nil if disconnected)
 }
 
 // NewProxyClient creates a new proxy client
@@ -17,15 +18,13 @@ func NewProxyClient() *ProxyClient {
 	}
 }
 
-func (pc *ProxyClient) Connect(address string, tuiAPI proxyapi.TuiAPI) error {
+func (pc *ProxyClient) Connect(address string, tuiAPI coreapi.TuiAPI) error {
 	// Use static Connect function to create new ProxyAPI instance
-	api, err := proxyapi.Connect(address, tuiAPI)
-	if err != nil {
-		return err
-	}
+	// Static function never returns errors - all failures go via callbacks
+	proxyAPI := proxy.Connect(address, tuiAPI)
 
 	// Store the connected API instance
-	pc.currentAPI = api
+	pc.currentAPI = proxyAPI
 	return nil
 }
 
@@ -53,12 +52,3 @@ func (pc *ProxyClient) SendData(data []byte) error {
 	return pc.currentAPI.SendData(data)
 }
 
-func (pc *ProxyClient) Shutdown() error {
-	if pc.currentAPI == nil {
-		return nil
-	}
-
-	err := pc.currentAPI.Shutdown()
-	pc.currentAPI = nil // Clear reference after shutdown
-	return err
-}

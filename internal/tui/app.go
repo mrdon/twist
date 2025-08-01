@@ -1,16 +1,14 @@
 package tui
 
 import (
-	"fmt"
-	"twist/internal/debug"
-	"twist/internal/proxy"
+	// "twist/internal/debug" // Keep for future debugging
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
 	"twist/internal/tui/handlers"
 	"twist/internal/theme"
 	twistComponents "twist/internal/components"
 	"twist/internal/tui/api"
-	proxyapi "twist/internal/proxy/api"
+	coreapi "twist/internal/api"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -19,11 +17,10 @@ import (
 // TwistApp represents the main tview application - refactored version
 type TwistApp struct {
 	app    *tview.Application
-	proxy  *proxy.Proxy
 
-	// API layer (alongside existing proxy for now)
+	// API layer (now exclusive) 
 	proxyClient *api.ProxyClient
-	tuiAPI      proxyapi.TuiAPI
+	tuiAPI      coreapi.TuiAPI
 
 	// Core components
 	terminal     *terminal.Terminal
@@ -52,8 +49,6 @@ type TwistApp struct {
 // NewApplication creates and configures the tview application
 func NewApplication() *TwistApp {
 
-	// Initialize proxy without terminal buffer - we'll connect it to TerminalComponent later
-	proxyInstance := proxy.New(nil)
 
 	// Create the main application
 	app := tview.NewApplication()
@@ -69,7 +64,6 @@ func NewApplication() *TwistApp {
 
 	twistApp := &TwistApp{
 		app:                app,
-		proxy:              proxyInstance,
 		terminal:           nil, // No longer using terminal buffer
 		connected:          false,
 		serverAddress:      "twgs.geekm0nkey.com:23",
@@ -94,8 +88,8 @@ func NewApplication() *TwistApp {
 		})
 	})
 
-	// Wire script manager to status component
-	statusComp.SetScriptManager(proxyInstance.GetScriptManager())
+	// Script manager will be set via API after connection established
+	// Script manager setup removed - will be handled in Phase 3
 
 	twistApp.setupUI()
 	twistApp.setupInputHandling()
@@ -200,8 +194,6 @@ func (ta *TwistApp) Run() error {
 
 // connect establishes connection to the game server
 func (ta *TwistApp) connect(address string) {
-	debug.Log("CONNECT: Starting connection attempt to %s", address)
-	
 	// Close modal immediately
 	if ta.modalVisible {
 		ta.closeModal()
@@ -209,9 +201,7 @@ func (ta *TwistApp) connect(address string) {
 	
 	// Use API layer exclusively - connection should be non-blocking
 	// Proxy will call HandleConnecting, then HandleConnectionEstablished/HandleConnectionError
-	debug.Log("CONNECT: Calling proxyClient.Connect...")
 	if err := ta.proxyClient.Connect(address, ta.tuiAPI); err != nil {
-		debug.Log("CONNECT: Connect returned error: %v", err)
 		// Handle immediate validation errors
 		ta.connected = false
 		ta.serverAddress = ""
@@ -219,7 +209,6 @@ func (ta *TwistApp) connect(address string) {
 		ta.statusComponent.SetConnectionStatus(false, "Connection failed: "+err.Error())
 		return
 	}
-	debug.Log("CONNECT: Connect call completed successfully, waiting for callbacks...")
 	// Connection state will be updated via proxy callbacks
 }
 
@@ -252,43 +241,30 @@ func (ta *TwistApp) updateTerminalView() {
 }
 
 // TuiAPI handler methods - called by API layer
-func (ta *TwistApp) HandleConnecting(address string) {
-	debug.Log("TUI_APP: HandleConnecting called with address: %s", address)
+func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatus, address string) {
 	ta.app.QueueUpdateDraw(func() {
-		debug.Log("TUI_APP: Setting status to 'Connecting to %s...'", address)
-		ta.statusComponent.SetConnectionStatus(false, "Connecting to "+address+"...")
-	})
-}
-
-func (ta *TwistApp) HandleConnectionEstablished(info proxyapi.ConnectionInfo) {
-	ta.app.QueueUpdateDraw(func() {
-		ta.connected = true
-		ta.serverAddress = info.Address
-		ta.menuComponent.SetConnectedMenu()
-		ta.statusComponent.SetConnectionStatus(true, info.Address)
-		
-		// Ensure modal is closed if it's still open
-		if ta.modalVisible {
-			ta.closeModal()
+		switch status {
+		case coreapi.ConnectionStatusConnecting:
+			ta.statusComponent.SetConnectionStatus(false, "Connecting to "+address+"...")
+			
+		case coreapi.ConnectionStatusConnected:
+			ta.connected = true
+			ta.serverAddress = address
+			ta.menuComponent.SetConnectedMenu()
+			ta.statusComponent.SetConnectionStatus(true, address)
+			if ta.modalVisible {
+				ta.closeModal()
+			}
+			
+		case coreapi.ConnectionStatusDisconnected:
+			ta.connected = false
+			ta.serverAddress = ""
+			ta.menuComponent.SetDisconnectedMenu()
+			ta.statusComponent.SetConnectionStatus(false, "")
+			// Show disconnect message in terminal
+			disconnectMsg := "\r\x1b[K\x1b[31;1mDISCONNECTED\x1b[0m\n"
+			ta.terminalComponent.Write([]byte(disconnectMsg))
 		}
-	})
-}
-
-func (ta *TwistApp) HandleDisconnection(reason string) {
-	fmt.Printf("[DEBUG] HandleDisconnection called with reason: %s\n", reason)
-	ta.app.QueueUpdateDraw(func() {
-		fmt.Printf("[DEBUG] In QueueUpdateDraw callback\n")
-		ta.connected = false
-		ta.serverAddress = ""
-		ta.menuComponent.SetDisconnectedMenu()
-		ta.statusComponent.SetConnectionStatus(false, "")
-		
-		// Also write red DISCONNECTED message to terminal (not sent to proxy)
-		// Move to beginning of line, clear it, show message, then newline
-		disconnectMsg := "\r\x1b[K\x1b[31;1mDISCONNECTED\x1b[0m\n"
-		fmt.Printf("[DEBUG] Writing disconnect message: %q\n", disconnectMsg)
-		n, err := ta.terminalComponent.Write([]byte(disconnectMsg))
-		fmt.Printf("[DEBUG] Write result: n=%d, err=%v\n", n, err)
 	})
 }
 
@@ -309,10 +285,10 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 }
 
 func (ta *TwistApp) HandleTerminalData(data []byte) {
-	
 	// Add error recovery to catch any panics in terminal processing
 	defer func() {
 		if r := recover(); r != nil {
+			// Panic in terminal processing - recovered
 		}
 	}()
 	

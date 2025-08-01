@@ -1,16 +1,13 @@
 package api
 
 import (
-	"fmt"
 	"twist/internal/debug"
-	proxyapi "twist/internal/proxy/api"
+	coreapi "twist/internal/api"
 )
 
 // Forward declaration - will be defined when we update app.go
 type TwistApp interface {
-	HandleConnecting(address string)
-	HandleConnectionEstablished(info proxyapi.ConnectionInfo)
-	HandleDisconnection(reason string)
+	HandleConnectionStatusChanged(status coreapi.ConnectionStatus, address string)
 	HandleConnectionError(err error)
 	HandleTerminalData(data []byte)
 }
@@ -23,7 +20,7 @@ type TuiApiImpl struct {
 }
 
 // NewTuiAPI creates a new TuiAPI implementation
-func NewTuiAPI(app TwistApp) proxyapi.TuiAPI {
+func NewTuiAPI(app TwistApp) coreapi.TuiAPI {
 	impl := &TuiApiImpl{
 		app:        app,
 		dataChan:   make(chan []byte, 100), // Buffered channel for data
@@ -38,18 +35,8 @@ func NewTuiAPI(app TwistApp) proxyapi.TuiAPI {
 
 // Thin orchestration methods - all one-liners calling app directly
 // All methods MUST return immediately using goroutines for async work
-func (tui *TuiApiImpl) OnConnecting(address string) {
-	debug.Log("TUI_API: OnConnecting called with address: %s", address)
-	go tui.app.HandleConnecting(address)
-}
-
-func (tui *TuiApiImpl) OnConnected(info proxyapi.ConnectionInfo) {
-	go tui.app.HandleConnectionEstablished(info)
-}
-
-func (tui *TuiApiImpl) OnDisconnected(reason string) {
-	fmt.Printf("[DEBUG] TuiApiImpl.OnDisconnected called with reason: %s\n", reason)
-	go tui.app.HandleDisconnection(reason)
+func (tui *TuiApiImpl) OnConnectionStatusChanged(status coreapi.ConnectionStatus, address string) {
+	go tui.app.HandleConnectionStatusChanged(status, address)
 }
 
 func (tui *TuiApiImpl) OnConnectionError(err error) {
@@ -57,6 +44,8 @@ func (tui *TuiApiImpl) OnConnectionError(err error) {
 }
 
 func (tui *TuiApiImpl) OnData(data []byte) {
+	// Log raw data chunks for debugging
+	debug.LogDataChunk("OnData", data)
 	
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))
@@ -72,15 +61,15 @@ func (tui *TuiApiImpl) OnData(data []byte) {
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially
 func (tui *TuiApiImpl) processDataLoop() {
-	
 	for {
 		select {
 		case data := <-tui.dataChan:
-				// Process data sequentially - no race conditions possible
+			// Process data sequentially - no race conditions possible
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						}
+						// Panic in data processing - recovered
+					}
 				}()
 				tui.app.HandleTerminalData(data)
 			}()

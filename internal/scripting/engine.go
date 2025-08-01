@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 
+	// "twist/internal/debug" // Keep for future debugging
 	"twist/internal/scripting/include"
 	"twist/internal/scripting/parser"
 	"twist/internal/scripting/triggers"
@@ -523,9 +524,7 @@ func (e *Engine) PrintAST(ast *parser.ASTNode, indent int) {
 		return
 	}
 	
-	prefix := strings.Repeat("  ", indent)
-	fmt.Printf("%sNode: Type=%d, Value=%s, Line=%d\n", prefix, ast.Type, ast.Value, ast.Line)
-	
+	// AST printing disabled - enable debug logging to see tree structure
 	for _, child := range ast.Children {
 		e.PrintAST(child, indent+1)
 	}

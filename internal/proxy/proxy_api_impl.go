@@ -1,27 +1,25 @@
-package api
+package proxy
 
 import (
 	"errors"
-	"fmt"
 	"time"
-	"twist/internal/debug"
-	"twist/internal/proxy"
+	// "twist/internal/debug" // Keep for future debugging
+	"twist/internal/api"
 )
 
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
 type ProxyApiImpl struct {
-	proxy  *proxy.Proxy  // Active proxy instance
-	tuiAPI TuiAPI        // TuiAPI reference for callbacks
+	proxy  *Proxy  // Active proxy instance
+	tuiAPI api.TuiAPI        // TuiAPI reference for callbacks
 }
 
 // Connect creates a new proxy instance and returns a connected ProxyAPI
-func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
-	if address == "" {
-		return nil, errors.New("address cannot be empty")
-	}
-	
+func Connect(address string, tuiAPI api.TuiAPI) api.ProxyAPI {
+	// Never return errors - all failures go via callbacks
+	// Even nil tuiAPI or empty address should be handled gracefully via callbacks
 	if tuiAPI == nil {
-		return nil, errors.New("tuiAPI cannot be nil")
+		// This is a programming error, but handle gracefully
+		return &ProxyApiImpl{} // Will fail safely when used
 	}
 	
 	// Create ProxyAPI wrapper first
@@ -29,14 +27,12 @@ func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
 		tuiAPI: tuiAPI,
 	}
 	
-	// Create proxy instance with TuiAPI wrapper as terminal writer
-	// The proxy constructor expects a TerminalWriter, so we implement that interface
-	proxyInstance := proxy.New(impl)
+	// Create proxy instance with TuiAPI directly - no adapter needed
+	proxyInstance := New(tuiAPI)
 	impl.proxy = proxyInstance
 	
 	// Notify TUI that connection is starting
-	debug.Log("PROXY: Calling OnConnecting(%s)", address)
-	tuiAPI.OnConnecting(address)
+	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnecting, address)
 	
 	// Attempt connection asynchronously to avoid blocking with 5-second timeout
 	go func() {
@@ -59,12 +55,7 @@ func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
 			}
 			
 			// Success -> call TuiAPI success callback
-			connectionInfo := ConnectionInfo{
-				Address:     address,
-				ConnectedAt: time.Now(),
-				Status:      ConnectionStatusConnected,
-			}
-			tuiAPI.OnConnected(connectionInfo)
+			tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
 			
 			// Start monitoring for network disconnections
 			go impl.monitorConnection()
@@ -76,22 +67,10 @@ func Connect(address string, tuiAPI TuiAPI) (ProxyAPI, error) {
 	}()
 	
 	// Return connected ProxyAPI instance immediately
-	return impl, nil
-}
-
-// Write implements streaming.TerminalWriter interface to bridge to TuiAPI
-// This eliminates the direct coupling between pipeline and TUI terminal
-func (p *ProxyApiImpl) Write(data []byte) {
-	if p.tuiAPI != nil {
-		p.tuiAPI.OnData(data)
-	}
+	return impl
 }
 
 // Thin orchestration methods - all one-liners delegating to proxy
-func (p *ProxyApiImpl) Connect(address string, tuiAPI TuiAPI) error {
-	// Not used - Connect is now a static function
-	return errors.New("use api.Connect() function instead")
-}
 
 func (p *ProxyApiImpl) Disconnect() error {
 	if p.proxy == nil {
@@ -103,7 +82,7 @@ func (p *ProxyApiImpl) Disconnect() error {
 		if err != nil {
 			p.tuiAPI.OnConnectionError(err)
 		} else {
-			p.tuiAPI.OnDisconnected("user requested")
+			p.tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusDisconnected, "")
 		}
 	}()
 	return nil
@@ -124,27 +103,11 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 	return nil
 }
 
-func (p *ProxyApiImpl) Shutdown() error {
-	if p.proxy == nil {
-		return nil
-	}
-	
-	go func() {
-		err := p.proxy.Disconnect()
-		if err != nil {
-			p.tuiAPI.OnConnectionError(err)
-		} else {
-			p.tuiAPI.OnDisconnected("shutdown")
-		}
-	}()
-	return nil
-}
-
 // monitorConnection monitors the proxy connection and calls appropriate callbacks
 func (p *ProxyApiImpl) monitorConnection() {
-	fmt.Printf("[DEBUG] monitorConnection started\n")
+	// monitorConnection started
 	if p.proxy == nil {
-		fmt.Printf("[DEBUG] proxy is nil, returning\n")
+		// proxy is nil, returning
 		return
 	}
 	
@@ -154,31 +117,31 @@ func (p *ProxyApiImpl) monitorConnection() {
 	
 	for {
 		select {
-		case err, ok := <-p.proxy.GetErrorChan():
+		case _, ok := <-p.proxy.GetErrorChan():
 			if !ok {
-				fmt.Printf("[DEBUG] Error channel closed\n")
+				// Error channel closed
 				// Channel closed, check connection status
 				if !p.proxy.IsConnected() {
-					fmt.Printf("[DEBUG] Proxy not connected after channel close, calling OnDisconnected\n")
-					p.tuiAPI.OnDisconnected("connection closed")
+					// Proxy not connected after channel close, calling OnConnectionStatusChanged
+					p.tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusDisconnected, "")
 				}
 				return
 			}
-			fmt.Printf("[DEBUG] Got error from channel: %v\n", err)
+			// Got error from channel
 			// Check if proxy is still connected after the error
 			if !p.proxy.IsConnected() {
-				fmt.Printf("[DEBUG] Proxy not connected, calling OnDisconnected\n")
+				// Proxy not connected, calling OnConnectionStatusChanged
 				// Connection was lost - call disconnection callback
-				p.tuiAPI.OnDisconnected("connection lost: " + err.Error())
+				p.tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusDisconnected, "")
 				return
 			}
-			fmt.Printf("[DEBUG] Proxy still connected, continuing to monitor\n")
+			// Proxy still connected, continuing to monitor
 			
 		case <-ticker.C:
 			// Periodically check if connection is still alive
 			if !p.proxy.IsConnected() {
-				fmt.Printf("[DEBUG] Periodic check: proxy not connected, calling OnDisconnected\n")
-				p.tuiAPI.OnDisconnected("connection lost")
+				// Periodic check: proxy not connected, calling OnConnectionStatusChanged
+				p.tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusDisconnected, "")
 				return
 			}
 		}

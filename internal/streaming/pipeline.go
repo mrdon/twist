@@ -10,6 +10,8 @@ import (
 	"twist/internal/telnet"
 	"twist/internal/database"
 	"twist/internal/streaming/parser"
+	"twist/internal/api"
+	// "twist/internal/debug" // Keep for future debugging
 )
 
 // ScriptManager interface for script processing
@@ -24,7 +26,7 @@ type Pipeline struct {
 	
 	// Processing layers
 	telnetHandler  *telnet.Handler
-	terminalWriter TerminalWriter
+	tuiAPI         api.TuiAPI  // Direct TuiAPI reference
 	decoder        *encoding.Decoder
 	sectorParser   *parser.SectorParser
 	scriptManager  ScriptManager
@@ -46,32 +48,56 @@ type Pipeline struct {
 	batchesProcessed uint64
 }
 
-// TerminalWriter interface for writing to terminal buffer
-type TerminalWriter interface {
-	Write([]byte)
-}
 
 // NewPipeline creates an optimized streaming pipeline
-func NewPipeline(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database) *Pipeline {
-	return NewPipelineWithScriptManager(terminalWriter, writer, db, nil, nil)
+func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
+	return &Pipeline{
+		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
+		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
+		decoder:       charmap.CodePage437.NewDecoder(),
+		sectorParser:  parser.NewSectorParser(db),
+		batchBuffer:   make([]byte, 0, 4096),
+		batchSize:     1,     // Process immediately - no batching
+		batchTimeout:  0,     // No timeout needed
+		stopChan:      make(chan struct{}),
+	}
 }
 
 // NewPipelineWithScriptManager creates an optimized streaming pipeline with script support
-func NewPipelineWithScriptManager(terminalWriter TerminalWriter, writer func([]byte) error, db database.Database, scriptManager ScriptManager, pvpLogger interface{}) *Pipeline {
-	
+func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager) *Pipeline {
 	p := &Pipeline{
-		rawDataChan:    make(chan []byte, 100), // Buffered for burst handling
-		terminalWriter: terminalWriter,
-		decoder:        charmap.CodePage437.NewDecoder(),
-		sectorParser:   parser.NewSectorParser(db),
-		scriptManager:  scriptManager,
-		batchBuffer:    make([]byte, 0, 4096),
-		batchSize:      1,     // Process immediately - no batching
-		batchTimeout:   0,     // No timeout needed
-		stopChan:       make(chan struct{}),
+		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
+		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
+		decoder:       charmap.CodePage437.NewDecoder(),
+		sectorParser:  parser.NewSectorParser(db),
+		scriptManager: scriptManager,
+		batchBuffer:   make([]byte, 0, 4096),
+		batchSize:     1,     // Process immediately - no batching
+		batchTimeout:  0,     // No timeout needed
+		stopChan:      make(chan struct{}),
 	}
 	
-	// Initialize telnet handler
+	// Initialize telnet handler with no writer - scripts don't need to write back to connection
+	p.telnetHandler = telnet.NewHandler(nil)
+	
+	return p
+}
+
+// NewPipelineWithWriter creates an optimized streaming pipeline with a writer for telnet negotiation
+func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, writer func([]byte) error) *Pipeline {
+	p := &Pipeline{
+		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
+		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
+		decoder:       charmap.CodePage437.NewDecoder(),
+		sectorParser:  parser.NewSectorParser(db),
+		scriptManager: scriptManager,
+		batchBuffer:   make([]byte, 0, 4096),
+		batchSize:     1,     // Process immediately - no batching
+		batchTimeout:  0,     // No timeout needed
+		stopChan:      make(chan struct{}),
+	}
+	
+	// Initialize telnet handler with proper writer for negotiation
 	p.telnetHandler = telnet.NewHandler(writer)
 	
 	return p
@@ -154,7 +180,9 @@ func (p *Pipeline) batchProcessor() {
 				// Parse the decoded text for sector information
 				p.sectorParser.ProcessData(decoded)
 				
-				p.terminalWriter.Write(decoded)
+				if p.tuiAPI != nil {
+					p.tuiAPI.OnData(decoded)
+				}
 				p.bytesProcessed += uint64(len(rawData))
 				p.batchesProcessed++
 			}
@@ -249,10 +277,6 @@ func (p *Pipeline) terminalProcessor() {
 	}
 }
 
-// GetTerminalWriter returns the terminal writer for external access
-func (p *Pipeline) GetTerminalWriter() TerminalWriter {
-	return p.terminalWriter
-}
 
 
 // GetMetrics returns pipeline performance metrics

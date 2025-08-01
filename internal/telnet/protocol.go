@@ -41,6 +41,11 @@ func NewHandler(writer func([]byte) error) *Handler {
 // SendInitialNegotiation sends the initial telnet option negotiations
 func (h *Handler) SendInitialNegotiation() error {
 	
+	// If no writer is available, skip telnet negotiation
+	if h.writer == nil {
+		return nil // Success - no negotiation needed
+	}
+	
 	// Send basic telnet client capabilities
 	commands := [][]byte{
 		{IAC, WILL, TERMINAL_TYPE},    // We support terminal type

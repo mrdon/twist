@@ -65,60 +65,54 @@ func (sc *StatusComponent) SetConnectionStatus(connected bool, serverAddress str
 
 // UpdateStatus updates the status bar display
 func (sc *StatusComponent) UpdateStatus() {
-	if sc.scriptManager == nil {
-		sc.wrapper.SetText(" Scripts: Unavailable | Status: Error | F1=Help")
-		return
-	}
-
-	engine := sc.scriptManager.GetEngine()
-	if engine == nil {
-		sc.wrapper.SetText(" Scripts: Engine Error | Status: Error | F1=Help")
-		return
-	}
-
-	allScripts := engine.ListScripts()
-	runningScripts := engine.GetRunningScripts()
-	
-	totalCount := len(allScripts)
-	runningCount := len(runningScripts)
-	
 	var statusText strings.Builder
 	
-	// Get theme colors
+	// Get theme colors for status bar
 	currentTheme := theme.Current()
 	statusColors := currentTheme.StatusColors()
 	
-	// Convert colors to hex for tview tags
-	connectedHex := fmt.Sprintf("#%06x", statusColors.ConnectedFg.Hex())
-	disconnectedHex := fmt.Sprintf("#%06x", statusColors.DisconnectedFg.Hex())
-	foregroundHex := fmt.Sprintf("#%06x", statusColors.Foreground.Hex())
+	// Set the overall status bar to normal foreground color
+	sc.wrapper.SetTextColor(statusColors.Foreground)
 	
-	// Connection status first
+	// Build status text with colored connection status
 	statusText.WriteString(" ")
 	if sc.connected {
-		statusText.WriteString(fmt.Sprintf("[%s]Connected[%s] to %s", connectedHex, foregroundHex, sc.serverAddress))
+		// Add green "Connected" part
+		statusText.WriteString(fmt.Sprintf("[%s]Connected[-] to %s", 
+			statusColors.ConnectedFg.String(), sc.serverAddress))
 	} else if sc.serverAddress != "" {
-		statusText.WriteString(fmt.Sprintf("[%s]%s[%s]", foregroundHex, sc.serverAddress, foregroundHex))
+		// Add connecting color for server address
+		statusText.WriteString(fmt.Sprintf("[%s]%s[-]", 
+			statusColors.ConnectingFg.String(), sc.serverAddress))
 	} else {
-		statusText.WriteString(fmt.Sprintf("[%s]Disconnected[%s]", disconnectedHex, foregroundHex))
+		// Add red "Disconnected" part
+		statusText.WriteString(fmt.Sprintf("[%s]Disconnected[-]", 
+			statusColors.DisconnectedFg.String()))
 	}
 	
-	statusText.WriteString(" | Scripts: ")
-	statusText.WriteString(fmt.Sprintf("%d active", runningCount))
-	
-	if totalCount > runningCount {
-		statusText.WriteString(fmt.Sprintf(", %d stopped", totalCount-runningCount))
-	}
-	
-	statusText.WriteString(" | Status: ")
-	
-	if runningCount > 0 {
-		statusText.WriteString("Running")
-	} else if totalCount > 0 {
-		statusText.WriteString("Loaded")
+	// Script status - handle case where script manager is not available
+	if sc.scriptManager == nil {
+		statusText.WriteString(" | Scripts: Not available")
 	} else {
-		statusText.WriteString("Ready")
+		engine := sc.scriptManager.GetEngine()
+		if engine == nil {
+			statusText.WriteString(" | Scripts: Engine error")
+		} else {
+			allScripts := engine.ListScripts()
+			runningScripts := engine.GetRunningScripts()
+			
+			totalCount := len(allScripts)
+			runningCount := len(runningScripts)
+			
+			statusText.WriteString(" | Scripts: ")
+			statusText.WriteString(fmt.Sprintf("%d active", runningCount))
+			
+			if totalCount > runningCount {
+				statusText.WriteString(fmt.Sprintf(", %d stopped", totalCount-runningCount))
+			}
+		}
 	}
+	
 	
 	statusText.WriteString(" | F1=Help")
 	

@@ -22,11 +22,8 @@ func init() {
 	var err error
 	globalLogger, err = NewLogger("twist_debug.log")
 	if err != nil {
-		// Fallback to stdout if we can't create the log file
-		globalLogger = &Logger{
-			file:   os.Stdout,
-			logger: log.New(os.Stdout, "[DEBUG] ", log.LstdFlags|log.Lshortfile),
-		}
+		// Disable logging if we can't create the log file (don't write to stdout in TUI mode)
+		globalLogger = nil
 	}
 }
 
@@ -86,7 +83,7 @@ func LogState(component, state string, details ...interface{}) {
 
 // LogDataChunk logs raw data chunks to a separate file for debugging network/terminal issues
 func LogDataChunk(source string, data []byte) {
-	if logFile, err := os.OpenFile("twist_data_chunks.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
+	if logFile, err := os.OpenFile("raw.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644); err == nil {
 		// Use %q to encode escapes, then strip the outer quotes
 		encoded := fmt.Sprintf("%q", string(data))
 		// Remove the first and last quote characters

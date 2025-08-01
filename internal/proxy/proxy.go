@@ -10,6 +10,8 @@ import (
 	"twist/internal/streaming"
 	"twist/internal/database"
 	"twist/internal/scripting"
+	"twist/internal/api"
+	// "twist/internal/debug" // Keep for future debugging
 )
 
 type Proxy struct {
@@ -19,22 +21,24 @@ type Proxy struct {
 	mu       sync.RWMutex
 	connected bool
 	
-	// Channels for communication with TUI
+	// Channels for communication
 	outputChan chan string
 	inputChan  chan string
 	errorChan  chan error
 	
-	
-	// Streaming pipeline
-	pipeline   *streaming.Pipeline
-	
-	// Script manager
+	// Core components
+	pipeline      *streaming.Pipeline
 	scriptManager *scripting.ScriptManager
 	db            database.Database
+	
+	// Direct TuiAPI reference
+	tuiAPI api.TuiAPI
+	
+	// Connection tracking for callbacks
+	currentAddress string  // Track address for OnConnectionStatusChanged callbacks
 }
 
-func New(terminalWriter streaming.TerminalWriter) *Proxy {
-	
+func New(tuiAPI api.TuiAPI) *Proxy {
 	// Initialize database
 	db := database.NewDatabase()
 	// Create or open database (TODO: make configurable)
@@ -48,25 +52,16 @@ func New(terminalWriter streaming.TerminalWriter) *Proxy {
 	p := &Proxy{
 		outputChan:    make(chan string, 100),
 		inputChan:     make(chan string, 100),
-		errorChan:     make(chan error, 10),
+		errorChan:     make(chan error, 100),
 		connected:     false,
 		scriptManager: scriptManager,
 		db:            db,
+		tuiAPI:        tuiAPI,  // Store TuiAPI reference
+		pipeline:      nil,     // Pipeline created only after connection
 	}
 	
-	// Initialize streaming pipeline with script manager
-	p.pipeline = streaming.NewPipelineWithScriptManager(terminalWriter, func(data []byte) error {
-		if p.conn != nil {
-			_, err := p.conn.Write(data)
-			return err
-		}
-		return fmt.Errorf("not connected")
-	}, db, scriptManager, nil)
-	
-	// Setup script manager connections to proxy and terminal
-	if terminal, ok := terminalWriter.(scripting.TerminalInterface); ok {
-		scriptManager.SetupConnections(p, terminal)
-	}
+	// Setup script manager connections to proxy - no terminal needed
+	scriptManager.SetupConnections(p, nil)
 	
 	return p
 }
@@ -127,9 +122,19 @@ func (p *Proxy) Connect(address string) error {
 	p.writer = bufio.NewWriter(conn)
 	p.connected = true
 
-	// Start the streaming pipeline
-	p.pipeline.Start()
+	// NOW create and start the streaming pipeline with a proper writer
+	writerFunc := func(data []byte) error {
+		_, err := p.writer.Write(data)
+		if err != nil {
+			return err
+		}
+		return p.writer.Flush()
+	}
 	
+	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, writerFunc)
+	
+	p.pipeline.Start()
+
 	// Send initial telnet negotiation through pipeline
 	err = p.pipeline.SendTelnetNegotiation()
 	if err != nil {
@@ -240,11 +245,11 @@ func (p *Proxy) handleOutput() {
 		// Read raw bytes from connection
 		n, err := p.reader.Read(buffer)
 		if err != nil {
-			fmt.Printf("[DEBUG] Read error in handleOutput: %v\n", err)
+			// Read error in handleOutput - connection likely closed
 			if err.Error() != "EOF" {
 				p.errorChan <- fmt.Errorf("read error: %w", err)
 			} else {
-				fmt.Printf("[DEBUG] Got EOF, sending to error channel\n")
+				// Got EOF, sending to error channel
 				p.errorChan <- fmt.Errorf("connection closed: %w", err)
 			}
 			break
@@ -259,7 +264,7 @@ func (p *Proxy) handleOutput() {
 	}
 	
 	// If we exit the loop, it means connection was lost
-	fmt.Printf("[DEBUG] handleOutput exiting, setting connected=false\n")
+	// handleOutput exiting, setting connected=false
 	p.mu.Lock()
 	p.connected = false
 	p.mu.Unlock()
