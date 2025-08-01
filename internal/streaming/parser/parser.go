@@ -5,6 +5,12 @@ import (
 	"twist/internal/database"
 )
 
+// StateManager interface for game state updates (avoids circular import)
+type StateManager interface {
+	SetCurrentSector(sectorNum int)
+	SetPlayerName(name string)
+}
+
 // SectorParser is the main parser that coordinates all parsing operations
 type SectorParser struct {
 	ctx             *ParserContext
@@ -20,6 +26,18 @@ func NewSectorParser(db database.Database) *SectorParser {
 	return &SectorParser{
 		ctx:             ctx,
 		sectorProcessor: NewSectorProcessor(ctx),
+		portProcessor:   NewPortProcessor(ctx),
+		utils:           NewParseUtils(ctx),
+	}
+}
+
+// NewSectorParserWithStateManager creates a new sector parser with database and state management
+func NewSectorParserWithStateManager(db database.Database, stateManager StateManager) *SectorParser {
+	ctx := NewParserContext(db, nil, nil)
+	
+	return &SectorParser{
+		ctx:             ctx,
+		sectorProcessor: NewSectorProcessorWithStateManager(ctx, stateManager),
 		portProcessor:   NewPortProcessor(ctx),
 		utils:           NewParseUtils(ctx),
 	}

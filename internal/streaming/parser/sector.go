@@ -7,8 +7,9 @@ import (
 
 // SectorProcessor handles sector-specific parsing logic
 type SectorProcessor struct {
-	ctx   *ParserContext
-	utils *ParseUtils
+	ctx          *ParserContext
+	utils        *ParseUtils
+	stateManager StateManager // For notifying game state changes
 }
 
 // NewSectorProcessor creates a new sector processor
@@ -16,6 +17,15 @@ func NewSectorProcessor(ctx *ParserContext) *SectorProcessor {
 	return &SectorProcessor{
 		ctx:   ctx,
 		utils: NewParseUtils(ctx),
+	}
+}
+
+// NewSectorProcessorWithStateManager creates a new sector processor with state management
+func NewSectorProcessorWithStateManager(ctx *ParserContext, stateManager StateManager) *SectorProcessor {
+	return &SectorProcessor{
+		ctx:          ctx,
+		utils:        NewParseUtils(ctx),
+		stateManager: stateManager,
 	}
 }
 
@@ -65,6 +75,11 @@ func (sp *SectorProcessor) initializeSectorData(line string) {
 		if sectorNum > 0 {
 			sp.ctx.State.CurrentSectorIndex = sectorNum
 			sp.ctx.State.CurrentSector = &database.TSector{}
+			
+			// NOTIFY state manager of sector change - triggers TuiAPI callback automatically
+			if sp.stateManager != nil {
+				sp.stateManager.SetCurrentSector(sectorNum)
+			}
 		}
 	}
 }

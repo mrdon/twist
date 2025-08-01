@@ -13,6 +13,11 @@ type ProxyAPI interface {
 	LoadScript(filename string) error
 	StopAllScripts() error
 	GetScriptStatus() ScriptStatusInfo
+	
+	// Game State Management (Phase 4)
+	GetCurrentSector() (int, error)
+	GetSectorInfo(sectorNum int) (SectorInfo, error)
+	GetPlayerInfo() (PlayerInfo, error)
 }
 
 // TuiAPI defines notifications from Proxy to TUI
@@ -31,6 +36,9 @@ type TuiAPI interface {
 	// Script Events (Phase 3)
 	OnScriptStatusChanged(status ScriptStatusInfo)
 	OnScriptError(scriptName string, err error)
+	
+	// Game State Events (Phase 4.3 - MINIMAL)
+	OnCurrentSectorChanged(sectorNumber int) // Simple sector change callback
 }
 
 // ConnectionStatus represents the current connection state
@@ -60,4 +68,19 @@ type ScriptStatusInfo struct {
 	ActiveCount int      `json:"active_count"` // Number of running scripts
 	TotalCount  int      `json:"total_count"`  // Total number of loaded scripts  
 	ScriptNames []string `json:"script_names"` // Names of loaded scripts
+}
+
+// PlayerInfo provides basic player information for Phase 4
+type PlayerInfo struct {
+	Name          string `json:"name"`           // Player name (if available)
+	CurrentSector int    `json:"current_sector"` // Current sector location
+}
+
+// SectorInfo provides basic sector information for panel display
+type SectorInfo struct {
+	Number        int    `json:"number"`         // Sector number
+	NavHaz        int    `json:"nav_haz"`        // Navigation hazard level  
+	HasTraders    int    `json:"has_traders"`    // Number of traders present
+	Constellation string `json:"constellation"`  // Constellation name
+	Beacon        string `json:"beacon"`         // Beacon text
 }

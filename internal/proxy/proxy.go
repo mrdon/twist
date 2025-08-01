@@ -36,6 +36,10 @@ type Proxy struct {
 	
 	// Connection tracking for callbacks
 	currentAddress string  // Track address for OnConnectionStatusChanged callbacks
+	
+	// Game state tracking (Phase 4.3) - based on parser CurrentSectorIndex
+	currentSector int    // Track current sector number (from parser)
+	playerName    string // Track current player name
 }
 
 func New(tuiAPI api.TuiAPI) *Proxy {
@@ -131,7 +135,7 @@ func (p *Proxy) Connect(address string) error {
 		return p.writer.Flush()
 	}
 	
-	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, writerFunc)
+	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, writerFunc)
 	
 	p.pipeline.Start()
 
@@ -293,5 +297,52 @@ func (p *Proxy) GetScriptStatus() map[string]interface{} {
 // StopAllScripts stops all running scripts
 func (p *Proxy) StopAllScripts() error {
 	return p.scriptManager.Stop()
+}
+
+// GetDatabase returns the database for API access
+func (p *Proxy) GetDatabase() database.Database {
+	return p.db
+}
+
+// GetSector returns sector data using database LoadSector method
+func (p *Proxy) GetSector(sectorNum int) (database.TSector, error) {
+	return p.db.LoadSector(sectorNum)
+}
+
+// GetCurrentSector returns the current sector number (thread-safe)
+func (p *Proxy) GetCurrentSector() int {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.currentSector
+}
+
+// SetCurrentSector sets the current sector number and triggers callbacks
+func (p *Proxy) SetCurrentSector(sectorNum int) {
+	p.mu.Lock()
+	oldSector := p.currentSector
+	p.currentSector = sectorNum
+	// Keep lock during callback check to prevent race conditions
+	shouldCallback := oldSector != sectorNum && p.tuiAPI != nil
+	currentTuiAPI := p.tuiAPI // Capture reference while locked
+	p.mu.Unlock()
+	
+	// Trigger callback if sector changed and TuiAPI is available
+	if shouldCallback {
+		go currentTuiAPI.OnCurrentSectorChanged(sectorNum)
+	}
+}
+
+// GetPlayerName returns the current player name (thread-safe)
+func (p *Proxy) GetPlayerName() string {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.playerName
+}
+
+// SetPlayerName sets the current player name
+func (p *Proxy) SetPlayerName(name string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.playerName = name
 }
 

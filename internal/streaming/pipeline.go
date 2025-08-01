@@ -19,6 +19,12 @@ type ScriptManager interface {
 	ProcessGameLine(line string) error
 }
 
+// StateManager interface for game state updates (avoids circular import with proxy)
+type StateManager interface {
+	SetCurrentSector(sectorNum int)
+	SetPlayerName(name string)
+}
+
 // Pipeline provides high-performance streaming from network to terminal buffer
 type Pipeline struct {
 	// Input
@@ -30,6 +36,7 @@ type Pipeline struct {
 	decoder        *encoding.Decoder
 	sectorParser   *parser.SectorParser
 	scriptManager  ScriptManager
+	stateManager   StateManager  // Game state updates
 	
 	// Batching
 	batchBuffer   []byte
@@ -84,13 +91,14 @@ func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scrip
 }
 
 // NewPipelineWithWriter creates an optimized streaming pipeline with a writer for telnet negotiation
-func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, writer func([]byte) error) *Pipeline {
+func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, stateManager StateManager, writer func([]byte) error) *Pipeline {
 	p := &Pipeline{
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		sectorParser:  parser.NewSectorParser(db),
+		sectorParser:  parser.NewSectorParserWithStateManager(db, stateManager),
 		scriptManager: scriptManager,
+		stateManager:  stateManager,
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
 		batchTimeout:  0,     // No timeout needed

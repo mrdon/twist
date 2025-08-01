@@ -3,7 +3,7 @@ package components
 import (
 	"fmt"
 	"strings"
-	"twist/internal/database"
+	"twist/internal/api"
 	"twist/internal/theme"
 	
 	"github.com/rivo/tview"
@@ -11,10 +11,11 @@ import (
 
 // PanelComponent manages the side panel components
 type PanelComponent struct {
-	leftView    *tview.TextView
-	leftWrapper *tview.Flex
-	rightView   *tview.TextView
+	leftView     *tview.TextView
+	leftWrapper  *tview.Flex
+	rightView    *tview.TextView
 	rightWrapper *tview.Flex
+	proxyAPI     api.ProxyAPI  // API access for game data
 }
 
 // NewPanelComponent creates new panel components
@@ -55,45 +56,33 @@ func (pc *PanelComponent) GetRightWrapper() *tview.Flex {
 	return pc.rightWrapper
 }
 
-// UpdateTraderInfo updates the trader information panel
-func (pc *PanelComponent) UpdateTraderInfo(trader *database.TTrader) {
-	if trader == nil {
-		pc.leftView.SetText("No trader data")
-		return
+// SetProxyAPI sets the API reference for accessing game data
+func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
+	pc.proxyAPI = proxyAPI
+}
+
+// UpdateTraderInfo updates the trader information panel using API PlayerInfo
+func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
+	var info strings.Builder
+	info.WriteString(fmt.Sprintf("[yellow]Player Info[-]\n"))
+	
+	if playerInfo.Name != "" {
+		info.WriteString(fmt.Sprintf("Name: %s\n", playerInfo.Name))
 	}
 	
-	var info strings.Builder
-	info.WriteString(fmt.Sprintf("[yellow]Trader Info[-]\n"))
-	info.WriteString(fmt.Sprintf("Name: %s\n", trader.Name))
-	info.WriteString(fmt.Sprintf("Ship: %s\n", trader.ShipType))
-	if trader.Figs > 0 {
-		info.WriteString(fmt.Sprintf("Fighters: %d\n", trader.Figs))
-	}
+	info.WriteString(fmt.Sprintf("Current Sector: %d\n", playerInfo.CurrentSector))
 	
 	pc.leftView.SetText(info.String())
 }
 
-// UpdateSectorInfo updates the sector information panel
-func (pc *PanelComponent) UpdateSectorInfo(sector *database.TSector) {
-	if sector == nil {
-		pc.rightView.SetText("No sector data")
-		return
-	}
-	
+// UpdateSectorInfo updates the sector information panel using API SectorInfo
+func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
 	var info strings.Builder
-	info.WriteString(fmt.Sprintf("[cyan]Sector Info[-]\n"))
+	info.WriteString(fmt.Sprintf("[cyan]Sector %d Info[-]\n", sector.Number))
 	info.WriteString(fmt.Sprintf("Nav Hazard: %d\n", sector.NavHaz))
 	
-	if sector.Figs.Quantity > 0 {
-		info.WriteString(fmt.Sprintf("Fighters: %d\n", sector.Figs.Quantity))
-	}
-	
-	if sector.MinesArmid.Quantity > 0 {
-		info.WriteString(fmt.Sprintf("Armid Mines: %d\n", sector.MinesArmid.Quantity))
-	}
-	
-	if sector.MinesLimpet.Quantity > 0 {
-		info.WriteString(fmt.Sprintf("Limpet Mines: %d\n", sector.MinesLimpet.Quantity))
+	if sector.HasTraders > 0 {
+		info.WriteString(fmt.Sprintf("Traders: %d\n", sector.HasTraders))
 	}
 	
 	if sector.Constellation != "" {
@@ -115,4 +104,14 @@ func (pc *PanelComponent) SetTraderInfoText(text string) {
 // SetSectorInfoText sets custom text in the sector info panel  
 func (pc *PanelComponent) SetSectorInfoText(text string) {
 	pc.rightView.SetText(text)
+}
+
+// SetPlaceholderPlayerText sets placeholder text for testing Phase 4.1
+func (pc *PanelComponent) SetPlaceholderPlayerText() {
+	pc.leftView.SetText("[yellow]Player Info[-]\nAPI data not yet available")
+}
+
+// SetPlaceholderSectorText sets placeholder text for testing Phase 4.1
+func (pc *PanelComponent) SetPlaceholderSectorText() {
+	pc.rightView.SetText("[cyan]Sector Info[-]\nAPI data not yet available")
 }

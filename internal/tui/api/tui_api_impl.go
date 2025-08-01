@@ -12,6 +12,7 @@ type TwistApp interface {
 	HandleTerminalData(data []byte)
 	HandleScriptStatusChanged(status coreapi.ScriptStatusInfo)
 	HandleScriptError(scriptName string, err error)
+	HandleCurrentSectorChanged(sectorNumber int)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -68,6 +69,11 @@ func (tui *TuiApiImpl) OnScriptStatusChanged(status coreapi.ScriptStatusInfo) {
 
 func (tui *TuiApiImpl) OnScriptError(scriptName string, err error) {
 	go tui.app.HandleScriptError(scriptName, err)
+}
+
+// Game state event methods - simple sector change handler
+func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorNumber int) {
+	go tui.app.HandleCurrentSectorChanged(sectorNumber)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

@@ -256,7 +256,9 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 			
 			// Set ProxyAPI on status component after connection established
 			if ta.proxyClient.IsConnected() {
-				ta.statusComponent.SetProxyAPI(ta.proxyClient.GetCurrentAPI())
+				currentAPI := ta.proxyClient.GetCurrentAPI()
+				ta.statusComponent.SetProxyAPI(currentAPI)
+				ta.panelComponent.SetProxyAPI(currentAPI) // Add panel component API setup
 			}
 			
 			if ta.modalVisible {
@@ -318,6 +320,38 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 	// Output script error to terminal
 	msg := fmt.Sprintf("Script error in %s: %s\n", scriptName, err.Error())
 	ta.terminalComponent.Write([]byte(msg))
+}
+
+// HandleCurrentSectorChanged processes sector change events
+func (ta *TwistApp) HandleCurrentSectorChanged(sectorNumber int) {
+	ta.app.QueueUpdateDraw(func() {
+		// Output sector change to terminal
+		msg := fmt.Sprintf("Entered sector %d\n", sectorNumber)
+		ta.terminalComponent.Write([]byte(msg))
+		
+		// Update panels with current sector data via API
+		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			ta.refreshPanelData(sectorNumber)
+		}
+	})
+}
+
+// refreshPanelData refreshes panel data using API calls
+func (ta *TwistApp) refreshPanelData(sectorNumber int) {
+	proxyAPI := ta.proxyClient.GetCurrentAPI()
+	if proxyAPI != nil {
+		// Get sector info and update panel
+		sectorInfo, err := proxyAPI.GetSectorInfo(sectorNumber)
+		if err == nil {
+			ta.panelComponent.UpdateSectorInfo(sectorInfo)
+		}
+		
+		// Get player info and update panel (UpdateTraderInfo shows current player)
+		playerInfo, err := proxyAPI.GetPlayerInfo()
+		if err == nil {
+			ta.panelComponent.UpdateTraderInfo(playerInfo) // Keep existing method name
+		}
+	}
 }
 
 // showMenuModal displays a modal menu

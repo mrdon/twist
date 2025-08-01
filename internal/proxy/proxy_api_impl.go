@@ -229,3 +229,48 @@ func (p *ProxyApiImpl) convertScriptStatus() api.ScriptStatusInfo {
 		ScriptNames: scriptNames,
 	}
 }
+
+// Game State Management Methods - Simple direct delegation (one-liners)
+
+func (p *ProxyApiImpl) GetCurrentSector() (int, error) {
+	if p.proxy == nil {
+		return 0, errors.New("not connected")
+	}
+	return p.proxy.GetCurrentSector(), nil // Simple delegation
+}
+
+func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
+	if p.proxy == nil {
+		return api.SectorInfo{Number: sectorNum}, errors.New("not connected")
+	}
+	
+	// Validate sector number range
+	if sectorNum < 1 || sectorNum > 99999 {
+		return api.SectorInfo{Number: sectorNum}, errors.New("invalid sector number")
+	}
+	
+	// Direct delegation using new GetSector wrapper method
+	dbSector, err := p.proxy.GetSector(sectorNum)
+	if err != nil {
+		// Return empty sector info with error rather than potentially corrupted data
+		return api.SectorInfo{
+			Number:        sectorNum,
+			NavHaz:        0,
+			HasTraders:    0,
+			Constellation: "",
+			Beacon:        "",
+		}, err
+	}
+	
+	// Simple conversion using converter function
+	return convertDatabaseSectorToAPI(sectorNum, dbSector), nil
+}
+
+func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
+	if p.proxy == nil {
+		return api.PlayerInfo{}, errors.New("not connected")
+	}
+	currentSector := p.proxy.GetCurrentSector()
+	playerName := p.proxy.GetPlayerName()
+	return convertDatabasePlayerToAPI(currentSector, playerName), nil
+}
