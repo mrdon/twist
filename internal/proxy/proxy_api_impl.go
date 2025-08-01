@@ -147,3 +147,85 @@ func (p *ProxyApiImpl) monitorConnection() {
 		}
 	}
 }
+
+// Script Management Methods - Thin orchestration layer (one-liners)
+
+func (p *ProxyApiImpl) LoadScript(filename string) error {
+	if p.proxy == nil {
+		return errors.New("not connected")
+	}
+	
+	// Do work asynchronously - return immediately
+	go func() {
+		err := p.proxy.LoadScript(filename)
+		if err != nil {
+			p.tuiAPI.OnScriptError(filename, err)
+		} else {
+			// Report status change
+			status := p.convertScriptStatus()
+			p.tuiAPI.OnScriptStatusChanged(status)
+		}
+	}()
+	
+	return nil // Returns immediately
+}
+
+func (p *ProxyApiImpl) StopAllScripts() error {
+	if p.proxy == nil {
+		return errors.New("not connected")
+	}
+	
+	// Do work asynchronously - return immediately
+	go func() {
+		err := p.proxy.StopAllScripts()
+		if err != nil {
+			p.tuiAPI.OnScriptError("all scripts", err)
+		} else {
+			// Report status change
+			status := p.convertScriptStatus()
+			p.tuiAPI.OnScriptStatusChanged(status)
+		}
+	}()
+	
+	return nil // Returns immediately
+}
+
+func (p *ProxyApiImpl) GetScriptStatus() api.ScriptStatusInfo {
+	if p.proxy == nil {
+		return api.ScriptStatusInfo{
+			ActiveCount: 0,
+			TotalCount:  0,
+			ScriptNames: []string{},
+		}
+	}
+	
+	return p.convertScriptStatus()
+}
+
+// convertScriptStatus converts proxy script manager status to API format
+func (p *ProxyApiImpl) convertScriptStatus() api.ScriptStatusInfo {
+	statusMap := p.proxy.GetScriptStatus()
+	
+	// Extract counts from existing GetStatus() return value
+	totalCount := 0
+	activeCount := 0
+	
+	if total, ok := statusMap["total_scripts"].(int); ok {
+		totalCount = total
+	}
+	if running, ok := statusMap["running_scripts"].(int); ok {
+		activeCount = running
+	}
+	
+	// Get script names - will need to be extended when proxy supports this
+	scriptNames := []string{}
+	if names, ok := statusMap["script_names"].([]string); ok {
+		scriptNames = names
+	}
+	
+	return api.ScriptStatusInfo{
+		ActiveCount: activeCount,
+		TotalCount:  totalCount,
+		ScriptNames: scriptNames,
+	}
+}

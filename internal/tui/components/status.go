@@ -3,7 +3,7 @@ package components
 import (
 	"fmt"
 	"strings"
-	"twist/internal/scripting"
+	"twist/internal/api"
 	"twist/internal/theme"
 
 	"github.com/rivo/tview"
@@ -12,17 +12,9 @@ import (
 // StatusComponent manages the bottom status bar
 type StatusComponent struct {
 	wrapper       *tview.TextView
-	scriptManager ScriptManagerInterface
+	proxyAPI      api.ProxyAPI
 	connected     bool
 	serverAddress string
-}
-
-// ScriptManagerInterface defines the interface for script management
-type ScriptManagerInterface interface {
-	GetEngine() *scripting.Engine
-	LoadAndRunScript(filename string) error
-	Stop() error
-	GetStatus() map[string]interface{}
 }
 
 // NewStatusComponent creates a new status bar component
@@ -50,9 +42,9 @@ func (sc *StatusComponent) GetWrapper() *tview.TextView {
 	return sc.wrapper
 }
 
-// SetScriptManager sets the script manager interface
-func (sc *StatusComponent) SetScriptManager(sm ScriptManagerInterface) {
-	sc.scriptManager = sm
+// SetProxyAPI sets the proxy API interface
+func (sc *StatusComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
+	sc.proxyAPI = proxyAPI
 	sc.UpdateStatus()
 }
 
@@ -90,27 +82,18 @@ func (sc *StatusComponent) UpdateStatus() {
 			statusColors.DisconnectedFg.String()))
 	}
 	
-	// Script status - handle case where script manager is not available
-	if sc.scriptManager == nil {
-		statusText.WriteString(" | Scripts: Not available")
-	} else {
-		engine := sc.scriptManager.GetEngine()
-		if engine == nil {
-			statusText.WriteString(" | Scripts: Engine error")
-		} else {
-			allScripts := engine.ListScripts()
-			runningScripts := engine.GetRunningScripts()
-			
-			totalCount := len(allScripts)
-			runningCount := len(runningScripts)
-			
-			statusText.WriteString(" | Scripts: ")
-			statusText.WriteString(fmt.Sprintf("%d active", runningCount))
-			
-			if totalCount > runningCount {
-				statusText.WriteString(fmt.Sprintf(", %d stopped", totalCount-runningCount))
-			}
+	// Script status - use ProxyAPI instead of direct script manager access
+	if sc.proxyAPI != nil && sc.proxyAPI.IsConnected() {
+		scriptStatus := sc.proxyAPI.GetScriptStatus()
+		statusText.WriteString(" | Scripts: ")
+		statusText.WriteString(fmt.Sprintf("%d active", scriptStatus.ActiveCount))
+		
+		if scriptStatus.TotalCount > scriptStatus.ActiveCount {
+			statusText.WriteString(fmt.Sprintf(", %d stopped", 
+				scriptStatus.TotalCount - scriptStatus.ActiveCount))
 		}
+	} else {
+		statusText.WriteString(" | Scripts: Not available")
 	}
 	
 	

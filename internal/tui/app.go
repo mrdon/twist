@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"fmt"
 	// "twist/internal/debug" // Keep for future debugging
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
@@ -252,6 +253,12 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 			ta.serverAddress = address
 			ta.menuComponent.SetConnectedMenu()
 			ta.statusComponent.SetConnectionStatus(true, address)
+			
+			// Set ProxyAPI on status component after connection established
+			if ta.proxyClient.IsConnected() {
+				ta.statusComponent.SetProxyAPI(ta.proxyClient.GetCurrentAPI())
+			}
+			
 			if ta.modalVisible {
 				ta.closeModal()
 			}
@@ -296,6 +303,21 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 	ta.terminalComponent.Write(data)
 	
 	// UI refresh is handled by the TerminalView's change callback
+}
+
+// Script event handlers
+func (ta *TwistApp) HandleScriptStatusChanged(status coreapi.ScriptStatusInfo) {
+	// Status component will be updated automatically via SetProxyAPI
+	// For now, just output to terminal for visibility
+	msg := fmt.Sprintf("Script status: %d active, %d total\n", 
+		status.ActiveCount, status.TotalCount)
+	ta.terminalComponent.Write([]byte(msg))
+}
+
+func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
+	// Output script error to terminal
+	msg := fmt.Sprintf("Script error in %s: %s\n", scriptName, err.Error())
+	ta.terminalComponent.Write([]byte(msg))
 }
 
 // showMenuModal displays a modal menu

@@ -12,6 +12,7 @@ Phase 3 completes the script management migration with **minimal scope** focused
 3. **Removing direct script manager access from TUI** - status component uses API only
 4. **Simple script data conversion** - minimal API data structures for basic info
 5. **Clean API separation** - TUI cannot access script manager directly
+6. **⚠️ CRITICAL: Fix dependency violation** - Remove `"twist/internal/scripting"` import from TUI
 
 **Out of Scope for Phase 3** (saved for future phases):
 - Complex trigger system implementation
@@ -37,8 +38,12 @@ Phase 3 completes the script management migration with **minimal scope** focused
 
 ### ❌ Script Management Problems to Fix:
 
-**Direct Script Manager Access**: TUI still bypasses API:
+**🚨 DEPENDENCY VIOLATION**: TUI imports internal scripting packages:
+- `/internal/tui/components/status.go` imports `"twist/internal/scripting"` (line 6)
+- This violates clean API separation - TUI should only import core API
 - Status component directly accesses script manager via ScriptManagerInterface (status.go:15)
+
+**Direct Script Manager Access**: TUI still bypasses API:
 - `SetScriptManager(sm ScriptManagerInterface)` method bypasses API layer (status.go:54)
 - No API data structures for script information
 - Script lifecycle events not implemented
@@ -410,18 +415,36 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 
 #### 5.1 Update Status Component to Use ProxyAPI
 
-**Current Problem**: `SetScriptManager(sm ScriptManagerInterface)` bypasses API  
-**Solution**: Replace with ProxyAPI access
+**🚨 CRITICAL**: Fix dependency violation and replace direct script manager access
+**Current Problems**: 
+- Imports `"twist/internal/scripting"` (VIOLATES clean API separation)
+- `SetScriptManager(sm ScriptManagerInterface)` bypasses API  
+**Solution**: Remove scripting import, replace with ProxyAPI access
 
 Update `internal/tui/components/status.go`:
 
 ```go
-// UPDATE Status component to use ProxyAPI only
+// CRITICAL CHANGES: Remove dependency violation and use ProxyAPI only
 
+package components
+
+import (
+    "fmt"
+    "strings"
+    // REMOVE: "twist/internal/scripting"  ← DEPENDENCY VIOLATION FIXED
+    "twist/internal/api"                   // ← Use core API only
+    "twist/internal/theme"
+
+    "github.com/rivo/tview"
+)
+
+// StatusComponent manages the bottom status bar
 type Status struct {
-    // ... existing fields ...
-    // REMOVE: scriptManager field completely
-    proxyAPI api.ProxyAPI  // ADD this field
+    wrapper       *tview.TextView
+    // REMOVE: scriptManager ScriptManagerInterface  ← REMOVE COMPLETELY
+    proxyAPI      api.ProxyAPI            // ← ADD: Use core API instead
+    connected     bool
+    serverAddress string
 }
 
 // REMOVE SetScriptManager method completely:
@@ -429,32 +452,41 @@ type Status struct {
 //     // Remove this method entirely
 // }
 
+// REMOVE ScriptManagerInterface definition completely:
+// type ScriptManagerInterface interface {
+//     GetEngine() *scripting.Engine
+//     LoadAndRunScript(filename string) error
+//     Stop() error
+//     GetStatus() map[string]interface{}
+// }
+
 // ADD SetProxyAPI method
 func (s *Status) SetProxyAPI(proxyAPI api.ProxyAPI) {
     s.proxyAPI = proxyAPI
 }
 
-// UPDATE display method to use API
-func (s *Status) GetInfo() string {
-    info := ""
+// UPDATE UpdateStatus method to use API instead of direct scripting access
+func (s *Status) UpdateStatus() {
+    var statusText strings.Builder
     
     // ... existing connection status logic unchanged ...
     
-    // UPDATE script status to use API
-    if s.proxyAPI != nil {
+    // REPLACE script status logic - use API instead of direct scripting access
+    if s.proxyAPI != nil && s.proxyAPI.IsConnected() {
         scriptStatus := s.proxyAPI.GetScriptStatus()
-        info += fmt.Sprintf("Scripts: %d active, %d total\n", 
-            scriptStatus.ActiveCount, scriptStatus.TotalCount)
+        statusText.WriteString(" | Scripts: ")
+        statusText.WriteString(fmt.Sprintf("%d active", scriptStatus.ActiveCount))
         
-        // Show script names if any loaded
-        if len(scriptStatus.ScriptNames) > 0 {
-            info += "Loaded: " + strings.Join(scriptStatus.ScriptNames, ", ") + "\n"
+        if scriptStatus.TotalCount > scriptStatus.ActiveCount {
+            statusText.WriteString(fmt.Sprintf(", %d stopped", 
+                scriptStatus.TotalCount - scriptStatus.ActiveCount))
         }
     } else {
-        info += "Scripts: not connected\n"
+        statusText.WriteString(" | Scripts: Not available")
     }
     
-    return info
+    statusText.WriteString(" | F1=Help")
+    s.wrapper.SetText(statusText.String())
 }
 ```
 
@@ -529,12 +561,13 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 
 ## Success Criteria (Minimal Scope)
 
+✅ **🚨 DEPENDENCY VIOLATION FIXED**: Remove `"twist/internal/scripting"` import from TUI  
 ✅ **Direct Script Manager Access Eliminated**: TUI has no direct script manager access  
 ✅ **Basic Script API Methods**: LoadScript, StopAllScripts, GetScriptStatus work via API  
 ✅ **Minimal Script Events**: OnScriptStatusChanged, OnScriptError implemented  
 ✅ **Simple Script Data**: ScriptStatusInfo provides basic count/name information  
 ✅ **Status Component Migration**: Uses ProxyAPI exclusively for script information  
-✅ **Clean API Separation**: No TUI imports of internal scripting packages  
+✅ **Clean API Separation**: TUI only imports `/internal/api/` for script functionality  
 
 ## Files to Modify Summary
 
@@ -549,7 +582,7 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 ### TUI Integration:
 - `internal/tui/api/tui_api_impl.go` - Implement script event handlers
 - `internal/tui/app.go` - Add script event handlers, update connection handler
-- `internal/tui/components/status.go` - Remove direct script manager, use ProxyAPI only
+- `internal/tui/components/status.go` - **🚨 CRITICAL: Remove scripting import, remove direct script manager, use ProxyAPI only**
 
 ## Key Architectural Changes
 

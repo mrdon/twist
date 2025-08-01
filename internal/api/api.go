@@ -8,6 +8,11 @@ type ProxyAPI interface {
 	
 	// Data Processing (symmetric with OnData)  
 	SendData(data []byte) error
+	
+	// Script Management (Phase 3)
+	LoadScript(filename string) error
+	StopAllScripts() error
+	GetScriptStatus() ScriptStatusInfo
 }
 
 // TuiAPI defines notifications from Proxy to TUI
@@ -22,6 +27,10 @@ type TuiAPI interface {
 
 	// Data Events - must return immediately (high frequency calls)
 	OnData(data []byte)
+	
+	// Script Events (Phase 3)
+	OnScriptStatusChanged(status ScriptStatusInfo)
+	OnScriptError(scriptName string, err error)
 }
 
 // ConnectionStatus represents the current connection state
@@ -44,4 +53,11 @@ func (cs ConnectionStatus) String() string {
 	default:
 		return "unknown"
 	}
+}
+
+// ScriptStatusInfo provides basic script information for Phase 3
+type ScriptStatusInfo struct {
+	ActiveCount int      `json:"active_count"` // Number of running scripts
+	TotalCount  int      `json:"total_count"`  // Total number of loaded scripts  
+	ScriptNames []string `json:"script_names"` // Names of loaded scripts
 }

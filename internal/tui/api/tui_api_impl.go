@@ -10,6 +10,8 @@ type TwistApp interface {
 	HandleConnectionStatusChanged(status coreapi.ConnectionStatus, address string)
 	HandleConnectionError(err error)
 	HandleTerminalData(data []byte)
+	HandleScriptStatusChanged(status coreapi.ScriptStatusInfo)
+	HandleScriptError(scriptName string, err error)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -57,6 +59,15 @@ func (tui *TuiApiImpl) OnData(data []byte) {
 	default:
 		// Channel full - could log warning or handle differently
 	}
+}
+
+// Script event methods - all one-liners calling app directly
+func (tui *TuiApiImpl) OnScriptStatusChanged(status coreapi.ScriptStatusInfo) {
+	go tui.app.HandleScriptStatusChanged(status)
+}
+
+func (tui *TuiApiImpl) OnScriptError(scriptName string, err error) {
+	go tui.app.HandleScriptError(scriptName, err)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

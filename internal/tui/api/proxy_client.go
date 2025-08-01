@@ -52,3 +52,7 @@ func (pc *ProxyClient) SendData(data []byte) error {
 	return pc.currentAPI.SendData(data)
 }
 
+func (pc *ProxyClient) GetCurrentAPI() coreapi.ProxyAPI {
+	return pc.currentAPI
+}
+
