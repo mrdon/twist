@@ -11,24 +11,33 @@ import (
 type TerminalComponent struct {
 	terminalView *TerminalView
 	wrapper      *tview.Flex
+	starfield    *StarfieldComponent
+	showStarfield bool
+	app          *tview.Application
 }
 
 // NewTerminalComponent creates a new terminal component with proper styling
-func NewTerminalComponent() *TerminalComponent {
+func NewTerminalComponent(app *tview.Application) *TerminalComponent {
 	// Create the core terminal view
 	terminalView := NewTerminalView()
 	
-	// The TerminalView already has proper padding configured via SetBorderPadding
-	// No need for additional wrapper padding - standard tview behavior
+	// Create starfield component with app reference
+	starfield := NewStarfieldComponent(150, app)
 	
-	// Create wrapper layout
+	// Create wrapper layout - initially show starfield
 	wrapper := theme.NewFlex().SetDirection(tview.FlexRow)
-	wrapper.AddItem(terminalView, 0, 1, true)
+	wrapper.AddItem(starfield, 0, 1, true)
 	
 	tc := &TerminalComponent{
 		terminalView: terminalView,
 		wrapper:      wrapper,
+		starfield:    starfield,
+		showStarfield: true,
+		app:          app,
 	}
+	
+	// Start starfield animation
+	tc.starfield.Start()
 	
 	return tc
 }
@@ -44,8 +53,26 @@ func (tc *TerminalComponent) GetWrapper() *tview.Flex {
 	return tc.wrapper
 }
 
-// Write implements io.Writer - delegates to terminal view
+// TransitionToTerminal switches from starfield to terminal view
+func (tc *TerminalComponent) TransitionToTerminal() {
+	if !tc.showStarfield {
+		return
+	}
+	
+	tc.showStarfield = false
+	tc.starfield.Stop()
+	
+	// Clear wrapper and add terminal view
+	tc.wrapper.Clear()
+	tc.wrapper.AddItem(tc.terminalView, 0, 1, true)
+}
+
+// Write implements io.Writer - delegates to terminal view and triggers transition
 func (tc *TerminalComponent) Write(p []byte) (n int, err error) {
+	// If starfield is showing, transition to terminal on first write
+	if tc.showStarfield {
+		tc.TransitionToTerminal()
+	}
 	return tc.terminalView.Write(p)
 }
 

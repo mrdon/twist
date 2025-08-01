@@ -56,7 +56,7 @@ func NewApplication() *TwistApp {
 
 	// Create UI components
 	menuComp := components.NewMenuComponent()
-	terminalComp := components.NewTerminalComponent()
+	terminalComp := components.NewTerminalComponent(app)
 	panelComp := components.NewPanelComponent()
 	statusComp := components.NewStatusComponent()
 
