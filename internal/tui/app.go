@@ -97,6 +97,14 @@ func NewApplication() *TwistApp {
 	twistApp.registerMenuShortcuts() // Register all menu shortcuts globally
 	twistApp.startUpdateWorker()
 
+	// Auto-show connection dialog on startup for easy testing
+	go func() {
+		// Small delay to ensure UI is fully initialized
+		twistApp.app.QueueUpdateDraw(func() {
+			twistApp.showConnectionDialog()
+		})
+	}()
+
 	return twistApp
 }
 
