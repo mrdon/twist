@@ -83,5 +83,6 @@ type SectorInfo struct {
 	HasTraders    int    `json:"has_traders"`    // Number of traders present
 	Constellation string `json:"constellation"`  // Constellation name
 	Beacon        string `json:"beacon"`         // Beacon text
+	Warps         []int  `json:"warps"`          // Warp connections to other sectors
 }
 

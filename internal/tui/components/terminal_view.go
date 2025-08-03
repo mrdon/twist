@@ -147,10 +147,37 @@ func (tv *TerminalView) Write(p []byte) (n int, err error) {
 	// Auto-scroll to bottom when new content is added (but only if not positioned elsewhere)
 	// This should happen during content addition, not during drawing
 	_, _, _, height := tv.GetInnerRect()
-	if len(tv.lines) > height && tv.cursorY >= len(tv.lines)-height {
-		tv.scrollOffsetRow = len(tv.lines) - height
-		if tv.scrollOffsetRow < 0 {
-			tv.scrollOffsetRow = 0
+	if len(tv.lines) > height {
+		// Original logic: cursor near bottom
+		// Additional fix: also autoscroll if we're already viewing near the bottom,
+		// regardless of cursor position (fixes issue with ANSI cursor positioning)
+		isViewingNearBottom := tv.scrollOffsetRow >= len(tv.lines) - height - 3
+		cursorNearBottom := tv.cursorY >= len(tv.lines)-height
+		maxScrollOffset := len(tv.lines) - height
+		
+		// New fix: After clear screen, if we're at scroll position 0 and there's content
+		// beyond the visible area, auto-scroll to show the latest content
+		isAfterClearScreen := tv.scrollOffsetRow == 0 && len(tv.lines) > height
+		
+		// Additional fix: If cursor is writing outside the current view area, follow it
+		cursorOutsideView := tv.cursorY < tv.scrollOffsetRow || tv.cursorY >= tv.scrollOffsetRow + height
+		
+		
+		if cursorOutsideView {
+			// If cursor is outside current view, follow it immediately
+			// Center the cursor in the view for optimal visibility
+			tv.scrollOffsetRow = tv.cursorY - height/2
+			if tv.scrollOffsetRow < 0 {
+				tv.scrollOffsetRow = 0
+			}
+			if tv.scrollOffsetRow > maxScrollOffset {
+				tv.scrollOffsetRow = maxScrollOffset
+			}
+		} else if cursorNearBottom || isViewingNearBottom || isAfterClearScreen {
+			tv.scrollOffsetRow = maxScrollOffset
+			if tv.scrollOffsetRow < 0 {
+				tv.scrollOffsetRow = 0
+			}
 		}
 	}
 	
@@ -274,6 +301,7 @@ func (tv *TerminalView) processANSISequence(sequence []byte) {
 	case 'K': // Erase line
 		tv.handleEraseLine(params)
 	default:
+		// Unknown ANSI command - ignore silently
 	}
 }
 
@@ -442,7 +470,8 @@ func (tv *TerminalView) handleCursorPosition(params string) {
 		}
 	}
 	
-	tv.cursorY = row - 1
+	// Cursor position should be relative to the current visible area, not absolute buffer position
+	tv.cursorY = tv.scrollOffsetRow + (row - 1)
 	tv.cursorX = col - 1
 	
 	// Bounds checking
@@ -453,6 +482,17 @@ func (tv *TerminalView) handleCursorPosition(params string) {
 		tv.cursorX = 0
 	}
 	
+	
+	// If cursor moved significantly backward after a clear screen operation,
+	// adjust scroll position to show the cursor area
+	_, _, _, height := tv.GetInnerRect()
+	if tv.cursorY < tv.scrollOffsetRow && len(tv.lines) > height {
+		// Cursor moved to an area that's not visible, adjust scroll to show it
+		tv.scrollOffsetRow = tv.cursorY
+		if tv.scrollOffsetRow < 0 {
+			tv.scrollOffsetRow = 0
+		}
+	}
 }
 
 func (tv *TerminalView) handleCursorUp(params string) {
@@ -595,21 +635,32 @@ func (tv *TerminalView) clearToCursor() {
 }
 
 func (tv *TerminalView) clearScreen() {
-	// Use terminal default colors for clearing, not current style
-	colors := theme.Current().TerminalColors()
-	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
+	_, _, _, height := tv.GetInnerRect()
 	
-	for y := 0; y < len(tv.lines); y++ {
-		for x := 0; x < len(tv.lines[y]); x++ {
-			tv.lines[y][x] = ' '
-			tv.colors[y][x] = clearStyle
+	// Clear screen means: make old content scroll off-screen
+	// Add enough empty lines to push all existing content above the visible area
+	if len(tv.lines) > 0 {
+		// Add height empty lines so existing content scrolls off-screen
+		for i := 0; i < height; i++ {
+			tv.lines = append(tv.lines, make([]rune, tv.width))
+			newColorLine := make([]tcell.Style, tv.width)
+			// Initialize with terminal default colors
+			colors := theme.Current().TerminalColors()
+			defaultStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
+			for j := range newColorLine {
+				newColorLine[j] = defaultStyle
+			}
+			tv.colors = append(tv.colors, newColorLine)
 		}
+		
+		// Set scroll position so the new empty lines are at the top of the view
+		tv.scrollOffsetRow = len(tv.lines) - height
+	} else {
+		tv.scrollOffsetRow = 0
 	}
-	tv.cursorX = 0
-	tv.cursorY = 0
-	// Reset scroll position when screen is cleared
-	tv.scrollOffsetRow = 0
 	tv.scrollOffsetCol = 0
+	
+	// Cursor position will be set by subsequent cursor home command relative to current scroll position
 }
 
 func (tv *TerminalView) clearLineFromCursor() {

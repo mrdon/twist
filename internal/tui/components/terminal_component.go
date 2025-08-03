@@ -24,20 +24,17 @@ func NewTerminalComponent(app *tview.Application) *TerminalComponent {
 	// Create starfield component with app reference
 	starfield := NewStarfieldComponent(150, app)
 	
-	// Create wrapper layout - initially show starfield
+	// Create wrapper layout - show terminal directly (temporary fix)
 	wrapper := theme.NewFlex().SetDirection(tview.FlexRow)
-	wrapper.AddItem(starfield, 0, 1, true)
+	wrapper.AddItem(terminalView, 0, 1, true)
 	
 	tc := &TerminalComponent{
 		terminalView: terminalView,
 		wrapper:      wrapper,
 		starfield:    starfield,
-		showStarfield: true,
+		showStarfield: false,  // Disable starfield for now
 		app:          app,
 	}
-	
-	// Start starfield animation
-	tc.starfield.Start()
 	
 	return tc
 }
@@ -65,6 +62,13 @@ func (tc *TerminalComponent) TransitionToTerminal() {
 	// Clear wrapper and add terminal view
 	tc.wrapper.Clear()
 	tc.wrapper.AddItem(tc.terminalView, 0, 1, true)
+	
+	// Ensure terminal view gets focus after transition
+	if tc.app != nil {
+		tc.app.QueueUpdateDraw(func() {
+			tc.app.SetFocus(tc.terminalView)
+		})
+	}
 }
 
 // Write implements io.Writer - delegates to terminal view and triggers transition
@@ -73,7 +77,18 @@ func (tc *TerminalComponent) Write(p []byte) (n int, err error) {
 	if tc.showStarfield {
 		tc.TransitionToTerminal()
 	}
-	return tc.terminalView.Write(p)
+	
+	// Always write to terminal view, even during transition
+	n, err = tc.terminalView.Write(p)
+	
+	// Force a redraw after writing
+	if tc.app != nil {
+		tc.app.QueueUpdateDraw(func() {
+			// Just trigger a redraw
+		})
+	}
+	
+	return n, err
 }
 
 // SetChangedFunc sets the callback for content changes

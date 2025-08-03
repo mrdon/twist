@@ -13,8 +13,8 @@ import (
 type PanelComponent struct {
 	leftView     *tview.TextView
 	leftWrapper  *tview.Flex
-	rightView    *tview.TextView
 	rightWrapper *tview.Flex
+	sectorMap    *SectorMapComponent  // New sector map component
 	proxyAPI     api.ProxyAPI  // API access for game data
 }
 
@@ -25,24 +25,23 @@ func NewPanelComponent() *PanelComponent {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft)
 	leftPanel.SetBorder(true).SetTitle("Trader Info")
+	leftPanel.SetText("[yellow]Player Info[-]\n\n[cyan]Connect to see trader info[-]")
 	
 	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(leftPanel, 0, 1, false)
 	
-	// Right panel for sector info using theme
-	rightPanel := theme.NewPanelView().
-		SetDynamicColors(true).
-		SetTextAlign(tview.AlignLeft)
-	rightPanel.SetBorder(true).SetTitle("Sector Info")
+	// Create sector map component for right panel
+	sectorMap := NewSectorMapComponent()
 	
+	// Right panel is just the sector map
 	rightWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(rightPanel, 0, 1, false)
+		AddItem(sectorMap.GetView(), 0, 1, false)
 	
 	return &PanelComponent{
 		leftView:     leftPanel,
 		leftWrapper:  leftWrapper,
-		rightView:    rightPanel,
 		rightWrapper: rightWrapper,
+		sectorMap:    sectorMap,
 	}
 }
 
@@ -59,6 +58,32 @@ func (pc *PanelComponent) GetRightWrapper() *tview.Flex {
 // SetProxyAPI sets the API reference for accessing game data
 func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	pc.proxyAPI = proxyAPI
+	if pc.sectorMap != nil {
+		pc.sectorMap.SetProxyAPI(proxyAPI)
+	}
+	
+	// Show test trader info when API is connected
+	if proxyAPI != nil {
+		pc.showTestTraderInfo()
+	}
+}
+
+// showTestTraderInfo displays test trader information
+func (pc *PanelComponent) showTestTraderInfo() {
+	var info strings.Builder
+	info.WriteString("[yellow]Player Info[-]\n\n")
+	info.WriteString("Name: TestPlayer\n")
+	info.WriteString("Current Sector: 123\n")
+	info.WriteString("Ship: Imperial StarShip\n")
+	info.WriteString("Credits: 50,000\n")
+	info.WriteString("Fighters: 100\n")
+	info.WriteString("Holds: 50/50\n\n")
+	info.WriteString("[cyan]Cargo[-]\n")
+	info.WriteString("Fuel Ore: 10\n")
+	info.WriteString("Organics: 15\n")
+	info.WriteString("Equipment: 25\n")
+	
+	pc.leftView.SetText(info.String())
 }
 
 // UpdateTraderInfo updates the trader information panel using API PlayerInfo
@@ -75,25 +100,11 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 	pc.leftView.SetText(info.String())
 }
 
-// UpdateSectorInfo updates the sector information panel using API SectorInfo
+// UpdateSectorInfo updates the sector map with current sector info
 func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
-	var info strings.Builder
-	info.WriteString(fmt.Sprintf("[cyan]Sector %d Info[-]\n", sector.Number))
-	info.WriteString(fmt.Sprintf("Nav Hazard: %d\n", sector.NavHaz))
-	
-	if sector.HasTraders > 0 {
-		info.WriteString(fmt.Sprintf("Traders: %d\n", sector.HasTraders))
+	if pc.sectorMap != nil {
+		pc.sectorMap.UpdateCurrentSector(sector.Number)
 	}
-	
-	if sector.Constellation != "" {
-		info.WriteString(fmt.Sprintf("Constellation: %s\n", sector.Constellation))
-	}
-	
-	if sector.Beacon != "" {
-		info.WriteString(fmt.Sprintf("Beacon: %s\n", sector.Beacon))
-	}
-	
-	pc.rightView.SetText(info.String())
 }
 
 // SetTraderInfoText sets custom text in the trader info panel
@@ -101,17 +112,7 @@ func (pc *PanelComponent) SetTraderInfoText(text string) {
 	pc.leftView.SetText(text)
 }
 
-// SetSectorInfoText sets custom text in the sector info panel  
-func (pc *PanelComponent) SetSectorInfoText(text string) {
-	pc.rightView.SetText(text)
-}
-
 // SetPlaceholderPlayerText sets placeholder text for testing Phase 4.1
 func (pc *PanelComponent) SetPlaceholderPlayerText() {
 	pc.leftView.SetText("[yellow]Player Info[-]\nAPI data not yet available")
-}
-
-// SetPlaceholderSectorText sets placeholder text for testing Phase 4.1
-func (pc *PanelComponent) SetPlaceholderSectorText() {
-	pc.rightView.SetText("[cyan]Sector Info[-]\nAPI data not yet available")
 }

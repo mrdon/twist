@@ -280,3 +280,4 @@ func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
 	playerName := p.proxy.GetPlayerName()
 	return convertDatabasePlayerToAPI(currentSector, playerName), nil
 }
+

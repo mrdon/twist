@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
-	"runtime"
 	"time"
 )
 
@@ -34,7 +32,7 @@ func NewLogger(filename string) (*Logger, error) {
 		return nil, err
 	}
 
-	logger := log.New(file, "[DEBUG] ", log.LstdFlags|log.Lshortfile)
+	logger := log.New(file, "", 0)
 	
 	return &Logger{
 		file:   file,
@@ -45,15 +43,7 @@ func NewLogger(filename string) (*Logger, error) {
 // Log writes a debug message with caller information
 func Log(format string, args ...interface{}) {
 	if globalLogger != nil {
-		// Get caller information
-		_, file, line, ok := runtime.Caller(1)
-		if ok {
-			file = filepath.Base(file)
-			prefix := fmt.Sprintf("[%s:%d] ", file, line)
-			globalLogger.logger.Printf(prefix+format, args...)
-		} else {
-			globalLogger.logger.Printf(format, args...)
-		}
+		globalLogger.logger.Printf(format, args...)
 	}
 }
 

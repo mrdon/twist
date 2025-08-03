@@ -111,9 +111,10 @@ func NewApplication() *TwistApp {
 // setupUI configures the user interface layout
 func (ta *TwistApp) setupUI() {
 	// Create main grid layout: 3 columns, 3 rows (menu, main content, status)
+	// Left panel: 20 chars, Terminal: fixed 80 chars, Right panel: remaining space
 	ta.mainGrid = tview.NewGrid().
 		SetRows(1, 0, 1).
-		SetColumns(20, 0, 20).
+		SetColumns(20, 80, 0).
 		SetBorders(false)
 	
 	// Set main grid background to pure black
@@ -676,7 +677,6 @@ func (ta *TwistApp) updatePanels() {
 	// Update with sample data - in real implementation, this would
 	// get data from the game state
 	ta.panelComponent.SetTraderInfoText("No trader data available")
-	ta.panelComponent.SetSectorInfoText("No sector data available")
 	
 	// Update status bar
 	ta.statusComponent.UpdateStatus()
