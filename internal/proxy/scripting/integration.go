@@ -43,6 +43,11 @@ func (g *GameAdapter) SetTerminal(terminal TerminalInterface) {
 	g.terminal = terminal
 }
 
+// SetDatabase updates the database reference
+func (g *GameAdapter) SetDatabase(db database.Database) {
+	g.db = db
+}
+
 // GetSector implements GameInterface
 func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 	sector, err := g.db.LoadSector(index)
@@ -256,10 +261,16 @@ func (g *GameAdapter) GetSystemConstants() types.SystemConstantsInterface {
 }
 
 // ScriptManager provides high-level script management
+// DatabaseProvider interface for getting the current database
+type DatabaseProvider interface {
+	GetDatabase() database.Database
+}
+
 type ScriptManager struct {
-	engine      *Engine
-	db          database.Database
-	gameAdapter *GameAdapter
+	engine         *Engine
+	db             database.Database
+	gameAdapter    *GameAdapter
+	dbProvider     DatabaseProvider // For getting current database when needed
 }
 
 // NewScriptManager creates a new script manager
@@ -274,11 +285,49 @@ func NewScriptManager(db database.Database) *ScriptManager {
 	}
 }
 
+// NewScriptManagerWithProvider creates a new script manager that can request databases dynamically
+func NewScriptManagerWithProvider(dbProvider DatabaseProvider) *ScriptManager {
+	// Create a basic game adapter without a database initially
+	// The adapter will request the database when needed
+	gameAdapter := NewGameAdapter(nil)
+	engine := NewEngine(gameAdapter)
+	
+	return &ScriptManager{
+		engine:      engine,
+		db:          nil, // Will be requested from provider when needed
+		gameAdapter: gameAdapter,
+		dbProvider:  dbProvider,
+	}
+}
+
+// getCurrentDatabase returns the current database, either from direct reference or provider
+func (sm *ScriptManager) getCurrentDatabase() database.Database {
+	if sm.db != nil {
+		return sm.db
+	}
+	if sm.dbProvider != nil {
+		return sm.dbProvider.GetDatabase()
+	}
+	return nil
+}
+
+// UpdateDatabase updates the game adapter with the current database
+func (sm *ScriptManager) UpdateDatabase() {
+	if currentDB := sm.getCurrentDatabase(); currentDB != nil {
+		sm.gameAdapter.SetDatabase(currentDB)
+	}
+}
+
 // SetupConnections wires the proxy and terminal to the game adapter and sets up engine handlers
 func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal TerminalInterface) {
 	// Wire the proxy and terminal to the game adapter
 	sm.gameAdapter.SetProxy(proxy)
 	sm.gameAdapter.SetTerminal(terminal)
+	
+	// Update the game adapter with current database
+	if currentDB := sm.getCurrentDatabase(); currentDB != nil {
+		sm.gameAdapter.SetDatabase(currentDB)
+	}
 	
 	// Set up engine handlers for script output
 	sm.engine.SetSendHandler(func(text string) error {

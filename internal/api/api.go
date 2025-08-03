@@ -37,6 +37,9 @@ type TuiAPI interface {
 	OnScriptStatusChanged(status ScriptStatusInfo)
 	OnScriptError(scriptName string, err error)
 	
+	// Database Events - called when game databases are loaded/unloaded
+	OnDatabaseStateChanged(info DatabaseStateInfo)
+	
 	// Game State Events (Phase 4.3 - MINIMAL)
 	OnCurrentSectorChanged(sectorNumber int) // Simple sector change callback
 }
@@ -84,5 +87,14 @@ type SectorInfo struct {
 	Constellation string `json:"constellation"`  // Constellation name
 	Beacon        string `json:"beacon"`         // Beacon text
 	Warps         []int  `json:"warps"`          // Warp connections to other sectors
+}
+
+// DatabaseStateInfo provides information about database loading/unloading
+type DatabaseStateInfo struct {
+	GameName     string `json:"game_name"`      // Name of the game (e.g., "Trade Wars 2002")
+	ServerHost   string `json:"server_host"`    // Server host (e.g., "twgs.geekm0nkey.com")
+	ServerPort   string `json:"server_port"`    // Server port (e.g., "23")
+	DatabaseName string `json:"database_name"`  // Database filename
+	IsLoaded     bool   `json:"is_loaded"`      // true when database is loaded, false when unloaded
 }
 

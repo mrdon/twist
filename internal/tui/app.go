@@ -356,6 +356,25 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 	ta.terminalComponent.Write([]byte(msg))
 }
 
+// HandleDatabaseStateChanged processes database loading/unloading events
+func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
+	debug.Log("TuiApp: Database state changed - Game: %s, Loaded: %v", info.GameName, info.IsLoaded)
+	
+	// Handle database state change asynchronously to ensure non-blocking
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				debug.Log("PANIC in HandleDatabaseStateChanged: %v", r)
+			}
+		}()
+		
+		ta.app.QueueUpdateDraw(func() {
+			// Update status bar to show active game information
+			ta.statusComponent.SetGameInfo(info.GameName, info.ServerHost, info.ServerPort, info.IsLoaded)
+		})
+	}()
+}
+
 // HandleCurrentSectorChanged processes sector change events
 func (ta *TwistApp) HandleCurrentSectorChanged(sectorNumber int) {
 	ta.app.QueueUpdateDraw(func() {

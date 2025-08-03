@@ -25,6 +25,11 @@ type StateManager interface {
 	SetPlayerName(name string)
 }
 
+// GameDetector interface for game detection
+type GameDetector interface {
+	ProcessLine(line string)
+}
+
 // Pipeline provides high-performance streaming from network to terminal buffer
 type Pipeline struct {
 	// Input
@@ -37,6 +42,7 @@ type Pipeline struct {
 	sectorParser   *parser.SectorParser
 	scriptManager  ScriptManager
 	stateManager   StateManager  // Game state updates
+	gameDetector   GameDetector  // Game detection
 	
 	// Batching
 	batchBuffer   []byte
@@ -91,18 +97,23 @@ func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scrip
 }
 
 // NewPipelineWithWriter creates an optimized streaming pipeline with a writer for telnet negotiation
-func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, stateManager StateManager, writer func([]byte) error) *Pipeline {
+func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, stateManager StateManager, gameDetector GameDetector, writer func([]byte) error) *Pipeline {
 	p := &Pipeline{
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		sectorParser:  parser.NewSectorParserWithStateManager(db, stateManager),
 		scriptManager: scriptManager,
 		stateManager:  stateManager,
+		gameDetector:  gameDetector,
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
 		batchTimeout:  0,     // No timeout needed
 		stopChan:      make(chan struct{}),
+	}
+	
+	// Initialize sector parser only if database is available
+	if db != nil && stateManager != nil {
+		p.sectorParser = parser.NewSectorParserWithStateManager(db, stateManager)
 	}
 	
 	// Initialize telnet handler with proper writer for negotiation
@@ -184,9 +195,15 @@ func (p *Pipeline) batchProcessor() {
 					decoded = cleanData
 				}
 				
+				// Process through game detector for game identification
+				if p.gameDetector != nil {
+					p.gameDetector.ProcessLine(string(decoded))
+				}
 				
-				// Parse the decoded text for sector information
-				p.sectorParser.ProcessData(decoded)
+				// Parse the decoded text for sector information (only if parser available)
+				if p.sectorParser != nil {
+					p.sectorParser.ProcessData(decoded)
+				}
 				
 				if p.tuiAPI != nil {
 					p.tuiAPI.OnData(decoded)

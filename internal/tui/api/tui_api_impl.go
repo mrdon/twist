@@ -12,6 +12,7 @@ type TwistApp interface {
 	HandleTerminalData(data []byte)
 	HandleScriptStatusChanged(status coreapi.ScriptStatusInfo)
 	HandleScriptError(scriptName string, err error)
+	HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo)
 	HandleCurrentSectorChanged(sectorNumber int)
 }
 
@@ -69,6 +70,11 @@ func (tui *TuiApiImpl) OnScriptStatusChanged(status coreapi.ScriptStatusInfo) {
 
 func (tui *TuiApiImpl) OnScriptError(scriptName string, err error) {
 	go tui.app.HandleScriptError(scriptName, err)
+}
+
+// Database event methods - database loading/unloading handler
+func (tui *TuiApiImpl) OnDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
+	go tui.app.HandleDatabaseStateChanged(info)
 }
 
 // Game state event methods - simple sector change handler

@@ -11,7 +11,7 @@ import (
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 	"twist/internal/api"
-	// "twist/internal/debug" // Keep for future debugging
+	"twist/internal/debug"
 )
 
 type Proxy struct {
@@ -34,8 +34,13 @@ type Proxy struct {
 	// Direct TuiAPI reference
 	tuiAPI api.TuiAPI
 	
+	// Game detection
+	gameDetector  *GameDetector
+	
 	// Connection tracking for callbacks
 	currentAddress string  // Track address for OnConnectionStatusChanged callbacks
+	currentHost    string  // Track hostname for database naming
+	currentPort    string  // Track port for database naming
 	
 	// Game state tracking (Phase 4.3) - based on parser CurrentSectorIndex
 	currentSector int    // Track current sector number (from parser)
@@ -43,29 +48,22 @@ type Proxy struct {
 }
 
 func New(tuiAPI api.TuiAPI) *Proxy {
-	// Initialize database
-	db := database.NewDatabase()
-	// Create or open database (TODO: make configurable)
-	if err := db.CreateDatabase("twist.db"); err != nil {
-		db.OpenDatabase("twist.db")
-	}
-	
-	// Initialize script manager
-	scriptManager := scripting.NewScriptManager(db)
+	// Initialize with no database initially - will be loaded when game is detected
+	var db database.Database = nil
 	
 	p := &Proxy{
 		outputChan:    make(chan string, 100),
 		inputChan:     make(chan string, 100),
 		errorChan:     make(chan error, 100),
 		connected:     false,
-		scriptManager: scriptManager,
 		db:            db,
 		tuiAPI:        tuiAPI,  // Store TuiAPI reference
 		pipeline:      nil,     // Pipeline created only after connection
+		gameDetector:  nil,     // Will be created when connection is established
 	}
 	
-	// Setup script manager connections to proxy - no terminal needed
-	scriptManager.SetupConnections(p, nil)
+	// Create script manager that can request database dynamically
+	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
 	
 	return p
 }
@@ -115,6 +113,27 @@ func (p *Proxy) Connect(address string) error {
 	if !strings.Contains(address, ":") {
 		address = address + ":23"
 	}
+	
+	// Store connection details for database naming
+	p.currentAddress = address
+	parts := strings.Split(address, ":")
+	if len(parts) >= 2 {
+		p.currentHost = parts[0]
+		p.currentPort = parts[1]
+	} else {
+		p.currentHost = address
+		p.currentPort = "23"
+	}
+	
+	// Create game detector with connection info
+	connInfo := ConnectionInfo{Host: p.currentHost, Port: p.currentPort}
+	p.gameDetector = NewGameDetector(connInfo)
+	
+	// Setup database loaded callback
+	p.gameDetector.SetDatabaseLoadedCallback(p.onDatabaseLoaded)
+	
+	// Setup database state change callback
+	p.gameDetector.SetDatabaseStateChangedCallback(p.onDatabaseStateChanged)
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -135,7 +154,8 @@ func (p *Proxy) Connect(address string) error {
 		return p.writer.Flush()
 	}
 	
-	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, writerFunc)
+	// Create pipeline with game detector - database may be nil initially
+	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
 	
 	p.pipeline.Start()
 
@@ -171,6 +191,12 @@ func (p *Proxy) Disconnect() error {
 	// Stop the streaming pipeline
 	if p.pipeline != nil {
 		p.pipeline.Stop()
+	}
+	
+	// Close game detector
+	if p.gameDetector != nil {
+		p.gameDetector.Close()
+		p.gameDetector = nil
 	}
 	
 	if p.conn != nil {
@@ -218,6 +244,11 @@ func (p *Proxy) handleInput() {
 		// Process outgoing text through script manager
 		if p.scriptManager != nil {
 			p.scriptManager.ProcessOutgoingText(input)
+		}
+		
+		// Process user input through game detector
+		if p.gameDetector != nil {
+			p.gameDetector.ProcessUserInput(input)
 		}
 
 		_, err := p.writer.WriteString(input)
@@ -344,5 +375,82 @@ func (p *Proxy) SetPlayerName(name string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.playerName = name
+}
+
+// onDatabaseLoaded is called when the game detector loads a database
+func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.ScriptManager) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	
+	// Update proxy state with new database
+	p.db = db
+	
+	// Update existing script manager with new database instead of replacing it
+	if p.scriptManager != nil {
+		p.scriptManager.UpdateDatabase()
+		p.scriptManager.SetupConnections(p, nil)
+	}
+	
+	// If pipeline exists, update it with the new database
+	if p.pipeline != nil {
+		// Recreate pipeline with new database
+		writerFunc := func(data []byte) error {
+			_, err := p.writer.Write(data)
+			if err != nil {
+				return err
+			}
+			return p.writer.Flush()
+		}
+		
+		p.pipeline.Stop()
+		p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
+		p.pipeline.Start()
+	}
+	
+	return nil
+}
+
+// onDatabaseStateChanged is called when the game detector loads/unloads a database
+func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName string, isLoaded bool) {
+	debug.Log("Proxy: Database state change - Game: %s, Loaded: %v", gameName, isLoaded)
+	
+	// Create database state info for TUI notification
+	info := api.DatabaseStateInfo{
+		GameName:     gameName,
+		ServerHost:   serverHost,
+		ServerPort:   serverPort,
+		DatabaseName: dbName,
+		IsLoaded:     isLoaded,
+	}
+	
+	// Notify TUI about database state change
+	if p.tuiAPI != nil {
+		p.tuiAPI.OnDatabaseStateChanged(info)
+	} else {
+		debug.Log("Proxy: tuiAPI is nil - cannot notify TUI about database state change")
+	}
+}
+
+// GetCurrentGame returns the currently detected game name
+func (p *Proxy) GetCurrentGame() string {
+	if p.gameDetector != nil {
+		return p.gameDetector.GetCurrentGame()
+	}
+	return ""
+}
+
+// IsGameActive returns true if a game is currently active
+func (p *Proxy) IsGameActive() bool {
+	if p.gameDetector != nil {
+		return p.gameDetector.IsGameActive()
+	}
+	return false
+}
+
+// LoadGameDatabase loads a specific game database (legacy method for backward compatibility)
+func (p *Proxy) LoadGameDatabase(gameName string) error {
+	// This method is now handled by the game detector
+	// Keep for backward compatibility but functionality moved to game detector
+	return fmt.Errorf("database loading is now handled automatically by game detection")
 }
 
