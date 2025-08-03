@@ -3,6 +3,7 @@ package components
 import (
 	"twist/internal/theme"
 	
+	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
@@ -57,6 +58,19 @@ func (cd *ConnectionDialog) setupComponents() {
 
 	// Set focus to the input field
 	cd.form.SetFocus(0)
+	
+	// Set up input capture to handle Enter key
+	cd.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			// Activate the Connect button (first button, index 0)
+			serverAddress := cd.form.GetFormItem(0).(*tview.InputField).GetText()
+			if cd.callback != nil {
+				cd.callback(serverAddress)
+			}
+			return nil // Consume the event
+		}
+		return event // Allow other keys to be processed normally
+	})
 }
 
 // GetView returns the main view component

@@ -2,6 +2,7 @@ package parser
 
 import (
 	"strings"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 )
 
@@ -52,18 +53,28 @@ func (sp *SectorProcessor) ProcessSectorLine(line string) {
 
 // processSectorHeader processes the main sector information
 func (sp *SectorProcessor) processSectorHeader(line string) {
-	// TWX sector header parsing logic
+	debug.Log("SectorProcessor: processSectorHeader called with line: %q", line)
+	
+	// TWX sector header parsing logic - but NOT for current sector detection!
+	// Current sector comes from command prompts, not "Sector :" displays
 	if strings.Contains(line, "Sector :") {
+		debug.Log("SectorProcessor: Found 'Sector :' pattern (sector info display, NOT current sector)")
 		sp.initializeSectorData(line)
 	} else if strings.Contains(line, "Warps to Sector(s) :") {
+		debug.Log("SectorProcessor: Found warps pattern")
 		sp.processWarpLine(line)
 	} else if strings.Contains(line, "Class") {
+		debug.Log("SectorProcessor: Found class pattern")
 		sp.processSectorClass(line)
+	} else {
+		debug.Log("SectorProcessor: No recognized patterns in line")
 	}
 }
 
 // initializeSectorData initializes a new sector from header line
 func (sp *SectorProcessor) initializeSectorData(line string) {
+	debug.Log("SectorProcessor: initializeSectorData called with line: %q", line)
+	
 	// Extract sector number from "Sector : 1234"
 	if idx := strings.Index(line, "Sector :"); idx != -1 {
 		sectorStr := strings.TrimSpace(line[idx+8:])
@@ -71,16 +82,27 @@ func (sp *SectorProcessor) initializeSectorData(line string) {
 			sectorStr = sectorStr[:spaceIdx]
 		}
 		
+		debug.Log("SectorProcessor: Extracted sector string: %q", sectorStr)
 		sectorNum := sp.utils.StrToIntSafe(sectorStr)
+		debug.Log("SectorProcessor: Parsed sector number: %d", sectorNum)
+		
 		if sectorNum > 0 {
 			sp.ctx.State.CurrentSectorIndex = sectorNum
 			sp.ctx.State.CurrentSector = &database.TSector{}
 			
+			debug.Log("SectorProcessor: About to call SetCurrentSector(%d)", sectorNum)
 			// NOTIFY state manager of sector change - triggers TuiAPI callback automatically
 			if sp.stateManager != nil {
 				sp.stateManager.SetCurrentSector(sectorNum)
+				debug.Log("SectorProcessor: SetCurrentSector(%d) called successfully", sectorNum)
+			} else {
+				debug.Log("SectorProcessor: ERROR - stateManager is nil!")
 			}
+		} else {
+			debug.Log("SectorProcessor: Invalid sector number: %d", sectorNum)
 		}
+	} else {
+		debug.Log("SectorProcessor: No 'Sector :' found in line")
 	}
 }
 

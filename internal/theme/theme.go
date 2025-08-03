@@ -43,6 +43,7 @@ type TerminalColors struct {
 type DefaultColors struct {
 	Background      tcell.Color
 	Foreground      tcell.Color
+	Waiting         tcell.Color // Color for "Waiting..." messages
 }
 
 // StatusColors defines color scheme for status bars

@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"time"
 	"twist/internal/debug"
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
@@ -42,6 +43,8 @@ type TwistApp struct {
 	connected     bool
 	serverAddress string
 	modalVisible  bool
+	panelsVisible bool
+	animating     bool
 
 	// Update channel
 	terminalUpdateChan chan struct{}
@@ -75,6 +78,8 @@ func NewApplication() *TwistApp {
 		statusComponent:    statusComp,
 		inputHandler:       inputHandler,
 		globalShortcuts:    twistComponents.NewGlobalShortcutManager(),
+		panelsVisible:      false, // Start with panels hidden
+		animating:          false,
 	}
 
 	// Create API layer - proxy instances created per connection via static Connect()
@@ -110,28 +115,12 @@ func NewApplication() *TwistApp {
 
 // setupUI configures the user interface layout
 func (ta *TwistApp) setupUI() {
-	// Create main grid layout: 3 columns, 3 rows (menu, main content, status)
-	// Left panel: 20 chars, Terminal: fixed 80 chars, Right panel: remaining space
-	ta.mainGrid = tview.NewGrid().
-		SetRows(1, 0, 1).
-		SetColumns(20, 80, 0).
-		SetBorders(false)
-	
 	// Set main grid background to pure black
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	ta.mainGrid.SetBackgroundColor(defaultColors.Background)
-
-	// Add menu bar to top row, spanning all columns
-	ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 3, 0, 0, false)
-
-	// Add panels and terminal to main area
-	ta.mainGrid.AddItem(ta.panelComponent.GetLeftWrapper(), 1, 0, 1, 1, 0, 0, false)
-	ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 1, 1, 1, 0, 0, true)
-	ta.mainGrid.AddItem(ta.panelComponent.GetRightWrapper(), 1, 2, 1, 1, 0, 0, false)
-
-	// Add status bar to bottom row, spanning all columns
-	ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 3, 0, 0, false)
+	
+	// Initialize the UI without panels (they start hidden)
+	ta.setupUILayout()
 
 	// Create pages container
 	ta.pages = tview.NewPages()
@@ -143,6 +132,168 @@ func (ta *TwistApp) setupUI() {
 	// Always keep terminal focused and in terminal input mode
 	ta.app.SetFocus(ta.terminalComponent.GetView())
 	ta.inputHandler.SetInputMode(handlers.InputModeTerminal)
+}
+
+// setupUILayout creates the main grid layout based on panel visibility
+func (ta *TwistApp) setupUILayout() {
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	
+	if ta.panelsVisible {
+		// Create main grid layout: 3 columns, 3 rows (menu, main content, status)
+		// Left panel: 20 chars, Terminal: fixed 80 chars, Right panel: remaining space
+		ta.mainGrid = tview.NewGrid().
+			SetRows(1, 0, 1).
+			SetColumns(20, 80, 0).
+			SetBorders(false)
+		
+		ta.mainGrid.SetBackgroundColor(defaultColors.Background)
+
+		// Add menu bar to top row, spanning all columns
+		ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 3, 0, 0, false)
+
+		// Add panels and terminal to main area
+		ta.mainGrid.AddItem(ta.panelComponent.GetLeftWrapper(), 1, 0, 1, 1, 0, 0, false)
+		ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 1, 1, 1, 0, 0, true)
+		ta.mainGrid.AddItem(ta.panelComponent.GetRightWrapper(), 1, 2, 1, 1, 0, 0, false)
+
+		// Add status bar to bottom row, spanning all columns
+		ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 3, 0, 0, false)
+	} else {
+		// Create main grid layout: 1 column, 3 rows (menu, terminal, status)
+		ta.mainGrid = tview.NewGrid().
+			SetRows(1, 0, 1).
+			SetColumns(0).
+			SetBorders(false)
+		
+		ta.mainGrid.SetBackgroundColor(defaultColors.Background)
+
+		// Add menu bar to top row
+		ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 1, 0, 0, false)
+
+		// Add terminal to main area (no panels)
+		ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 0, 1, 1, 0, 0, true)
+
+		// Add status bar to bottom row
+		ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
+	}
+}
+
+// showPanels makes the side panels visible with animation
+func (ta *TwistApp) showPanels() {
+	if ta.panelsVisible || ta.animating {
+		return
+	}
+	ta.animatePanels(true)
+}
+
+// hidePanels hides the side panels with animation
+func (ta *TwistApp) hidePanels() {
+	if !ta.panelsVisible || ta.animating {
+		return
+	}
+	ta.animatePanels(false)
+}
+
+// animatePanels performs smooth panel show/hide animation
+func (ta *TwistApp) animatePanels(show bool) {
+	ta.animating = true
+	
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				debug.Log("PANIC in animatePanels: %v", r)
+			}
+		}()
+		
+		const animationFrames = 8
+		const frameDuration = 30 * time.Millisecond
+		
+		// Get current theme for consistent colors
+		currentTheme := theme.Current()
+		defaultColors := currentTheme.DefaultColors()
+		
+		for frame := 0; frame <= animationFrames; frame++ {
+			// Calculate animation progress (0.0 to 1.0)
+			var progress float64
+			if show {
+				progress = float64(frame) / float64(animationFrames)
+			} else {
+				progress = 1.0 - float64(frame)/float64(animationFrames)
+			}
+			
+			// Calculate panel widths based on progress
+			leftPanelWidth := int(20.0 * progress)
+			terminalWidth := 80
+			// Right panel uses remaining space (0 means use remaining space in tview grid)
+			
+			// Ensure minimum widths
+			if leftPanelWidth < 1 && progress > 0 {
+				leftPanelWidth = 1
+			}
+			
+			ta.app.QueueUpdateDraw(func() {
+				// Create new grid with animated panel sizes
+				if leftPanelWidth > 0 {
+					// Panels are visible - create 3-column layout
+					ta.mainGrid = tview.NewGrid().
+						SetRows(1, 0, 1).
+						SetColumns(leftPanelWidth, terminalWidth, 0).
+						SetBorders(false)
+					
+					ta.mainGrid.SetBackgroundColor(defaultColors.Background)
+					
+					// Add components
+					ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 3, 0, 0, false)
+					ta.mainGrid.AddItem(ta.panelComponent.GetLeftWrapper(), 1, 0, 1, 1, 0, 0, false)
+					ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 1, 1, 1, 0, 0, true)
+					ta.mainGrid.AddItem(ta.panelComponent.GetRightWrapper(), 1, 2, 1, 1, 0, 0, false)
+					ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 3, 0, 0, false)
+				} else {
+					// Panels are hidden - create 1-column layout
+					ta.mainGrid = tview.NewGrid().
+						SetRows(1, 0, 1).
+						SetColumns(0).
+						SetBorders(false)
+					
+					ta.mainGrid.SetBackgroundColor(defaultColors.Background)
+					
+					// Add components
+					ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 1, 0, 0, false)
+					ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 0, 1, 1, 0, 0, true)
+					ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
+				}
+				
+				// Update the page
+				ta.pages.RemovePage("main")
+				ta.pages.AddPage("main", ta.mainGrid, true, true)
+				ta.app.SetFocus(ta.terminalComponent.GetView())
+			})
+			
+			// Wait for next frame (except on last frame)
+			if frame < animationFrames {
+				time.Sleep(frameDuration)
+			}
+		}
+		
+		// Animation complete - update final state
+		ta.panelsVisible = show
+		ta.animating = false
+		
+		// Load real data when panels become visible
+		if show && ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			debug.Log("TwistApp: Panels now visible, trying sector-based data load")
+			// Since GetPlayerInfo() returns CurrentSector: 0, we'll rely on sector change events
+			// Try to get the last known sector from sector change events, or use a default
+			// This is a workaround until GetPlayerInfo() is fixed
+			ta.app.QueueUpdateDraw(func() {
+				ta.panelComponent.LoadRealData()
+			})
+		} else {
+			debug.Log("TwistApp: Not loading data - show: %v, panelComponent: %v, connected: %v", 
+				show, ta.panelComponent != nil, ta.proxyClient.IsConnected())
+		}
+	}()
 }
 
 // setupInputHandling configures input event handling
@@ -371,6 +522,13 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 		ta.app.QueueUpdateDraw(func() {
 			// Update status bar to show active game information
 			ta.statusComponent.SetGameInfo(info.GameName, info.ServerHost, info.ServerPort, info.IsLoaded)
+			
+			// Show/hide panels based on database loading state
+			if info.IsLoaded {
+				ta.showPanels()
+			} else {
+				ta.hidePanels()
+			}
 		})
 	}()
 }
@@ -391,18 +549,35 @@ func (ta *TwistApp) HandleCurrentSectorChanged(sectorNumber int) {
 
 // refreshPanelData refreshes panel data using API calls
 func (ta *TwistApp) refreshPanelData(sectorNumber int) {
+	debug.Log("TwistApp: refreshPanelData called for sector %d, panels visible: %v", sectorNumber, ta.panelsVisible)
+	
+	// Only refresh if panels are visible
+	if !ta.panelsVisible {
+		return
+	}
+	
 	proxyAPI := ta.proxyClient.GetCurrentAPI()
 	if proxyAPI != nil {
 		// Get sector info and update panel
 		sectorInfo, err := proxyAPI.GetSectorInfo(sectorNumber)
 		if err == nil {
+			debug.Log("TwistApp: Got sector info for sector %d, updating panels", sectorNumber)
 			ta.panelComponent.UpdateSectorInfo(sectorInfo)
+		} else {
+			debug.Log("TwistApp: Failed to get sector info for sector %d: %v", sectorNumber, err)
 		}
 		
-		// Get player info and update panel (UpdateTraderInfo shows current player)
-		playerInfo, err := proxyAPI.GetPlayerInfo()
-		if err == nil {
-			ta.panelComponent.UpdateTraderInfo(playerInfo) // Keep existing method name
+		// Create fake player info with the current sector since GetPlayerInfo() is broken
+		playerInfo := coreapi.PlayerInfo{
+			Name:          "Player", // We don't have the real name from GetPlayerInfo
+			CurrentSector: sectorNumber,
+		}
+		debug.Log("TwistApp: Using sector-based player info for sector %d", sectorNumber)
+		ta.panelComponent.UpdateTraderInfo(playerInfo)
+		
+		// Also update sector map
+		if ta.panelComponent != nil {
+			ta.panelComponent.UpdateSectorInfo(sectorInfo)
 		}
 	}
 }

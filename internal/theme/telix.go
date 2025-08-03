@@ -47,6 +47,7 @@ func (t *TelixTheme) DefaultColors() DefaultColors {
 	return DefaultColors{
 		Background: DOSBlack,
 		Foreground: DOSLightGray,
+		Waiting:    DOSDarkGray,       // Dark gray for waiting messages
 	}
 }
 

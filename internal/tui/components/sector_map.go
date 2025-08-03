@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
+	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/rivo/tview"
@@ -34,7 +35,7 @@ func NewSectorMapComponent() *SectorMapComponent {
 	}
 	
 	// Set initial text
-	smc.view.SetText("[cyan]Sector Map[-]\n\n[yellow]Connect to see sector map[-]")
+	smc.view.SetText("[cyan]Sector Map[-]\n\n[yellow]Connect and load database to see sector map[-]")
 	
 	return smc
 }
@@ -48,13 +49,61 @@ func (smc *SectorMapComponent) GetView() *tview.TextView {
 func (smc *SectorMapComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	smc.proxyAPI = proxyAPI
 	if proxyAPI != nil {
-		smc.view.SetText("[cyan]Sector Map[-]\n\n[green]API connected[-]\n[yellow]Waiting for sector data...[-]")
-		// Show a test map for now
-		smc.showTestMap()
+		smc.setWaitingMessage()
+		// Don't load data immediately - wait for database to be ready
+		// Data will be loaded when panels become visible
 	}
 }
 
-// showTestMap displays a test map to verify rendering works
+// LoadRealMapData loads real sector data from the API (public method)
+func (smc *SectorMapComponent) LoadRealMapData() {
+	smc.loadRealMapData()
+}
+
+// loadRealMapData loads real sector data from the API
+func (smc *SectorMapComponent) loadRealMapData() {
+	if smc.proxyAPI == nil {
+		debug.Log("SectorMapComponent: No proxyAPI available")
+		smc.setWaitingMessage()
+		return
+	}
+	
+	// Get player info to find current sector
+	playerInfo, err := smc.proxyAPI.GetPlayerInfo()
+	if err != nil {
+		debug.Log("SectorMapComponent: GetPlayerInfo failed: %v", err)
+		smc.setWaitingMessage()
+		return
+	}
+	
+	debug.Log("SectorMapComponent: Got player info - CurrentSector: %d", playerInfo.CurrentSector)
+	
+	// Check if we have valid sector data
+	if playerInfo.CurrentSector <= 0 {
+		debug.Log("SectorMapComponent: Invalid sector number: %d", playerInfo.CurrentSector)
+		smc.setWaitingMessage()
+		return
+	}
+	
+	// Set current sector and load its data
+	smc.currentSector = playerInfo.CurrentSector
+	debug.Log("SectorMapComponent: Loading map data for sector %d", smc.currentSector)
+	smc.refreshMap()
+}
+
+// setWaitingMessage displays a waiting message in the sector map
+func (smc *SectorMapComponent) setWaitingMessage() {
+	// Use theme colors for the waiting message
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	
+	// Create blinking gray text using the themed waiting color
+	waitingText := fmt.Sprintf("[cyan]Sector Map[-]\n\n[%s::bl]Waiting...[-]", 
+		defaultColors.Waiting.String())
+	smc.view.SetText(waitingText)
+}
+
+// showTestMap displays a test map to verify rendering works (kept for fallback)
 func (smc *SectorMapComponent) showTestMap() {
 	// Add mock sector data
 	smc.currentSector = 123

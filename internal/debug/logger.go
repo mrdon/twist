@@ -32,7 +32,7 @@ func NewLogger(filename string) (*Logger, error) {
 		return nil, err
 	}
 
-	logger := log.New(file, "", 0)
+	logger := log.New(file, "", log.LstdFlags|log.Lmicroseconds)
 	
 	return &Logger{
 		file:   file,
