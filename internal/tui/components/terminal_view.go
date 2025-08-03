@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync"
 	"twist/internal/ansi"
+	_ "twist/internal/debug"
 	"twist/internal/theme"
 	"unicode/utf8"
 

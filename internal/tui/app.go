@@ -2,7 +2,7 @@ package tui
 
 import (
 	"fmt"
-	// "twist/internal/debug" // Keep for future debugging
+	"twist/internal/debug"
 	"twist/internal/terminal"
 	"twist/internal/tui/components"
 	"twist/internal/tui/handlers"
@@ -240,6 +240,7 @@ func (ta *TwistApp) sendCommand(command string) {
 	if ta.proxyClient.IsConnected() {
 		ta.proxyClient.SendData([]byte(command))
 	}
+	// When disconnected, we don't send commands to server, but local UI operations still work
 }
 
 // updateTerminalView updates the terminal display
@@ -252,68 +253,92 @@ func (ta *TwistApp) updateTerminalView() {
 
 // TuiAPI handler methods - called by API layer
 func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatus, address string) {
-	ta.app.QueueUpdateDraw(func() {
-		switch status {
-		case coreapi.ConnectionStatusConnecting:
-			ta.statusComponent.SetConnectionStatus(false, "Connecting to "+address+"...")
-			
-		case coreapi.ConnectionStatusConnected:
-			ta.connected = true
-			ta.serverAddress = address
-			ta.menuComponent.SetConnectedMenu()
-			ta.statusComponent.SetConnectionStatus(true, address)
-			
-			// Set ProxyAPI on status component after connection established
-			if ta.proxyClient.IsConnected() {
-				currentAPI := ta.proxyClient.GetCurrentAPI()
-				ta.statusComponent.SetProxyAPI(currentAPI)
-				ta.panelComponent.SetProxyAPI(currentAPI) // Add panel component API setup
+	// Handle status change asynchronously to ensure non-blocking
+	go func() {
+		// Add panic recovery to prevent crashes during callback
+		defer func() {
+			if r := recover(); r != nil {
+				debug.Log("PANIC in HandleConnectionStatusChanged: %v", r)
 			}
-			
-			if ta.modalVisible {
-				ta.closeModal()
+		}()
+		
+		ta.app.QueueUpdateDraw(func() {
+			switch status {
+			case coreapi.ConnectionStatusConnecting:
+				ta.statusComponent.SetConnectionStatus(false, "Connecting to "+address+"...")
+				
+			case coreapi.ConnectionStatusConnected:
+				ta.connected = true
+				ta.serverAddress = address
+				ta.menuComponent.SetConnectedMenu()
+				ta.statusComponent.SetConnectionStatus(true, address)
+				
+				// Set ProxyAPI on status component after connection established
+				if ta.proxyClient.IsConnected() {
+					currentAPI := ta.proxyClient.GetCurrentAPI()
+					ta.statusComponent.SetProxyAPI(currentAPI)
+					ta.panelComponent.SetProxyAPI(currentAPI) // Add panel component API setup
+				}
+				
+				if ta.modalVisible {
+					ta.closeModal()
+				}
+				
+			case coreapi.ConnectionStatusDisconnected:
+				ta.connected = false
+				ta.serverAddress = ""
+				ta.menuComponent.SetDisconnectedMenu()
+				ta.statusComponent.SetConnectionStatus(false, "")
+				// Show disconnect message in terminal
+				disconnectMsg := "\r\x1b[K\x1b[31;1m*** DISCONNECTED ***\x1b[0m\n"
+				ta.terminalComponent.Write([]byte(disconnectMsg))
+				
+				// Ensure terminal keeps focus after disconnection
+				ta.app.SetFocus(ta.terminalComponent.GetView())
 			}
-			
-		case coreapi.ConnectionStatusDisconnected:
+		})
+	}()
+}
+
+func (ta *TwistApp) HandleConnectionError(err error) {
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				debug.Log("PANIC in HandleConnectionError: %v", r)
+			}
+		}()
+		
+		ta.app.QueueUpdateDraw(func() {
 			ta.connected = false
 			ta.serverAddress = ""
 			ta.menuComponent.SetDisconnectedMenu()
 			ta.statusComponent.SetConnectionStatus(false, "")
-			// Show disconnect message in terminal
-			disconnectMsg := "\r\x1b[K\x1b[31;1mDISCONNECTED\x1b[0m\n"
-			ta.terminalComponent.Write([]byte(disconnectMsg))
-		}
-	})
-}
-
-func (ta *TwistApp) HandleConnectionError(err error) {
-	ta.app.QueueUpdateDraw(func() {
-		ta.connected = false
-		ta.serverAddress = ""
-		ta.menuComponent.SetDisconnectedMenu()
-		ta.statusComponent.SetConnectionStatus(false, "")
-		
-		// Ensure modal is closed if it's still open
-		if ta.modalVisible {
-			ta.closeModal()
-		}
-		
-		// TODO: Show error modal: ta.showErrorModal(err)
-	})
+			
+			// Ensure modal is closed if it's still open
+			if ta.modalVisible {
+				ta.closeModal()
+			}
+			
+			// TODO: Show error modal: ta.showErrorModal(err)
+		})
+	}()
 }
 
 func (ta *TwistApp) HandleTerminalData(data []byte) {
-	// Add error recovery to catch any panics in terminal processing
-	defer func() {
-		if r := recover(); r != nil {
-			// Panic in terminal processing - recovered
-		}
+	// Terminal data should be handled asynchronously to avoid blocking
+	go func() {
+		// Add error recovery to catch any panics in terminal processing
+		defer func() {
+			if r := recover(); r != nil {
+				debug.Log("PANIC in HandleTerminalData: %v", r)
+			}
+		}()
+		
+		// Write directly to the TerminalComponent
+		ta.terminalComponent.Write(data)
+		
+		// UI refresh is handled by the TerminalView's change callback
 	}()
-	
-	// Write directly to the TerminalComponent
-	ta.terminalComponent.Write(data)
-	
-	// UI refresh is handled by the TerminalView's change callback
 }
 
 // Script event handlers
@@ -421,6 +446,7 @@ func (ta *TwistApp) startUpdateWorker() {
 
 // handleGlobalKeys handles global key events
 func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
+	
 	// Ctrl+C - exit the application (check multiple ways)
 	if event.Key() == tcell.KeyCtrlC {
 		ta.exit()

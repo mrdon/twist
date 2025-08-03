@@ -5,3 +5,16 @@ Coding style:
 Testing:
 * Favor integration tests in integration/ that use a real vm and real test db
 * Run 'make test' to run all tests
+* Do not try to run the application - ask the user to run it and report results
+
+Debugging:
+* Always keep the internal/debug package import in all files
+* Use debug.Log() for debugging during development
+* Remove debug.Log() calls before final commits, except for critical error recovery (panics)
+* Keep debug.Log() calls in panic recovery blocks: `defer func() { if r := recover() { debug.Log("PANIC: %v", r) } }()`
+
+UI Development (tview):
+* NEVER call QueueUpdateDraw() from within another QueueUpdateDraw() callback - this causes deadlocks
+* Use goroutines for async UI updates: `go func() { app.QueueUpdateDraw(func() { ... }) }()`
+* Handle connection events asynchronously to prevent blocking the main event loop
+* Always use non-blocking patterns for event handling to ensure UI responsiveness

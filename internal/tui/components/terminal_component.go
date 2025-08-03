@@ -1,6 +1,7 @@
 package components
 
 import (
+	_ "twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
@@ -81,11 +82,13 @@ func (tc *TerminalComponent) Write(p []byte) (n int, err error) {
 	// Always write to terminal view, even during transition
 	n, err = tc.terminalView.Write(p)
 	
-	// Force a redraw after writing
+	// Force a redraw after writing - do this asynchronously to avoid deadlocks
 	if tc.app != nil {
-		tc.app.QueueUpdateDraw(func() {
-			// Just trigger a redraw
-		})
+		go func() {
+			tc.app.QueueUpdateDraw(func() {
+				// Just trigger a redraw
+			})
+		}()
 	}
 	
 	return n, err

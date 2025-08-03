@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	_ "twist/internal/debug"
 	coreapi "twist/internal/api"
 )
 

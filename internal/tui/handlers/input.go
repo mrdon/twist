@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	_ "twist/internal/debug"
+	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -78,7 +80,6 @@ func (ih *InputHandler) SetModalVisible(visible bool) {
 
 // HandleKeyEvent handles key events based on current input mode
 func (ih *InputHandler) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
-	
 	// Modal mode handling
 	if ih.modalVisible {
 		return ih.handleModalInput(event)
@@ -137,7 +138,6 @@ func (ih *InputHandler) handleMenuInput(event *tcell.EventKey) *tcell.EventKey {
 
 // handleTerminalInput handles input in terminal mode
 func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventKey {
-	
 	// Handle Alt+Letter combinations for menu access
 	if event.Key() == tcell.KeyRune && event.Modifiers()&tcell.ModAlt != 0 {
 		switch event.Rune() {
