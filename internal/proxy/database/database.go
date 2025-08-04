@@ -557,9 +557,9 @@ func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
 		id, turns, credits, fighters, shields, total_holds, ore_holds, org_holds, equ_holds, col_holds,
 		photons, armids, limpets, gen_torps, twarp_type, cloaks, beacons, atomics, corbomite, eprobes,
 		mine_disr, alignment, experience, corp, ship_number, psychic_probe, planet_scanner, scan_type,
-		ship_class, updated_at
+		ship_class, current_sector, player_name, updated_at
 	) VALUES (
-		1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+		1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
 	);`
 
 	_, err := d.db.Exec(query,
@@ -568,7 +568,7 @@ func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
 		stats.Armids, stats.Limpets, stats.GenTorps, stats.TwarpType, stats.Cloaks,
 		stats.Beacons, stats.Atomics, stats.Corbomite, stats.Eprobes, stats.MineDisr,
 		stats.Alignment, stats.Experience, stats.Corp, stats.ShipNumber, stats.PsychicProbe,
-		stats.PlanetScanner, stats.ScanType, stats.ShipClass,
+		stats.PlanetScanner, stats.ScanType, stats.ShipClass, stats.CurrentSector, stats.PlayerName,
 	)
 
 	if err != nil {
@@ -588,7 +588,7 @@ func (d *SQLiteDatabase) LoadPlayerStats() (TPlayerStats, error) {
 	SELECT turns, credits, fighters, shields, total_holds, ore_holds, org_holds, equ_holds, col_holds,
 		   photons, armids, limpets, gen_torps, twarp_type, cloaks, beacons, atomics, corbomite, eprobes,
 		   mine_disr, alignment, experience, corp, ship_number, psychic_probe, planet_scanner, scan_type,
-		   ship_class
+		   ship_class, COALESCE(current_sector, 0), COALESCE(player_name, '')
 	FROM player_stats WHERE id = 1;`
 
 	var stats TPlayerStats
@@ -598,7 +598,7 @@ func (d *SQLiteDatabase) LoadPlayerStats() (TPlayerStats, error) {
 		&stats.Armids, &stats.Limpets, &stats.GenTorps, &stats.TwarpType, &stats.Cloaks,
 		&stats.Beacons, &stats.Atomics, &stats.Corbomite, &stats.Eprobes, &stats.MineDisr,
 		&stats.Alignment, &stats.Experience, &stats.Corp, &stats.ShipNumber, &stats.PsychicProbe,
-		&stats.PlanetScanner, &stats.ScanType, &stats.ShipClass,
+		&stats.PlanetScanner, &stats.ScanType, &stats.ShipClass, &stats.CurrentSector, &stats.PlayerName,
 	)
 
 	if err == sql.ErrNoRows {

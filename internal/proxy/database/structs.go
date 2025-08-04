@@ -160,6 +160,10 @@ type TPlayerStats struct {
 	PlanetScanner bool   `json:"planet_scanner"`
 	ScanType      int    `json:"scan_type"`
 	ShipClass     string `json:"ship_class"`
+	
+	// Current game state (like TWX Database.pas)
+	CurrentSector int    `json:"current_sector"`
+	PlayerName    string `json:"player_name"`
 }
 
 // Helper functions matching TWX behavior

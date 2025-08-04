@@ -73,6 +73,14 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	
 	debug.Log("TWXParser: Saved sector %d to database", p.currentSectorIndex)
 	
+	// Update current sector in player stats (like TWX Database.pas)
+	p.playerStats.CurrentSector = p.currentSectorIndex
+	if err := p.savePlayerStatsToDatabase(); err != nil {
+		debug.Log("TWXParser: Failed to save current sector to player stats: %v", err)
+	} else {
+		debug.Log("TWXParser: Updated current sector in database to %d", p.currentSectorIndex)
+	}
+	
 	// Notify TUI API if available
 	if p.tuiAPI != nil {
 		sectorInfo := p.buildSectorInfo(sectorData)

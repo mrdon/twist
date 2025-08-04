@@ -340,11 +340,19 @@ func (p *Proxy) GetSector(sectorNum int) (database.TSector, error) {
 	return p.db.LoadSector(sectorNum)
 }
 
-// GetCurrentSector returns the current sector number (thread-safe)
+// GetCurrentSector returns the current sector number from database (like TWX Database.pas)
 func (p *Proxy) GetCurrentSector() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.currentSector
+	if p.db == nil {
+		return 0
+	}
+	
+	playerStats, err := p.db.LoadPlayerStats()
+	if err != nil {
+		debug.Log("Proxy: Failed to load player stats for current sector: %v", err)
+		return 0
+	}
+	
+	return playerStats.CurrentSector
 }
 
 // SetCurrentSector sets the current sector number and triggers callbacks
@@ -364,11 +372,19 @@ func (p *Proxy) SetCurrentSector(sectorNum int) {
 	}
 }
 
-// GetPlayerName returns the current player name (thread-safe)
+// GetPlayerName returns the current player name from database (like TWX Database.pas)
 func (p *Proxy) GetPlayerName() string {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.playerName
+	if p.db == nil {
+		return ""
+	}
+	
+	playerStats, err := p.db.LoadPlayerStats()
+	if err != nil {
+		debug.Log("Proxy: Failed to load player stats for player name: %v", err)
+		return ""
+	}
+	
+	return playerStats.PlayerName
 }
 
 // SetPlayerName sets the current player name

@@ -69,6 +69,10 @@ type PlayerStats struct {
 	PlanetScanner bool
 	ScanType      int
 	ShipClass     string
+	
+	// Current game state (like TWX Database.pas)
+	CurrentSector int
+	PlayerName    string
 }
 
 // FighterType represents the type of deployed fighters
@@ -270,15 +274,16 @@ type TWXParser struct {
 	
 	// Script integration (mirrors Pascal TWXInterpreter integration)
 	scriptEventProcessor *ScriptEventProcessor
+	
+	// Observer pattern and event system (Pascal: TTWXModule integration)
+	observers  []IObserver
+	eventBus   IEventBus
+	scriptInterpreter IScriptInterpreter
+	
 }
 
-// NewTWXParser creates a new TWX-style parser with required database and optional TUI API
-func NewTWXParser(db database.Database) *TWXParser {
-	return NewTWXParserWithAPI(db, nil)
-}
-
-// NewTWXParserWithAPI creates a new TWX-style parser with database and TUI API
-func NewTWXParserWithAPI(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
+// NewTWXParser creates a new TWX-style parser with database and TUI API
+func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 	parser := &TWXParser{
 		currentLine:      "",
 		currentANSILine:  "",
@@ -308,7 +313,13 @@ func NewTWXParserWithAPI(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 		currentProducts:  make([]ProductInfo, 0),
 		// Initialize script integration (disabled by default)
 		scriptEventProcessor: NewScriptEventProcessor(nil),
+		// Initialize observer pattern
+		observers: make([]IObserver, 0),
 	}
+
+	// Initialize event bus and script interpreter
+	parser.eventBus = NewEventBus()
+	parser.scriptInterpreter = NewScriptInterpreter(parser.eventBus)
 
 	// Set up default handlers
 	parser.setupDefaultHandlers()
@@ -391,6 +402,9 @@ func (p *TWXParser) setupDefaultHandlers() {
 
 // ProcessInBound processes incoming data (main entry point, like TWX Pascal)
 func (p *TWXParser) ProcessInBound(data string) {
+	// Fire inbound text events (Pascal: TWXInterpreter.TextEvent)
+	p.FireTextEvent(data, false)
+	
 	// Remove null chars
 	s := strings.ReplaceAll(data, "\x00", "")
 	p.rawANSILine = data
@@ -428,11 +442,16 @@ func (p *TWXParser) ProcessInBound(data string) {
 		p.currentLine = completeLine
 		p.currentANSILine = completeANSILine
 
+		// Fire line event (Pascal: TWXInterpreter.TextLineEvent)
+		p.FireTextLineEvent(completeLine, false)
+		
 		// Process the complete line with error recovery
 		p.safeParseWithRecovery("processLine", func() {
 			// Validate line format before processing
 			if p.validateLineFormat(completeLine) {
 				p.processLine(completeLine)
+				// Fire parse complete event
+				p.fireParseCompleteEvent(completeLine)
 			}
 		})
 
@@ -456,6 +475,9 @@ func (p *TWXParser) ProcessInBound(data string) {
 
 	// Process partial line for prompts (key TWX feature!)
 	p.processPrompt(p.currentLine)
+	
+	// Activate triggers after processing (Pascal: TWXInterpreter.ActivateTriggers)
+	p.ActivateTriggers()
 }
 
 // Finalize processes any remaining data and completes pending sectors
@@ -1886,7 +1908,28 @@ func (p *TWXParser) sectorCompleted() {
 		return p.saveSectorToDatabase()
 	})
 	
+	// Fire sector complete event
+	sectorData := p.buildSectorData()
+	p.fireSectorCompleteEvent(sectorData)
+	
 	p.sectorSaved = true
+}
+
+// buildSectorData creates a SectorData struct from current parser state
+func (p *TWXParser) buildSectorData() SectorData {
+	return SectorData{
+		Index:         p.currentSectorIndex,
+		Constellation: p.currentSector.Constellation,
+		Beacon:        p.currentSector.Beacon,
+		Warps:         p.currentSectorWarps,
+		Port:          p.currentSector.Port,
+		NavHaz:        p.currentSector.NavHaz,
+		Ships:         p.currentShips,
+		Traders:       p.currentTraders,
+		Planets:       p.currentPlanets,
+		Mines:         p.currentMines,
+		Products:      p.currentProducts,
+	}
 }
 
 // parseIntSafe is now implemented in parser_utils.go
@@ -2267,5 +2310,248 @@ func (p *TWXParser) addReverseWarp(toSector, fromSector int) {
 		} else {
 			debug.Log("TWXParser: Added reverse warp %d -> %d", toSector, fromSector)
 		}
+	}
+}
+
+// ===== IModExtractor Interface Implementation =====
+
+// GetCurrentDisplay returns the current display/parsing context
+func (p *TWXParser) GetCurrentDisplay() DisplayType {
+	return p.currentDisplay
+}
+
+// SetCurrentDisplay sets the current display/parsing context
+func (p *TWXParser) SetCurrentDisplay(display DisplayType) {
+	oldDisplay := p.currentDisplay
+	p.currentDisplay = display
+	debug.Log("TWXParser: Display changed from %d to %d", int(oldDisplay), int(display))
+	
+	// Fire state change event
+	p.fireStateChangeEvent("display", oldDisplay, display)
+}
+
+// SetEventBus sets the event bus for module communication
+func (p *TWXParser) SetEventBus(bus IEventBus) {
+	p.eventBus = bus
+	
+	// Update script interpreter with new event bus
+	if p.scriptInterpreter != nil {
+		p.scriptInterpreter = NewScriptInterpreter(bus)
+	}
+	
+	debug.Log("TWXParser: Event bus updated")
+}
+
+// GetEventBus returns the current event bus
+func (p *TWXParser) GetEventBus() IEventBus {
+	return p.eventBus
+}
+
+// FireTextEvent fires a text event to the script system (Pascal: TWXInterpreter.TextEvent)
+func (p *TWXParser) FireTextEvent(line string, outbound bool) {
+	if p.scriptInterpreter != nil {
+		p.scriptInterpreter.TextEvent(line, outbound)
+	}
+}
+
+// FireTextLineEvent fires a text line event to the script system (Pascal: TWXInterpreter.TextLineEvent)
+func (p *TWXParser) FireTextLineEvent(line string, outbound bool) {
+	if p.scriptInterpreter != nil {
+		p.scriptInterpreter.TextLineEvent(line, outbound)
+	}
+}
+
+// ActivateTriggers activates script triggers (Pascal: TWXInterpreter.ActivateTriggers)
+func (p *TWXParser) ActivateTriggers() {
+	if p.scriptInterpreter != nil {
+		p.scriptInterpreter.ActivateTriggers()
+	}
+}
+
+// FireAutoTextEvent fires an auto text event to the script system (Pascal: TWXInterpreter.AutoTextEvent)
+func (p *TWXParser) FireAutoTextEvent(line string, outbound bool) {
+	if p.scriptInterpreter != nil {
+		p.scriptInterpreter.AutoTextEvent(line, outbound)
+	}
+}
+
+// GetDatabase returns the database interface
+func (p *TWXParser) GetDatabase() database.Database {
+	return p.database
+}
+
+// SetDatabase sets the database interface
+func (p *TWXParser) SetDatabase(db database.Database) {
+	p.database = db
+	debug.Log("TWXParser: Database updated")
+}
+
+// ProcessOutBound processes outbound data and returns whether to continue sending
+func (p *TWXParser) ProcessOutBound(data string) bool {
+	debug.Log("TWXParser: ProcessOutBound - Data: %q", data)
+	
+	// Fire outbound text events
+	p.FireTextEvent(data, true)
+	p.FireTextLineEvent(data, true)
+	
+	// Fire outbound event to event bus
+	if p.eventBus != nil {
+		event := Event{
+			Type: EventText,
+			Data: map[string]interface{}{
+				"line":     data,
+				"outbound": true,
+			},
+			Source: "TWXParser",
+		}
+		p.eventBus.Fire(event)
+	}
+	
+	// Always continue sending (return true means "continue")
+	return true
+}
+
+// ===== Observer Pattern Implementation (ISubject) =====
+
+// Attach adds an observer to the subject
+func (p *TWXParser) Attach(observer IObserver) {
+	p.observers = append(p.observers, observer)
+	debug.Log("TWXParser: Observer attached - %s", observer.GetObserverID())
+}
+
+// Detach removes an observer from the subject
+func (p *TWXParser) Detach(observerID string) {
+	for i, observer := range p.observers {
+		if observer.GetObserverID() == observerID {
+			// Remove observer by swapping with last element and truncating
+			p.observers[i] = p.observers[len(p.observers)-1]
+			p.observers = p.observers[:len(p.observers)-1]
+			debug.Log("TWXParser: Observer detached - %s", observerID)
+			return
+		}
+	}
+	debug.Log("TWXParser: Observer not found for detach - %s", observerID)
+}
+
+// Notify notifies all observers of an event
+func (p *TWXParser) Notify(event Event) {
+	debug.Log("TWXParser: Notifying %d observers of event type %d", len(p.observers), int(event.Type))
+	
+	for _, observer := range p.observers {
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					debug.Log("TWXParser: PANIC in observer %s: %v", observer.GetObserverID(), r)
+				}
+			}()
+			observer.Update(p, event)
+		}()
+	}
+}
+
+// ===== Event Helper Methods =====
+
+// fireStateChangeEvent fires a state change event to both observers and event bus
+func (p *TWXParser) fireStateChangeEvent(property string, oldValue, newValue interface{}) {
+	event := Event{
+		Type: EventStateChange,
+		Data: map[string]interface{}{
+			"property":  property,
+			"oldValue":  oldValue,
+			"newValue":  newValue,
+			"sector":    p.currentSectorIndex,
+		},
+		Source: "TWXParser",
+	}
+	
+	// Notify observers
+	p.Notify(event)
+	
+	// Fire to event bus
+	if p.eventBus != nil {
+		p.eventBus.Fire(event)
+	}
+}
+
+// fireSectorCompleteEvent fires a sector completion event
+func (p *TWXParser) fireSectorCompleteEvent(sectorData SectorData) {
+	event := Event{
+		Type: EventSectorComplete,
+		Data: map[string]interface{}{
+			"sectorData": sectorData,
+			"sector":     sectorData.Index,
+		},
+		Source: "TWXParser",
+	}
+	
+	// Notify observers
+	p.Notify(event)
+	
+	// Fire to event bus
+	if p.eventBus != nil {
+		p.eventBus.Fire(event)
+	}
+}
+
+// fireParseCompleteEvent fires a parse completion event
+func (p *TWXParser) fireParseCompleteEvent(line string) {
+	event := Event{
+		Type: EventParseComplete,
+		Data: map[string]interface{}{
+			"line":   line,
+			"sector": p.currentSectorIndex,
+		},
+		Source: "TWXParser",
+	}
+	
+	// Notify observers
+	p.Notify(event)
+	
+	// Fire to event bus
+	if p.eventBus != nil {
+		p.eventBus.Fire(event)
+	}
+}
+
+// fireMessageEvent fires a message received event
+func (p *TWXParser) fireMessageEvent(msgType MessageType, content, sender string, channel int) {
+	event := Event{
+		Type: EventMessageReceived,
+		Data: map[string]interface{}{
+			"messageType": msgType,
+			"content":     content,
+			"sender":      sender,
+			"channel":     channel,
+		},
+		Source: "TWXParser",
+	}
+	
+	// Notify observers
+	p.Notify(event)
+	
+	// Fire to event bus
+	if p.eventBus != nil {
+		p.eventBus.Fire(event)
+	}
+}
+
+// fireDatabaseUpdateEvent fires a database update event
+func (p *TWXParser) fireDatabaseUpdateEvent(operation string, sectorNum int, data interface{}) {
+	event := Event{
+		Type: EventDatabaseUpdate,
+		Data: map[string]interface{}{
+			"operation": operation,
+			"sector":    sectorNum,
+			"data":      data,
+		},
+		Source: "TWXParser",
+	}
+	
+	// Notify observers
+	p.Notify(event)
+	
+	// Fire to event bus
+	if p.eventBus != nil {
+		p.eventBus.Fire(event)
 	}
 }

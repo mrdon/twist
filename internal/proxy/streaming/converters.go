@@ -293,6 +293,8 @@ func (c *PlayerStatsConverter) ToDatabase(parserStats PlayerStats) database.TPla
 		PlanetScanner: parserStats.PlanetScanner,
 		ScanType:      parserStats.ScanType,
 		ShipClass:     parserStats.ShipClass,
+		CurrentSector: parserStats.CurrentSector,
+		PlayerName:    parserStats.PlayerName,
 	}
 }
 

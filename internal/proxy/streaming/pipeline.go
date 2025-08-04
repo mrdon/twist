@@ -67,7 +67,7 @@ func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db),
+		twxParser:     NewTWXParser(db, tuiAPI),
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
 		batchTimeout:  0,     // No timeout needed
@@ -81,7 +81,7 @@ func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scrip
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db),
+		twxParser:     NewTWXParser(db, tuiAPI),
 		scriptManager: scriptManager,
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
@@ -101,7 +101,7 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db),
+		twxParser:     NewTWXParser(db, tuiAPI),
 		scriptManager: scriptManager,
 		stateManager:  stateManager,
 		gameDetector:  gameDetector,

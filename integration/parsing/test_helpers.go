@@ -30,7 +30,7 @@ func CreateTestParser(t *testing.T) (*streaming.TWXParser, *MockTuiAPI, database
 		t.Fatalf("sectors table was not created during CreateDatabase")
 	}
 	
-	twxParser := streaming.NewTWXParserWithAPI(db, mockAPI)
+	twxParser := streaming.NewTWXParser(db, mockAPI)
 	
 	// Debug: Verify database is still working after parser creation
 	if err := db.GetDB().QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sectors'").Scan(&testCount); err != nil {

@@ -71,6 +71,14 @@ INSERT OR IGNORE INTO player_stats (id) VALUES (1);`,
 -- Add new columns to planets table if they don't exist
 -- These will be handled by a special migration function like figs_type`,
 	},
+	{
+		ID:          6,
+		Description: "Add current game state fields to player_stats (like TWX Database.pas)",
+		SQL: `
+-- Add current_sector and player_name to track current game state
+ALTER TABLE player_stats ADD COLUMN current_sector INTEGER DEFAULT 0;
+ALTER TABLE player_stats ADD COLUMN player_name TEXT DEFAULT '';`,
+	},
 	// Future migrations can be added here
 }
 

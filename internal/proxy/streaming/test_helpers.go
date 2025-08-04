@@ -18,5 +18,5 @@ func NewTestDatabase() database.Database {
 
 // NewTestTWXParser creates a parser with a test database for testing
 func NewTestTWXParser() *TWXParser {
-	return NewTWXParser(NewTestDatabase())
+	return NewTWXParser(NewTestDatabase(), nil)
 }

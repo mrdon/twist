@@ -3,7 +3,6 @@ package components
 import (
 	"fmt"
 	"strings"
-	"time"
 	"twist/internal/api"
 	"twist/internal/debug"
 	"twist/internal/theme"
@@ -18,7 +17,6 @@ type PanelComponent struct {
 	rightWrapper *tview.Flex
 	sectorMap    *SectorMapComponent  // New sector map component
 	proxyAPI     api.ProxyAPI  // API access for game data
-	retryCount   int           // Track retry attempts
 }
 
 // NewPanelComponent creates new panel components
@@ -72,9 +70,9 @@ func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	}
 }
 
-// LoadRealData loads real player and sector data from the API
+// LoadRealData loads real player and sector data from the database (like TWX)
 func (pc *PanelComponent) LoadRealData() {
-	debug.Log("PanelComponent: LoadRealData called (retry count: %d)", pc.retryCount)
+	debug.Log("PanelComponent: LoadRealData called")
 	
 	if pc.proxyAPI == nil {
 		debug.Log("PanelComponent: No proxyAPI available")
@@ -82,7 +80,7 @@ func (pc *PanelComponent) LoadRealData() {
 		return
 	}
 	
-	// Get player info
+	// Get player info from database
 	playerInfo, err := pc.proxyAPI.GetPlayerInfo()
 	if err != nil {
 		debug.Log("PanelComponent: GetPlayerInfo failed: %v", err)
@@ -94,28 +92,10 @@ func (pc *PanelComponent) LoadRealData() {
 	
 	// Check if we have valid sector data
 	if playerInfo.CurrentSector <= 0 {
-		// Limit retries to prevent infinite loops
-		if pc.retryCount >= 5 {
-			debug.Log("PanelComponent: Max retries reached, giving up")
-			pc.setWaitingMessage()
-			return
-		}
-		
-		debug.Log("PanelComponent: Invalid sector number: %d - will retry (attempt %d/5)", playerInfo.CurrentSector, pc.retryCount+1)
+		debug.Log("PanelComponent: Invalid sector number: %d", playerInfo.CurrentSector)
 		pc.setWaitingMessage()
-		pc.retryCount++
-		
-		// Retry after a short delay - player data might not be ready yet
-		go func() {
-			time.Sleep(2 * time.Second)
-			debug.Log("PanelComponent: Retrying LoadRealData after sector data delay")
-			pc.LoadRealData()
-		}()
 		return
 	}
-	
-	// Reset retry count on success
-	pc.retryCount = 0
 	
 	// Get current sector info
 	sectorInfo, err := pc.proxyAPI.GetSectorInfo(playerInfo.CurrentSector)
