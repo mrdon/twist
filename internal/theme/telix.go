@@ -116,6 +116,20 @@ func (t *TelixTheme) PanelColors() PanelColors {
 	}
 }
 
+// SectorMapColors returns the sector map color scheme
+func (t *TelixTheme) SectorMapColors() SectorMapColors {
+	return SectorMapColors{
+		CurrentSectorBg: DOSYellow,        // Bright yellow background for current sector
+		CurrentSectorFg: DOSBlack,         // Black text on yellow background
+		PortSectorBg:    DOSGreen,         // Dark green background for ports
+		PortSectorFg:    DOSWhite,         // White text on green background
+		EmptySectorBg:   DOSBlue,          // Blue background for empty sectors
+		EmptySectorFg:   DOSWhite,         // White text on blue background
+		ConnectionLine:  DOSLightGray,     // Light gray for connection lines
+		MapBackground:   DOSBlack,         // Black background for map area
+	}
+}
+
 // BorderStyle returns the border styling
 func (t *TelixTheme) BorderStyle() BorderStyle {
 	return BorderStyle{

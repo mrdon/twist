@@ -534,13 +534,35 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 }
 
 // HandleCurrentSectorChanged processes sector change events
-func (ta *TwistApp) HandleCurrentSectorChanged(sectorNumber int) {
+func (ta *TwistApp) HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 	ta.app.QueueUpdateDraw(func() {
-		// Update panels with current sector data via API
+		// Update panels directly with sector info (no need to re-fetch)
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			ta.refreshPanelData(sectorNumber)
+			ta.refreshPanelDataWithInfo(sectorInfo)
 		}
 	})
+}
+
+// refreshPanelDataWithInfo refreshes panel data using provided sector info
+func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
+	debug.Log("TwistApp: refreshPanelDataWithInfo called for sector %d, panels visible: %v", sectorInfo.Number, ta.panelsVisible)
+	
+	// Only refresh if panels are visible
+	if !ta.panelsVisible {
+		return
+	}
+	
+	// Update panels directly with the provided sector info
+	debug.Log("TwistApp: Using provided sector info for sector %d, updating panels", sectorInfo.Number)
+	ta.panelComponent.UpdateSectorInfo(sectorInfo)
+	
+	// Create player info with the current sector
+	playerInfo := coreapi.PlayerInfo{
+		Name:          "Player", // We don't have the real name from GetPlayerInfo
+		CurrentSector: sectorInfo.Number,
+	}
+	debug.Log("TwistApp: Using sector-based player info for sector %d", sectorInfo.Number)
+	ta.panelComponent.UpdateTraderInfo(playerInfo)
 }
 
 // refreshPanelData refreshes panel data using API calls

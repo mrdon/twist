@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"time"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 )
 
@@ -20,8 +21,22 @@ func NewSectorConverter() *SectorConverter {
 func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 	dbSector := database.NULLSector()
 	
+	debug.Log("Converter: ToDatabase for sector %d - input warps: %v", parserSector.Index, parserSector.Warps)
+	
 	// Basic sector info
 	dbSector.Warp = parserSector.Warps
+	
+	// Count valid warps for the Warps field
+	validWarps := 0
+	for _, warp := range parserSector.Warps {
+		if warp > 0 {
+			validWarps++
+		}
+	}
+	dbSector.Warps = validWarps
+	
+	debug.Log("Converter: ToDatabase - output dbSector.Warp: %v, dbSector.Warps: %d", 
+		dbSector.Warp, dbSector.Warps)
 	dbSector.Constellation = parserSector.Constellation
 	dbSector.Beacon = parserSector.Beacon
 	dbSector.Density = parserSector.Density

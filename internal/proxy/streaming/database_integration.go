@@ -39,6 +39,10 @@ func (p *TWXParser) saveSectorToDatabase() error {
 		return fmt.Errorf("parser's database GetDB() returned nil")
 	}
 	
+	// Debug: Check what warps we have before conversion
+	debug.Log("TWXParser: Building sector data for sector %d - currentSectorWarps: %v", 
+		p.currentSectorIndex, p.currentSectorWarps)
+	
 	// Build complete sector data from current parsing context
 	sectorData := SectorData{
 		Index:         p.currentSectorIndex,
@@ -54,6 +58,8 @@ func (p *TWXParser) saveSectorToDatabase() error {
 		Products:      append([]ProductInfo{}, p.currentProducts...),
 		Explored:      true,
 	}
+	
+	debug.Log("TWXParser: SectorData.Warps before conversion: %v", sectorData.Warps)
 	
 	// Convert to database format using converter
 	converter := NewSectorConverter()

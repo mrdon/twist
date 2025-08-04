@@ -69,6 +69,18 @@ type PanelColors struct {
 	HeaderFg        tcell.Color
 }
 
+// SectorMapColors defines color scheme for sector map display
+type SectorMapColors struct {
+	CurrentSectorBg    tcell.Color // Background for current sector
+	CurrentSectorFg    tcell.Color // Text color for current sector
+	PortSectorBg       tcell.Color // Background for sectors with ports/traders
+	PortSectorFg       tcell.Color // Text color for sectors with ports
+	EmptySectorBg      tcell.Color // Background for empty sectors
+	EmptySectorFg      tcell.Color // Text color for empty sectors
+	ConnectionLine     tcell.Color // Color for connection lines between sectors
+	MapBackground      tcell.Color // Background for the entire map area
+}
+
 // BorderStyle defines border styling options
 type BorderStyle struct {
 	Color       tcell.Color
@@ -89,6 +101,7 @@ type Theme interface {
 	TerminalColors() TerminalColors
 	StatusColors() StatusColors
 	PanelColors() PanelColors
+	SectorMapColors() SectorMapColors
 	
 	// Border styling
 	BorderStyle() BorderStyle

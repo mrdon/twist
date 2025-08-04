@@ -87,6 +87,7 @@ type SectorInfo struct {
 	Constellation string `json:"constellation"`  // Constellation name
 	Beacon        string `json:"beacon"`         // Beacon text
 	Warps         []int  `json:"warps"`          // Warp connections to other sectors
+	PortType      string `json:"port_type"`      // Port type (BBS, SSS, etc.) if HasTraders > 0
 }
 
 // DatabaseStateInfo provides information about database loading/unloading

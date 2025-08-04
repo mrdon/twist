@@ -158,45 +158,61 @@ func (pc *PanelComponent) showTestTraderInfo() {
 // UpdateTraderInfo updates the trader information panel using API PlayerInfo
 func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 	var info strings.Builder
-	info.WriteString("[yellow]Player Info[-]\n\n")
 	
-	if playerInfo.Name != "" {
-		info.WriteString(fmt.Sprintf("Name: %s\n", playerInfo.Name))
-	} else {
-		info.WriteString("Name: [gray]Unknown[-]\n")
+	// Helper function to format a labeled line with proper alignment (no backgrounds)
+	formatLine := func(label, value, valueColor string) string {
+		// Pad label to fit the layout, right-align the colon and value
+		return fmt.Sprintf("%-12s : [%s]%s[-]\n", label, valueColor, value)
 	}
 	
-	info.WriteString(fmt.Sprintf("Current Sector: [cyan]%d[-]\n\n", playerInfo.CurrentSector))
+	// Header section - simple yellow text
+	info.WriteString("[yellow]Trader Info[-]\n\n")
 	
 	// Get current sector details if available
+	var sectorInfo api.SectorInfo
+	var hasSectorInfo bool
 	if pc.proxyAPI != nil {
-		sectorInfo, err := pc.proxyAPI.GetSectorInfo(playerInfo.CurrentSector)
-		if err == nil {
-			info.WriteString("[green]Sector Details[-]\n")
-			if sectorInfo.Constellation != "" {
-				info.WriteString(fmt.Sprintf("Constellation: %s\n", sectorInfo.Constellation))
-			}
-			if sectorInfo.NavHaz > 0 {
-				info.WriteString(fmt.Sprintf("Nav Hazard: [red]%d[-]\n", sectorInfo.NavHaz))
-			}
-			if sectorInfo.HasTraders > 0 {
-				info.WriteString(fmt.Sprintf("Traders: [yellow]%d[-]\n", sectorInfo.HasTraders))
-			}
-			if sectorInfo.Beacon != "" {
-				info.WriteString(fmt.Sprintf("Beacon: [cyan]%s[-]\n", sectorInfo.Beacon))
-			}
-			if len(sectorInfo.Warps) > 0 {
-				info.WriteString("Warps: ")
-				for i, warp := range sectorInfo.Warps {
-					if i > 0 {
-						info.WriteString(", ")
-					}
-					info.WriteString(fmt.Sprintf("%d", warp))
-				}
-				info.WriteString("\n")
-			}
+		if si, err := pc.proxyAPI.GetSectorInfo(playerInfo.CurrentSector); err == nil {
+			sectorInfo = si
+			hasSectorInfo = true
 		}
 	}
+	
+	// Top section - just sector, credits, turns
+	sectorValue := fmt.Sprintf("%d", playerInfo.CurrentSector)
+	info.WriteString(formatLine("Sector", sectorValue, "cyan"))
+	info.WriteString(formatLine("Credits", "?", "gray"))
+	info.WriteString(formatLine("Turns", "?", "gray"))
+	
+	// Cargo section 
+	info.WriteString("\n[yellow]Cargo[-]\n")
+	info.WriteString(formatLine("Fuel Ore", "?", "gray"))
+	info.WriteString(formatLine("Organics", "?", "gray"))
+	info.WriteString(formatLine("Equipment", "?", "gray"))
+	info.WriteString(formatLine("Colonists", "?", "gray"))
+	info.WriteString(formatLine("Empty", "?", "gray"))
+	
+	// Traders in sector
+	if hasSectorInfo && sectorInfo.HasTraders > 0 {
+		info.WriteString(fmt.Sprintf("\n[white]%d Trader(s) are here.[-]\n", sectorInfo.HasTraders))
+	}
+	
+	// Beacon
+	if hasSectorInfo && sectorInfo.Beacon != "" {
+		info.WriteString(formatLine("Beacon", sectorInfo.Beacon, "cyan"))
+	}
+	
+	// Ship Info section
+	info.WriteString("\n[yellow]Ship Info[-]\n")
+	info.WriteString(formatLine("Ship Type", "?", "gray"))
+	info.WriteString(formatLine("Fighters", "?", "gray"))
+	info.WriteString(formatLine("Shields", "?", "gray"))
+	info.WriteString(formatLine("Holds", "?/?", "gray"))
+	info.WriteString(formatLine("Photons", "?", "gray"))
+	info.WriteString(formatLine("Armids", "?", "gray"))
+	info.WriteString(formatLine("Limpets", "?", "gray"))
+	info.WriteString(formatLine("Alignment", "?", "gray"))
+	info.WriteString(formatLine("Experience", "?", "gray"))
 	
 	pc.leftView.SetText(info.String())
 }
@@ -204,7 +220,7 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 // UpdateSectorInfo updates the sector map with current sector info
 func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
 	if pc.sectorMap != nil {
-		pc.sectorMap.UpdateCurrentSector(sector.Number)
+		pc.sectorMap.UpdateCurrentSectorWithInfo(sector)
 	}
 }
 

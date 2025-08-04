@@ -3,6 +3,7 @@ package streaming
 import (
 	"strings"
 	"time"
+	"twist/internal/ansi"
 	"twist/internal/api"
 	"twist/internal/debug"
 	"twist/internal/proxy/database"
@@ -224,6 +225,7 @@ type TWXParser struct {
 	currentANSILine string
 	rawANSILine     string
 	inANSI          bool
+	ansiStripper    *ansi.StreamingStripper // Handles ANSI sequences across chunks
 
 	// State tracking (mirrors TWX Pascal state)
 	currentDisplay       DisplayType
@@ -289,6 +291,7 @@ func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 		currentANSILine:  "",
 		rawANSILine:      "",
 		inANSI:           false,
+		ansiStripper:     ansi.NewStreamingStripper(),
 		currentDisplay:   DisplayNone,
 		sectorPosition:   SectorPosNormal,
 		lastWarp:         0,
@@ -498,29 +501,11 @@ func (p *TWXParser) Finalize() {
 
 // stripANSI removes ANSI escape sequences (mirrors TWX Pascal logic)
 func (p *TWXParser) stripANSI(s *string) {
-	result := strings.Builder{}
-	inEscape := false
-
 	// Remove bells first
 	*s = strings.ReplaceAll(*s, "\x07", "")
-
-	for _, char := range *s {
-		if char == '\x1b' { // ESC character
-			inEscape = true
-			continue
-		}
-
-		if !inEscape {
-			result.WriteRune(char)
-		}
-
-		// Check for end of ANSI sequence
-		if inEscape && ((char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z')) {
-			inEscape = false
-		}
-	}
-
-	*s = result.String()
+	
+	// Use streaming ANSI stripper to handle sequences split across chunks
+	*s = p.ansiStripper.StripChunk(*s)
 }
 
 // processLine processes a complete line (mirrors TWX Pascal ProcessLine)
@@ -2155,50 +2140,73 @@ func (p *TWXParser) parseWarpConnections(warpData string) {
 	// Initialize warps array
 	var warps [6]int
 	
+	// First, strip ANSI color codes to avoid parsing issues
+	warpData = ansi.StripString(warpData)
+	debug.Log("TWXParser: After ANSI stripping: %q", warpData)
+	
 	// Clean up the warp data - remove parentheses and split on various delimiters
 	warpData = strings.ReplaceAll(warpData, "(", "")
 	warpData = strings.ReplaceAll(warpData, ")", "")
 	warpData = strings.TrimSpace(warpData)
+	debug.Log("TWXParser: After cleanup: %q", warpData)
 	
 	// Split on both " - " and ", " to handle different formats
 	var warpStrs []string
 	if strings.Contains(warpData, " - ") {
 		warpStrs = strings.Split(warpData, " - ")
+		debug.Log("TWXParser: Split on ' - ', got %d parts: %v", len(warpStrs), warpStrs)
 	} else if strings.Contains(warpData, ", ") {
 		warpStrs = strings.Split(warpData, ", ")
+		debug.Log("TWXParser: Split on ', ', got %d parts: %v", len(warpStrs), warpStrs)
 	} else {
 		// Single warp or space-separated
 		warpStrs = strings.Fields(warpData)
+		debug.Log("TWXParser: Split on whitespace, got %d parts: %v", len(warpStrs), warpStrs)
 	}
 	
 	// Parse and validate each warp sector number
 	warpIndex := 0
-	for _, warpStr := range warpStrs {
+	for i, warpStr := range warpStrs {
 		warpStr = strings.TrimSpace(warpStr)
+		debug.Log("TWXParser: Processing warp string %d: %q", i, warpStr)
 		if warpStr != "" && warpIndex < 6 {
-			if warpNum := p.parseIntSafe(warpStr); warpNum > 0 {
+			warpNum := p.parseIntSafe(warpStr)
+			debug.Log("TWXParser: Parsed warp string %q to number: %d", warpStr, warpNum)
+			if warpNum > 0 {
 				// Validate warp sector number (must be reasonable range)
 				if p.validateWarpSector(warpNum) {
+					debug.Log("TWXParser: Warp %d passed validation", warpNum)
 					// Check for duplicates in current warp list
 					if !p.containsWarp(warps[:warpIndex], warpNum) {
 						warps[warpIndex] = warpNum
-						debug.Log("TWXParser: Found warp %d: %d", warpIndex+1, warpNum)
+						debug.Log("TWXParser: Added warp %d at index %d", warpNum, warpIndex)
 						warpIndex++
 					} else {
 						debug.Log("TWXParser: Duplicate warp %d ignored", warpNum)
 					}
 				} else {
-					debug.Log("TWXParser: Invalid warp sector %d ignored", warpNum)
+					debug.Log("TWXParser: Invalid warp sector %d ignored (failed validation)", warpNum)
 				}
+			} else {
+				debug.Log("TWXParser: Failed to parse warp string %q (got %d)", warpStr, warpNum)
+			}
+		} else {
+			if warpStr == "" {
+				debug.Log("TWXParser: Empty warp string at position %d", i)
+			} else if warpIndex >= 6 {
+				debug.Log("TWXParser: Too many warps, ignoring %q (already have %d)", warpStr, warpIndex)
 			}
 		}
 	}
 	
+	debug.Log("TWXParser: Before sorting, warps array: %v", warps[:warpIndex])
 	// Sort warps for consistency (mirrors Pascal AddWarp insertion sort logic)
 	p.sortWarps(warps[:warpIndex])
+	debug.Log("TWXParser: After sorting, warps array: %v", warps[:warpIndex])
 	
 	// Store the warps in the current sector data
 	p.currentSectorWarps = warps
+	debug.Log("TWXParser: Final currentSectorWarps array: %v", p.currentSectorWarps)
 	debug.Log("TWXParser: Stored %d validated warps for sector %d", warpIndex, p.currentSectorIndex)
 	
 	// Update reverse warp connections in database for advanced pathfinding
@@ -2209,22 +2217,20 @@ func (p *TWXParser) parseWarpConnections(warpData string) {
 func (p *TWXParser) validateWarpSector(sectorNum int) bool {
 	// Basic validation - sector must be positive and within reasonable bounds
 	if sectorNum <= 0 {
+		debug.Log("TWXParser: Warp validation failed - sector %d <= 0", sectorNum)
 		return false
 	}
 	
-	// If we have database access, validate against actual sector count  
-	if p.database != nil {
-		maxSectors := p.database.GetSectors()
-		if maxSectors > 0 && sectorNum > maxSectors {
-			return false
-		}
-	}
+	// NOTE: Don't validate against database max sectors as it prevents discovering new sectors
+	// The database only knows about sectors that have already been visited/parsed
 	
-	// Reasonable upper bound check (TWX universes typically don't exceed 100k sectors)
-	if sectorNum > 100000 {
+	// Reasonable upper bound check (Trade Wars maximum is 20,000 sectors)
+	if sectorNum > 20000 {
+		debug.Log("TWXParser: Warp validation failed - sector %d > 20000", sectorNum)
 		return false
 	}
 	
+	debug.Log("TWXParser: Warp sector %d passed validation", sectorNum)
 	return true
 }
 

@@ -13,7 +13,7 @@ type TwistApp interface {
 	HandleScriptStatusChanged(status coreapi.ScriptStatusInfo)
 	HandleScriptError(scriptName string, err error)
 	HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo)
-	HandleCurrentSectorChanged(sectorNumber int)
+	HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -85,7 +85,7 @@ func (tui *TuiApiImpl) OnDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 // Game state event methods - simple sector change handler
 func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 	debug.Log("TuiApiImpl: OnCurrentSectorChanged called - sectorInfo: %+v", sectorInfo)
-	go tui.app.HandleCurrentSectorChanged(sectorInfo.Number)
+	go tui.app.HandleCurrentSectorChanged(sectorInfo)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially
