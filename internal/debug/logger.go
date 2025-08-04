@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -15,13 +16,33 @@ type Logger struct {
 
 var globalLogger *Logger
 
+// isTestMode detects if we're running in test mode
+func isTestMode() bool {
+	// Check if any argument contains "test" (e.g., go test, _test, etc.)
+	for _, arg := range os.Args {
+		if strings.Contains(arg, "test") || strings.HasSuffix(arg, ".test") {
+			return true
+		}
+	}
+	return false
+}
+
 // init creates the global debug logger
 func init() {
 	var err error
-	globalLogger, err = NewLogger("twist_debug.log")
-	if err != nil {
-		// Disable logging if we can't create the log file (don't write to stdout in TUI mode)
-		globalLogger = nil
+	if isTestMode() {
+		// In test mode, log to stdout
+		globalLogger = &Logger{
+			file:   os.Stdout,
+			logger: log.New(os.Stdout, "[DEBUG] ", log.LstdFlags|log.Lmicroseconds),
+		}
+	} else {
+		// In normal mode, log to file
+		globalLogger, err = NewLogger("twist_debug.log")
+		if err != nil {
+			// Disable logging if we can't create the log file (don't write to stdout in TUI mode)
+			globalLogger = nil
+		}
 	}
 }
 

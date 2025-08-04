@@ -94,15 +94,72 @@ type TShip struct {
 	Figs     int    `json:"figs"`      // LongInt in TWX
 }
 
-// TPlanet matches TWX TPlanet record
+// TPlanet matches TWX TPlanet record with parser enhancements
 type TPlanet struct {
-	Name string `json:"name"` // string[40] in TWX
+	Name     string `json:"name"`     // string[40] in TWX
+	Owner    string `json:"owner"`    // Enhanced from parser
+	Fighters int    `json:"fighters"` // Enhanced from parser
+	Citadel  bool   `json:"citadel"`  // Enhanced from parser  
+	Stardock bool   `json:"stardock"` // Enhanced from parser
 }
 
 // TSectorVar matches TWX TSectorVar record
 type TSectorVar struct {
 	VarName string `json:"var_name"` // string[10] in TWX
 	Value   string `json:"value"`    // string[40] in TWX
+}
+
+// TMessageType represents different message categories (matches parser)
+type TMessageType int
+
+const (
+	TMessageGeneral TMessageType = iota
+	TMessageFighter
+	TMessageComputer
+	TMessageRadio
+	TMessageFedlink
+	TMessagePlanet
+)
+
+// TMessageHistory holds historical message data (matches parser)
+type TMessageHistory struct {
+	Type      TMessageType `json:"type"`
+	Timestamp time.Time    `json:"timestamp"`
+	Content   string       `json:"content"`
+	Sender    string       `json:"sender"`
+	Channel   int          `json:"channel"`
+}
+
+// TPlayerStats holds current player statistics (matches parser)
+type TPlayerStats struct {
+	Turns         int    `json:"turns"`
+	Credits       int    `json:"credits"`
+	Fighters      int    `json:"fighters"`
+	Shields       int    `json:"shields"`
+	TotalHolds    int    `json:"total_holds"`
+	OreHolds      int    `json:"ore_holds"`
+	OrgHolds      int    `json:"org_holds"`
+	EquHolds      int    `json:"equ_holds"`
+	ColHolds      int    `json:"col_holds"`
+	Photons       int    `json:"photons"`
+	Armids        int    `json:"armids"`
+	Limpets       int    `json:"limpets"`
+	GenTorps      int    `json:"gen_torps"`
+	TwarpType     int    `json:"twarp_type"`
+	Cloaks        int    `json:"cloaks"`
+	Beacons       int    `json:"beacons"`
+	Atomics       int    `json:"atomics"`
+	Corbomite     int    `json:"corbomite"`
+	Eprobes       int    `json:"eprobes"`
+	MineDisr      int    `json:"mine_disr"`
+	Alignment     int    `json:"alignment"`
+	Experience    int    `json:"experience"`
+	Corp          int    `json:"corp"`
+	ShipNumber    int    `json:"ship_number"`
+	PsychicProbe  bool   `json:"psychic_probe"`
+	PlanetScanner bool   `json:"planet_scanner"`
+	ScanType      int    `json:"scan_type"`
+	ShipClass     string `json:"ship_class"`
 }
 
 // Helper functions matching TWX behavior
@@ -167,6 +224,10 @@ func NULLShip() TShip {
 // NULLPlanet initializes a planet with TWX default values
 func NULLPlanet() TPlanet {
 	return TPlanet{
-		Name: "",
+		Name:     "",
+		Owner:    "",
+		Fighters: 0,
+		Citadel:  false,
+		Stardock: false,
 	}
 }

@@ -359,7 +359,8 @@ func (p *Proxy) SetCurrentSector(sectorNum int) {
 	
 	// Trigger callback if sector changed and TuiAPI is available
 	if shouldCallback {
-		go currentTuiAPI.OnCurrentSectorChanged(sectorNum)
+		sectorInfo := api.SectorInfo{Number: sectorNum}
+		go currentTuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}
 }
 

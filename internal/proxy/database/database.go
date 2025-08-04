@@ -20,6 +20,9 @@ type Database interface {
 	SaveSector(sector TSector, index int) error
 	LoadSector(index int) (TSector, error)
 	
+	// Enhanced SaveSector with collections (Pascal-compliant signature)
+	SaveSectorWithCollections(sector TSector, index int, ships []TShip, traders []TTrader, planets []TPlanet) error
+	
 	// TWX compatibility methods
 	GetDatabaseOpen() bool
 	GetSectors() int
@@ -27,6 +30,15 @@ type Database interface {
 	// Script variable operations
 	SaveScriptVariable(name string, value interface{}) error
 	LoadScriptVariable(name string) (interface{}, error)
+	
+	// Parser integration methods
+	SavePlayerStats(stats TPlayerStats) error
+	LoadPlayerStats() (TPlayerStats, error)
+	AddMessageToHistory(message TMessageHistory) error
+	GetMessageHistory(limit int) ([]TMessageHistory, error)
+	
+	// Fighter management
+	ResetPersonalCorpFighters() error
 	
 	// Modern additions
 	BeginTransaction() error
@@ -108,14 +120,25 @@ func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
 	
-	// Create schema
+	// Test the connection
+	if err = d.db.Ping(); err != nil {
+		return fmt.Errorf("failed to ping database: %w", err)
+	}
+	
+	// Create complete schema (no migrations for new app)
 	if err = d.createSchema(); err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
 	
-	// Run migrations
-	if err = d.runMigrations(); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+	// Validate schema was created correctly
+	if err = d.validateSchema(); err != nil {
+		return fmt.Errorf("schema validation failed: %w", err)
+	}
+	
+	// Get sector count
+	d.sectors, err = d.getSectorCount()
+	if err != nil {
+		return fmt.Errorf("failed to get sector count: %w", err)
 	}
 	
 	// Prepare statements for performance
@@ -125,7 +148,6 @@ func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	
 	d.filename = filename
 	d.dbOpen = true
-	d.sectors = 0
 	
 	return nil
 }
@@ -222,6 +244,22 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		return fmt.Errorf("invalid sector index: %d", index)
 	}
 	
+	// Debug: Verify database connection and table existence
+	if d.db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	// Test a simple query to ensure the connection works
+	var tableCount int
+	if err := d.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sectors'").Scan(&tableCount); err != nil {
+		return fmt.Errorf("failed to query sqlite_master: %w", err)  
+	}
+	
+	if tableCount == 0 {
+		return fmt.Errorf("sectors table does not exist (found %d tables named 'sectors')", tableCount)
+	}
+	
+	
 	// Start transaction if not already in one
 	shouldCommit := false
 	if d.tx == nil {
@@ -234,8 +272,25 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 	// Update timestamp
 	sector.UpDate = time.Now()
 	
-	// Save main sector data
-	_, err := d.saveSectorStmt.Exec(
+	// Save main sector data using direct SQL for debugging
+	saveQuery := `
+	INSERT OR REPLACE INTO sectors (
+		sector_index,
+		warp1, warp2, warp3, warp4, warp5, warp6,
+		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
+		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
+		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
+		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
+		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
+		figs_quantity, figs_owner, figs_type,
+		mines_armid_quantity, mines_armid_owner,
+		mines_limpet_quantity, mines_limpet_owner
+	) VALUES (
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+	);`
+	
+	_, err := d.tx.Exec(saveQuery,
 		index,
 		sector.Warp[0], sector.Warp[1], sector.Warp[2],
 		sector.Warp[3], sector.Warp[4], sector.Warp[5],
@@ -267,6 +322,86 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		return fmt.Errorf("failed to save related data for sector %d: %w", index, err)
 	}
 	
+	
+	if shouldCommit {
+		return d.CommitTransaction()
+	}
+	
+	return nil
+}
+
+// SaveSectorWithCollections stores a sector with explicit collections (Pascal-compliant signature)
+// This mirrors Pascal TWX: SaveSector(FCurrentSector, FCurrentSectorIndex, FShipList, FTraderList, FPlanetList)
+func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, ships []TShip, traders []TTrader, planets []TPlanet) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+	
+	if index <= 0 {
+		return fmt.Errorf("invalid sector index: %d", index)
+	}
+	
+	// Start transaction for atomic operation
+	shouldCommit := false
+	if d.tx == nil {
+		if err := d.BeginTransaction(); err != nil {
+			return err
+		}
+		shouldCommit = true
+	}
+	
+	// Update timestamp
+	sector.UpDate = time.Now()
+	
+	// Save main sector data (without embedded collections)
+	saveQuery := `
+	INSERT OR REPLACE INTO sectors (
+		sector_index,
+		warp1, warp2, warp3, warp4, warp5, warp6,
+		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
+		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
+		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
+		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
+		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
+		figs_quantity, figs_owner, figs_type,
+		mines_armid_quantity, mines_armid_owner,
+		mines_limpet_quantity, mines_limpet_owner
+	) VALUES (
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+	);`
+	
+	_, err := d.tx.Exec(saveQuery,
+		index,
+		sector.Warp[0], sector.Warp[1], sector.Warp[2],
+		sector.Warp[3], sector.Warp[4], sector.Warp[5],
+		sector.Constellation, sector.Beacon, sector.NavHaz,
+		sector.Density, sector.Anomaly, sector.Warps, int(sector.Explored),
+		sector.UpDate,
+		sector.SPort.Name, sector.SPort.Dead, sector.SPort.ClassIndex,
+		sector.SPort.BuildTime, sector.SPort.UpDate,
+		sector.SPort.BuyProduct[0], sector.SPort.BuyProduct[1], sector.SPort.BuyProduct[2],
+		sector.SPort.ProductPercent[0], sector.SPort.ProductPercent[1], sector.SPort.ProductPercent[2],
+		sector.SPort.ProductAmount[0], sector.SPort.ProductAmount[1], sector.SPort.ProductAmount[2],
+		sector.Figs.Quantity, sector.Figs.Owner, int(sector.Figs.FigType),
+		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
+		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
+	)
+	
+	if err != nil {
+		if shouldCommit {
+			d.RollbackTransaction()
+		}
+		return fmt.Errorf("failed to save sector %d: %w", index, err)
+	}
+	
+	// Save collections with explicit parameters (Pascal-compliant approach)
+	if err = d.saveSectorCollectionsWithParams(index, ships, traders, planets); err != nil {
+		if shouldCommit {
+			d.RollbackTransaction()
+		}
+		return fmt.Errorf("failed to save collections for sector %d: %w", index, err)
+	}
 	
 	if shouldCommit {
 		return d.CommitTransaction()
@@ -409,4 +544,145 @@ func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
 		// Default to string for unknown types
 		return stringValue, nil
 	}
+}
+
+// SavePlayerStats saves current player statistics to database
+func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+
+	query := `
+	INSERT OR REPLACE INTO player_stats (
+		id, turns, credits, fighters, shields, total_holds, ore_holds, org_holds, equ_holds, col_holds,
+		photons, armids, limpets, gen_torps, twarp_type, cloaks, beacons, atomics, corbomite, eprobes,
+		mine_disr, alignment, experience, corp, ship_number, psychic_probe, planet_scanner, scan_type,
+		ship_class, updated_at
+	) VALUES (
+		1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP
+	);`
+
+	_, err := d.db.Exec(query,
+		stats.Turns, stats.Credits, stats.Fighters, stats.Shields, stats.TotalHolds,
+		stats.OreHolds, stats.OrgHolds, stats.EquHolds, stats.ColHolds, stats.Photons,
+		stats.Armids, stats.Limpets, stats.GenTorps, stats.TwarpType, stats.Cloaks,
+		stats.Beacons, stats.Atomics, stats.Corbomite, stats.Eprobes, stats.MineDisr,
+		stats.Alignment, stats.Experience, stats.Corp, stats.ShipNumber, stats.PsychicProbe,
+		stats.PlanetScanner, stats.ScanType, stats.ShipClass,
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to save player stats: %w", err)
+	}
+
+	return nil
+}
+
+// LoadPlayerStats loads current player statistics from database
+func (d *SQLiteDatabase) LoadPlayerStats() (TPlayerStats, error) {
+	if !d.dbOpen {
+		return TPlayerStats{}, fmt.Errorf("database not open")
+	}
+
+	query := `
+	SELECT turns, credits, fighters, shields, total_holds, ore_holds, org_holds, equ_holds, col_holds,
+		   photons, armids, limpets, gen_torps, twarp_type, cloaks, beacons, atomics, corbomite, eprobes,
+		   mine_disr, alignment, experience, corp, ship_number, psychic_probe, planet_scanner, scan_type,
+		   ship_class
+	FROM player_stats WHERE id = 1;`
+
+	var stats TPlayerStats
+	err := d.db.QueryRow(query).Scan(
+		&stats.Turns, &stats.Credits, &stats.Fighters, &stats.Shields, &stats.TotalHolds,
+		&stats.OreHolds, &stats.OrgHolds, &stats.EquHolds, &stats.ColHolds, &stats.Photons,
+		&stats.Armids, &stats.Limpets, &stats.GenTorps, &stats.TwarpType, &stats.Cloaks,
+		&stats.Beacons, &stats.Atomics, &stats.Corbomite, &stats.Eprobes, &stats.MineDisr,
+		&stats.Alignment, &stats.Experience, &stats.Corp, &stats.ShipNumber, &stats.PsychicProbe,
+		&stats.PlanetScanner, &stats.ScanType, &stats.ShipClass,
+	)
+
+	if err == sql.ErrNoRows {
+		// Return empty stats if none exist
+		return TPlayerStats{}, nil
+	} else if err != nil {
+		return TPlayerStats{}, fmt.Errorf("failed to load player stats: %w", err)
+	}
+
+	return stats, nil
+}
+
+// AddMessageToHistory adds a message to the message history
+func (d *SQLiteDatabase) AddMessageToHistory(message TMessageHistory) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+
+	query := `
+	INSERT INTO message_history (message_type, timestamp, content, sender, channel)
+	VALUES (?, ?, ?, ?, ?);`
+
+	_, err := d.db.Exec(query, int(message.Type), message.Timestamp, message.Content, message.Sender, message.Channel)
+	if err != nil {
+		return fmt.Errorf("failed to add message to history: %w", err)
+	}
+
+	return nil
+}
+
+// GetMessageHistory retrieves recent messages from history
+func (d *SQLiteDatabase) GetMessageHistory(limit int) ([]TMessageHistory, error) {
+	if !d.dbOpen {
+		return nil, fmt.Errorf("database not open")
+	}
+
+	if limit <= 0 {
+		limit = 100 // Default limit
+	}
+
+	query := `
+	SELECT message_type, timestamp, content, sender, channel
+	FROM message_history
+	ORDER BY timestamp DESC
+	LIMIT ?;`
+
+	rows, err := d.db.Query(query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get message history: %w", err)
+	}
+	defer rows.Close()
+
+	var messages []TMessageHistory
+	for rows.Next() {
+		var message TMessageHistory
+		var messageType int
+		
+		if err := rows.Scan(&messageType, &message.Timestamp, &message.Content, &message.Sender, &message.Channel); err != nil {
+			return nil, fmt.Errorf("failed to scan message: %w", err)
+		}
+		
+		message.Type = TMessageType(messageType)
+		messages = append(messages, message)
+	}
+
+	return messages, nil
+}
+
+// ResetPersonalCorpFighters clears all personal and corp fighter deployments (mirrors TWX Pascal ResetFigDatabase)
+func (d *SQLiteDatabase) ResetPersonalCorpFighters() error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+
+	// Update all sectors to clear fighters where owner is personal or corp
+	query := `
+	UPDATE sectors 
+	SET figs_quantity = 0, figs_owner = '', figs_type = 3
+	WHERE figs_owner IN ('yours', 'belong to your Corp');`
+
+	_, err := d.db.Exec(query)
+	if err != nil {
+		return fmt.Errorf("failed to reset personal/corp fighters: %w", err)
+	}
+
+	return nil
 }

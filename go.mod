@@ -11,6 +11,7 @@ require (
 )
 
 require (
+	github.com/alecthomas/participle/v2 v2.1.4 // indirect
 	github.com/gdamore/encoding v1.0.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect

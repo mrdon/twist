@@ -78,8 +78,8 @@ func (tui *TuiApiImpl) OnDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 }
 
 // Game state event methods - simple sector change handler
-func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorNumber int) {
-	go tui.app.HandleCurrentSectorChanged(sectorNumber)
+func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
+	go tui.app.HandleCurrentSectorChanged(sectorInfo.Number)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

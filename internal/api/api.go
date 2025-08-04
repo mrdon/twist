@@ -41,7 +41,7 @@ type TuiAPI interface {
 	OnDatabaseStateChanged(info DatabaseStateInfo)
 	
 	// Game State Events (Phase 4.3 - MINIMAL)
-	OnCurrentSectorChanged(sectorNumber int) // Simple sector change callback
+	OnCurrentSectorChanged(sectorInfo SectorInfo) // Sector change callback with full sector information
 }
 
 // ConnectionStatus represents the current connection state

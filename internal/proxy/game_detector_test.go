@@ -529,3 +529,72 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 		}
 	})
 }
+
+// TestGameDetector_ConfigScreenBug tests the specific bug where 'v' config screen
+// contains "TWGS v" text that incorrectly triggers game exit detection
+func TestGameDetector_ConfigScreenBug(t *testing.T) {
+	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	gd := NewGameDetector(connInfo)
+	defer gd.Close()
+
+	// First, set up an active game session
+	gd.ProcessLine("Select a game :")
+	gd.ProcessLine("<A> Alien Retribution\n")
+	gd.ProcessUserInput("A") // User selects game
+	gd.ProcessLine("Show today's log? (Y/N)")
+	
+	// Verify we're in an active game
+	if gd.GetState() != StateGameActive {
+		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
+	}
+	if gd.GetCurrentGame() != "Alien Retribution" {
+		t.Fatalf("Expected game 'Alien Retribution', got %q", gd.GetCurrentGame())
+	}
+
+	// Now user presses 'v' to view config - this should be processed as user input to the game
+	// The server responds with the config screen which contains "TWGS v" text
+	configText := `         Trade Wars 2002 Game Configuration and Status
+
+ Initial Turns per day 25000, fighters 2500, credits 1,000,000, holds 75.
+ Inactive players will be deleted after 30 days.
+ Maximum players 200, sectors 20000, ports 8000, planets 4000.
+ The Maximum number of Planets per sector: 6,  Traders on a Corp: 5,
+                Ships per FedSpace Sector: 5.
+
+         Photon Missile Wave duration is 20 seconds.
+         Ver# 3.34b Gold running under TWGS v2.
+         This game is registered to DarkMatter.
+
+         This game has been running for 35 days.
+
+-=-=-=-  Current Stats for 12:51:30 PM Sun Aug 03, 2053 -=-=-=-
+
+ 7,610 ports are open for business and have a net worth of 1,504,191,306.
+ 27 planets exist in the universe, 70% have Citadels.
+ 6 Traders (100% Good) are active in the game.
+ 44,150,065 Fighters and 2,460 Mines are in use throughout the Universe.
+ 2 Corporations are in business.
+
+Command [TL=00:00:00]:[2142] (?=Help)? : `
+
+	// Process the config screen output from server
+	gd.ProcessLine(configText)
+	
+	// BUG: The game detector should NOT change state due to "TWGS v" in the config text
+	// The game should still be active because we're just viewing config within the game
+	if gd.GetState() != StateGameActive {
+		t.Errorf("BUG: Config screen text caused game state to change from StateGameActive to %v", gd.GetState())
+		t.Errorf("The 'TWGS v' text in config screen was incorrectly interpreted as main menu")
+	}
+	if gd.GetCurrentGame() != "Alien Retribution" {
+		t.Errorf("BUG: Config screen text caused current game to change from 'Alien Retribution' to %q", gd.GetCurrentGame())
+	}
+
+	// The user should still be in the active game and be able to continue playing
+	// For example, they should be able to enter another command
+	gd.ProcessLine("Command [TL=00:00:00]:[2142] (?=Help)? : ")
+	
+	if gd.GetState() != StateGameActive {
+		t.Errorf("Game should still be active after config screen, got %v", gd.GetState())
+	}
+}

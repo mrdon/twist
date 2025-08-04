@@ -536,10 +536,6 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 // HandleCurrentSectorChanged processes sector change events
 func (ta *TwistApp) HandleCurrentSectorChanged(sectorNumber int) {
 	ta.app.QueueUpdateDraw(func() {
-		// Output sector change to terminal
-		msg := fmt.Sprintf("Entered sector %d\n", sectorNumber)
-		ta.terminalComponent.Write([]byte(msg))
-		
 		// Update panels with current sector data via API
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
 			ta.refreshPanelData(sectorNumber)

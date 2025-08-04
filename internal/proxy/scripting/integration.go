@@ -5,6 +5,7 @@ import (
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/constants"
 	"twist/internal/proxy/scripting/types"
+	"twist/internal/proxy/scripting/vm"
 )
 
 // ProxyInterface defines methods for sending commands to the game server
@@ -381,6 +382,43 @@ func (sm *ScriptManager) ProcessGameLine(line string) error {
 // ProcessOutgoingText processes outgoing text through triggers
 func (sm *ScriptManager) ProcessOutgoingText(text string) error {
 	return sm.engine.ProcessTextOut(text)
+}
+
+// ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
+func (sm *ScriptManager) ActivateTriggers() error {
+	// In Pascal TWX, ActivateTriggers processes delay triggers and reactivates disabled triggers
+	// For now, we'll process delay triggers which is the main functionality
+	return sm.engine.GetTriggerManager().ProcessDelayTriggers()
+}
+
+// ProcessAutoText processes auto text events (mirrors Pascal TWXInterpreter.AutoTextEvent)
+func (sm *ScriptManager) ProcessAutoText(text string) error {
+	// Process auto text triggers - these are triggers that automatically respond to text
+	triggerManager := sm.engine.GetTriggerManager()
+	
+	// Get all auto text triggers and process them
+	autoTextTriggers := triggerManager.GetTriggersByType(types.TriggerAutoText)
+	
+	for _, trigger := range autoTextTriggers {
+		if trigger.Matches(text) {
+			// Auto text triggers need a VM context to execute
+			// We'll use the first running script's VM, or create a temporary one
+			runningScripts := sm.engine.GetRunningScripts()
+			var vmInterface types.VMInterface
+			if len(runningScripts) > 0 {
+				vmInterface = runningScripts[0].VM
+			} else {
+				// Create a temporary VM for executing the trigger
+				vmInterface = vm.NewVirtualMachine(sm.gameAdapter)
+			}
+			
+			if err := trigger.Execute(vmInterface); err != nil {
+				return err
+			}
+		}
+	}
+	
+	return nil
 }
 
 // Stop stops all scripts and cleans up

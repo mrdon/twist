@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"twist/internal/debug"
 )
 
 // createSchema creates the TWX-compatible SQLite schema
@@ -84,12 +85,16 @@ func (d *SQLiteDatabase) createSchema() error {
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
 	
-	// Planets table (dynamic list)
+	// Planets table (dynamic list) - enhanced to match parser data
 	planetsTable := `
 	CREATE TABLE IF NOT EXISTS planets (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		sector_index INTEGER NOT NULL,
 		name TEXT DEFAULT '',
+		owner TEXT DEFAULT '',
+		fighters INTEGER DEFAULT 0,
+		citadel BOOLEAN DEFAULT FALSE,
+		stardock BOOLEAN DEFAULT FALSE,
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
 	
@@ -181,6 +186,54 @@ func (d *SQLiteDatabase) createSchema() error {
 		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
 		UNIQUE(script_id, frame_index)
 	);`
+
+	// Message history table (TWX parser message tracking)
+	messageHistoryTable := `
+	CREATE TABLE IF NOT EXISTS message_history (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		message_type INTEGER NOT NULL, -- 0=General, 1=Fighter, 2=Computer, 3=Radio, 4=Fedlink, 5=Planet
+		timestamp DATETIME NOT NULL,
+		content TEXT NOT NULL,
+		sender TEXT DEFAULT '',
+		channel INTEGER DEFAULT 0,
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+	);`
+
+	// Player stats table (current player statistics from TWX parser)
+	playerStatsTable := `
+	CREATE TABLE IF NOT EXISTS player_stats (
+		id INTEGER PRIMARY KEY DEFAULT 1, -- Single row table
+		turns INTEGER DEFAULT 0,
+		credits INTEGER DEFAULT 0,
+		fighters INTEGER DEFAULT 0,
+		shields INTEGER DEFAULT 0,
+		total_holds INTEGER DEFAULT 0,
+		ore_holds INTEGER DEFAULT 0,
+		org_holds INTEGER DEFAULT 0,
+		equ_holds INTEGER DEFAULT 0,
+		col_holds INTEGER DEFAULT 0,
+		photons INTEGER DEFAULT 0,
+		armids INTEGER DEFAULT 0,
+		limpets INTEGER DEFAULT 0,
+		gen_torps INTEGER DEFAULT 0,
+		twarp_type INTEGER DEFAULT 0,
+		cloaks INTEGER DEFAULT 0,
+		beacons INTEGER DEFAULT 0,
+		atomics INTEGER DEFAULT 0,
+		corbomite INTEGER DEFAULT 0,
+		eprobes INTEGER DEFAULT 0,
+		mine_disr INTEGER DEFAULT 0,
+		alignment INTEGER DEFAULT 0,
+		experience INTEGER DEFAULT 0,
+		corp INTEGER DEFAULT 0,
+		ship_number INTEGER DEFAULT 0,
+		psychic_probe BOOLEAN DEFAULT FALSE,
+		planet_scanner BOOLEAN DEFAULT FALSE,
+		scan_type INTEGER DEFAULT 0,
+		ship_class TEXT DEFAULT '',
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		CONSTRAINT single_row CHECK (id = 1)
+	);`
 	
 	// Create indexes for performance
 	indexes := []string{
@@ -190,6 +243,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_ships_sector ON ships(sector_index);`,
 		`CREATE INDEX IF NOT EXISTS idx_traders_sector ON traders(sector_index);`,
 		`CREATE INDEX IF NOT EXISTS idx_planets_sector ON planets(sector_index);`,
+		`CREATE INDEX IF NOT EXISTS idx_planets_owner ON planets(owner) WHERE owner != '';`,
 		`CREATE INDEX IF NOT EXISTS idx_sector_vars_sector ON sector_vars(sector_index);`,
 		`CREATE INDEX IF NOT EXISTS idx_sector_vars_name ON sector_vars(var_name);`,
 		`CREATE INDEX IF NOT EXISTS idx_script_vars_name ON script_vars(var_name);`,
@@ -204,10 +258,13 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_script_triggers_active ON script_triggers(is_active);`,
 		`CREATE INDEX IF NOT EXISTS idx_script_call_stack_script ON script_call_stack(script_id);`,
 		`CREATE INDEX IF NOT EXISTS idx_script_call_stack_frame ON script_call_stack(script_id, frame_index);`,
+		`CREATE INDEX IF NOT EXISTS idx_message_history_timestamp ON message_history(timestamp);`,
+		`CREATE INDEX IF NOT EXISTS idx_message_history_type ON message_history(message_type);`,
+		`CREATE INDEX IF NOT EXISTS idx_message_history_sender ON message_history(sender) WHERE sender != '';`,
 	}
 	
 	// Execute all DDL statements
-	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable}
+	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable, messageHistoryTable, playerStatsTable}
 	statements = append(statements, indexes...)
 	
 	for _, stmt := range statements {
@@ -238,6 +295,7 @@ func (d *SQLiteDatabase) validateSchema() error {
 	
 	return nil
 }
+
 
 // getSectorCount returns the total number of sectors in the database
 func (d *SQLiteDatabase) getSectorCount() (int, error) {
@@ -335,7 +393,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 	}
 	
 	// Load planets
-	planetsQuery := `SELECT name FROM planets WHERE sector_index = ?;`
+	planetsQuery := `SELECT name, owner, fighters, citadel, stardock FROM planets WHERE sector_index = ?;`
 	rows, err = d.db.Query(planetsQuery, sectorIndex)
 	if err != nil {
 		return fmt.Errorf("failed to load planets: %w", err)
@@ -344,7 +402,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 	
 	for rows.Next() {
 		var planet TPlanet
-		if err := rows.Scan(&planet.Name); err != nil {
+		if err := rows.Scan(&planet.Name, &planet.Owner, &planet.Fighters, &planet.Citadel, &planet.Stardock); err != nil {
 			return fmt.Errorf("failed to scan planet: %w", err)
 		}
 		sector.Planets = append(sector.Planets, planet)
@@ -375,7 +433,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 	tables := []string{"ships", "traders", "planets", "sector_vars"}
 	for _, table := range tables {
 		query := fmt.Sprintf("DELETE FROM %s WHERE sector_index = ?;", table)
-		if _, err := d.db.Exec(query, sectorIndex); err != nil {
+		if _, err := d.tx.Exec(query, sectorIndex); err != nil {
 			return fmt.Errorf("failed to clear %s: %w", table, err)
 		}
 	}
@@ -384,7 +442,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 	if len(sector.Ships) > 0 {
 		shipQuery := `INSERT INTO ships (sector_index, name, owner, ship_type, fighters) VALUES (?, ?, ?, ?, ?);`
 		for _, ship := range sector.Ships {
-			if _, err := d.db.Exec(shipQuery, sectorIndex, ship.Name, ship.Owner, ship.ShipType, ship.Figs); err != nil {
+			if _, err := d.tx.Exec(shipQuery, sectorIndex, ship.Name, ship.Owner, ship.ShipType, ship.Figs); err != nil {
 				return fmt.Errorf("failed to save ship: %w", err)
 			}
 		}
@@ -394,7 +452,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 	if len(sector.Traders) > 0 {
 		traderQuery := `INSERT INTO traders (sector_index, name, ship_type, ship_name, fighters) VALUES (?, ?, ?, ?, ?);`
 		for _, trader := range sector.Traders {
-			if _, err := d.db.Exec(traderQuery, sectorIndex, trader.Name, trader.ShipType, trader.ShipName, trader.Figs); err != nil {
+			if _, err := d.tx.Exec(traderQuery, sectorIndex, trader.Name, trader.ShipType, trader.ShipName, trader.Figs); err != nil {
 				return fmt.Errorf("failed to save trader: %w", err)
 			}
 		}
@@ -402,9 +460,9 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 	
 	// Save planets
 	if len(sector.Planets) > 0 {
-		planetQuery := `INSERT INTO planets (sector_index, name) VALUES (?, ?);`
+		planetQuery := `INSERT INTO planets (sector_index, name, owner, fighters, citadel, stardock) VALUES (?, ?, ?, ?, ?, ?);`
 		for _, planet := range sector.Planets {
-			if _, err := d.db.Exec(planetQuery, sectorIndex, planet.Name); err != nil {
+			if _, err := d.tx.Exec(planetQuery, sectorIndex, planet.Name, planet.Owner, planet.Fighters, planet.Citadel, planet.Stardock); err != nil {
 				return fmt.Errorf("failed to save planet: %w", err)
 			}
 		}
@@ -414,11 +472,61 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 	if len(sector.Vars) > 0 {
 		varQuery := `INSERT INTO sector_vars (sector_index, var_name, value) VALUES (?, ?, ?);`
 		for _, sectorVar := range sector.Vars {
-			if _, err := d.db.Exec(varQuery, sectorIndex, sectorVar.VarName, sectorVar.Value); err != nil {
+			if _, err := d.tx.Exec(varQuery, sectorIndex, sectorVar.VarName, sectorVar.Value); err != nil {
 				return fmt.Errorf("failed to save sector var: %w", err)
 			}
 		}
 	}
+	
+	return nil
+}
+
+// saveSectorCollectionsWithParams saves collections passed as separate parameters (Pascal-compliant approach)
+func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships []TShip, traders []TTrader, planets []TPlanet) error {
+	// Clear existing related data
+	tables := []string{"ships", "traders", "planets", "sector_vars"}
+	for _, table := range tables {
+		query := fmt.Sprintf("DELETE FROM %s WHERE sector_index = ?;", table)
+		if _, err := d.tx.Exec(query, sectorIndex); err != nil {
+			return fmt.Errorf("failed to clear %s: %w", table, err)
+		}
+	}
+	
+	// Save ships from parameter
+	if len(ships) > 0 {
+		shipQuery := `INSERT INTO ships (sector_index, name, owner, ship_type, fighters) VALUES (?, ?, ?, ?, ?);`
+		for _, ship := range ships {
+			if _, err := d.tx.Exec(shipQuery, sectorIndex, ship.Name, ship.Owner, ship.ShipType, ship.Figs); err != nil {
+				return fmt.Errorf("failed to save ship: %w", err)
+			}
+		}
+		debug.Log("Database: Saved %d ships for sector %d using parameter collections", len(ships), sectorIndex)
+	}
+	
+	// Save traders from parameter
+	if len(traders) > 0 {
+		traderQuery := `INSERT INTO traders (sector_index, name, ship_type, ship_name, fighters) VALUES (?, ?, ?, ?, ?);`
+		for _, trader := range traders {
+			if _, err := d.tx.Exec(traderQuery, sectorIndex, trader.Name, trader.ShipType, trader.ShipName, trader.Figs); err != nil {
+				return fmt.Errorf("failed to save trader: %w", err)
+			}
+		}
+		debug.Log("Database: Saved %d traders for sector %d using parameter collections", len(traders), sectorIndex)
+	}
+	
+	// Save planets from parameter
+	if len(planets) > 0 {
+		planetQuery := `INSERT INTO planets (sector_index, name, owner, fighters, citadel, stardock) VALUES (?, ?, ?, ?, ?, ?);`
+		for _, planet := range planets {
+			if _, err := d.tx.Exec(planetQuery, sectorIndex, planet.Name, planet.Owner, planet.Fighters, planet.Citadel, planet.Stardock); err != nil {
+				return fmt.Errorf("failed to save planet: %w", err)
+			}
+		}
+		debug.Log("Database: Saved %d planets for sector %d using parameter collections", len(planets), sectorIndex)
+	}
+	
+	debug.Log("Database: Completed saving collections for sector %d with parameters (ships=%d, traders=%d, planets=%d)", 
+		sectorIndex, len(ships), len(traders), len(planets))
 	
 	return nil
 }

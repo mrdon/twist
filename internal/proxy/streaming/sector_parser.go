@@ -1,0 +1,1014 @@
+package streaming
+
+import (
+	"strconv"
+	"strings"
+	"twist/internal/debug"
+)
+
+// isNumeric checks if a string represents a valid number
+func isNumeric(s string) bool {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return false
+	}
+	// Remove commas for number parsing
+	s = strings.ReplaceAll(s, ",", "")
+	_, err := strconv.Atoi(s)
+	return err == nil
+}
+
+// ============================================================================
+// DETAILED SECTOR DATA PARSING (Mirrors TWX Pascal sector parsing logic)
+// ============================================================================
+
+// parseSectorShips handles detailed ship parsing from sector data
+func (p *TWXParser) parseSectorShips(line string) {
+	debug.Log("TWXParser: Parsing sector ships: %s", line)
+	
+	// Parse format: "Ships   : Enterprise [Owned by Kirk], w/ 500 ftrs,"
+	//               "        (Constitution Class Cruiser)"
+	
+	if !strings.HasPrefix(line, "Ships   : ") {
+		// Continuation line - handle ship type
+		p.handleShipContinuation(line)
+		return
+	}
+	
+	shipInfo := line[10:] // Remove "Ships   : "
+	p.parseShipLine(shipInfo)
+}
+
+// parseShipLine parses individual ship information (mirrors Pascal logic from lines 671-690)
+func (p *TWXParser) parseShipLine(shipInfo string) {
+	// Clear previous ships if this is the first ship line
+	if p.sectorPosition != SectorPosShips {
+		p.currentShips = nil
+		p.sectorPosition = SectorPosShips
+	}
+	
+	// Parse ship name and owner (mirrors Pascal exact logic)
+	ship := ShipInfo{}
+	
+	// Pascal: I := Pos('[Owned by]', Line);
+	// Pascal: FCurrentShip.Name := Copy(Line, 11, I - 12);
+	ownedByPos := strings.Index(shipInfo, "[Owned by")
+	if ownedByPos > 0 {
+		// Extract ship name (everything before [Owned by)
+		ship.Name = strings.TrimSpace(shipInfo[:ownedByPos])
+		
+		// Extract owner from "[Owned by OWNER]"
+		ownerStart := ownedByPos + 10 // After "[Owned by "
+		ownerEnd := strings.Index(shipInfo[ownerStart:], "]")
+		if ownerEnd > 0 {
+			ship.Owner = shipInfo[ownerStart : ownerStart+ownerEnd]
+		}
+	} else {
+		// Fallback: try generic bracket parsing
+		bracketStart := strings.Index(shipInfo, "[")
+		if bracketStart > 0 {
+			ship.Name = strings.TrimSpace(shipInfo[:bracketStart])
+			
+			// Extract owner (between [ and ])
+			bracketEnd := strings.Index(shipInfo, "]")
+			if bracketEnd > bracketStart {
+				ownerInfo := shipInfo[bracketStart+1 : bracketEnd]
+				if strings.HasPrefix(ownerInfo, "Owned by ") {
+					ship.Owner = ownerInfo[9:] // Remove "Owned by "
+				} else {
+					ship.Owner = ownerInfo
+				}
+			}
+		} else {
+			// No brackets found - extract what we can
+			commaPos := strings.Index(shipInfo, ",")
+			if commaPos > 0 {
+				ship.Name = strings.TrimSpace(shipInfo[:commaPos])
+			} else {
+				ship.Name = strings.TrimSpace(shipInfo)
+			}
+		}
+	}
+	
+	// Pascal: I := Pos(', w/', Line);
+	// Pascal: S := Copy(Line, I + 5, Pos(' ftrs,', Line) - I - 5);
+	// Pascal: StripChar(S, ',');
+	// Pascal: FCurrentShip.Figs := StrToIntSafe(S);
+	fightersPos := strings.Index(shipInfo, ", w/")
+	if fightersPos >= 0 {
+		// Find end of fighter count (before ' ftrs')
+		ftrsPos := strings.Index(shipInfo, " ftrs")
+		if ftrsPos > fightersPos {
+			fighterStr := shipInfo[fightersPos+4 : ftrsPos] // After ", w/"
+			// Pascal: StripChar(S, ',');
+			fighterStr = strings.ReplaceAll(fighterStr, ",", "")
+			
+			// Validate fighter count (must be non-negative)
+			fighterCount := p.parseIntSafe(fighterStr)
+			if fighterCount >= 0 {
+				ship.Fighters = fighterCount
+			} else {
+				debug.Log("TWXParser: Invalid fighter count %d for ship %s", fighterCount, ship.Name)
+				ship.Fighters = 0
+			}
+		}
+	}
+	
+	// Parse alignment if present (Pascal doesn't show this explicitly, but TWX supports it)
+	// Look for alignment indicators like "(Good)", "(Evil)", "(Neutral)"
+	if parenStart := strings.Index(shipInfo, "("); parenStart >= 0 {
+		parenEnd := strings.Index(shipInfo[parenStart:], ")")
+		if parenEnd > 0 {
+			alignmentCandidate := strings.TrimSpace(shipInfo[parenStart+1 : parenStart+parenEnd])
+			// Check if this looks like an alignment (not a ship type or other info)
+			alignmentLower := strings.ToLower(alignmentCandidate)
+			if alignmentLower == "good" || alignmentLower == "evil" || alignmentLower == "neutral" ||
+				alignmentLower == "outlaw" || alignmentLower == "criminal" {
+				ship.Alignment = alignmentCandidate
+				debug.Log("TWXParser: Parsed ship alignment: %s", ship.Alignment)
+			}
+		}
+	}
+	
+	// Validate parsed ship data
+	if ship.Name == "" {
+		debug.Log("TWXParser: Warning - ship with empty name parsed from: %s", shipInfo)
+	}
+	
+	if ship.Owner == "" {
+		debug.Log("TWXParser: Warning - ship with empty owner parsed from: %s", shipInfo)
+	}
+	
+	p.currentShips = append(p.currentShips, ship)
+	debug.Log("TWXParser: Parsed enhanced ship: %+v", ship)
+}
+
+// handleShipContinuation handles continuation lines for ship data (mirrors Pascal lines 113-117)
+func (p *TWXParser) handleShipContinuation(line string) {
+	if len(p.currentShips) == 0 {
+		debug.Log("TWXParser: Ship continuation with no current ships")
+		return
+	}
+	
+	// Pascal logic: if (Copy(Line, 12, 1) = '(') then
+	// Pascal: NewShip^.ShipType := Copy(Line, 13, Pos(')', Line) - 13);
+	// Pascal: FShipList.Add(NewShip);
+	
+	// Check if position 12 (0-indexed 11) contains '('
+	if len(line) > 11 && line[11] == '(' {
+		// Find the closing parenthesis
+		closeParenPos := strings.Index(line, ")")
+		if closeParenPos > 11 {
+			// Extract ship type (between positions 13 and closing paren in Pascal 1-indexing)
+			// In 0-indexing: between position 12 and closeParenPos
+			shipType := line[12:closeParenPos]
+			
+			// Get the last ship (the one we're adding type info to)
+			lastShipIndex := len(p.currentShips) - 1
+			p.currentShips[lastShipIndex].ShipType = shipType
+			
+			debug.Log("TWXParser: Added ship type to %s: %s", 
+				p.currentShips[lastShipIndex].Name, shipType)
+		} else {
+			debug.Log("TWXParser: Ship continuation missing closing parenthesis: %s", line)
+		}
+	} else {
+		// This might be additional ship data or alignment info
+		// Parse other potential ship data from continuation line
+		line = strings.TrimSpace(line)
+		
+		// Check for alignment in continuation line
+		if strings.HasPrefix(line, "(") && strings.HasSuffix(line, ")") {
+			alignmentCandidate := line[1 : len(line)-1] // Remove parentheses
+			alignmentLower := strings.ToLower(alignmentCandidate)
+			
+			// If it's an alignment, update the last ship
+			if alignmentLower == "good" || alignmentLower == "evil" || alignmentLower == "neutral" ||
+				alignmentLower == "outlaw" || alignmentLower == "criminal" {
+				lastShipIndex := len(p.currentShips) - 1
+				p.currentShips[lastShipIndex].Alignment = alignmentCandidate
+				debug.Log("TWXParser: Added ship alignment to %s: %s", 
+					p.currentShips[lastShipIndex].Name, alignmentCandidate)
+			} else {
+				// Not an alignment, treat as ship type (fallback for non-Pascal format)
+				lastShipIndex := len(p.currentShips) - 1
+				if p.currentShips[lastShipIndex].ShipType == "" {
+					p.currentShips[lastShipIndex].ShipType = alignmentCandidate
+					debug.Log("TWXParser: Added ship type (fallback) to %s: %s", 
+						p.currentShips[lastShipIndex].Name, alignmentCandidate)
+				}
+			}
+		} else {
+			debug.Log("TWXParser: Unrecognized ship continuation format: %s", line)
+		}
+	}
+}
+
+// parseSectorTraders handles detailed trader parsing from sector data (mirrors Pascal logic)
+func (p *TWXParser) parseSectorTraders(line string) {
+	debug.Log("TWXParser: Parsing sector traders: %s", line)
+	
+	// Parse format: "Traders : Captain Kirk, w/ 1,000 ftrs"
+	// TWX Pascal logic: lines 713-722 in Process.pas
+	
+	if !strings.HasPrefix(line, "Traders : ") {
+		return
+	}
+	
+	// Clear previous traders and set position
+	p.currentTraders = nil
+	p.sectorPosition = SectorPosTraders
+	
+	// Mirror Pascal logic exactly:
+	// I := Pos(', w/', Line);
+	// FCurrentTrader.Name := Copy(Line, 11, I - 11);
+	// S := Copy(Line, I + 5, Pos(' ftrs', Line) - I - 5);
+	
+	traderInfo := line[10:] // Remove "Traders : "
+	
+	// Handle multiple trader formats and edge cases
+	trader := TraderInfo{}
+	
+	// First, parse alignment if present (look for alignment indicators)
+	workingInfo := traderInfo
+	if parenStart := strings.Index(traderInfo, "("); parenStart >= 0 {
+		parenEnd := strings.Index(traderInfo[parenStart:], ")")
+		if parenEnd > 0 {
+			alignmentCandidate := strings.TrimSpace(traderInfo[parenStart+1 : parenStart+parenEnd])
+			alignmentLower := strings.ToLower(alignmentCandidate)
+			if alignmentLower == "good" || alignmentLower == "evil" || alignmentLower == "neutral" ||
+				alignmentLower == "outlaw" || alignmentLower == "criminal" {
+				trader.Alignment = alignmentCandidate
+				// Remove alignment from working info for further parsing
+				workingInfo = strings.TrimSpace(traderInfo[:parenStart]) + strings.TrimSpace(traderInfo[parenStart+parenEnd+1:])
+				debug.Log("TWXParser: Parsed trader alignment: %s", trader.Alignment)
+			}
+		}
+	}
+	
+	fighterPos := strings.Index(workingInfo, ", w/")
+	if fighterPos == -1 {
+		// No fighter info - just extract trader name
+		trader.Name = strings.TrimSpace(workingInfo)
+		trader.Fighters = 0
+		debug.Log("TWXParser: Trader without fighter info: %s", trader.Name)
+	} else {
+		// Extract trader name (from start to ', w/' position)
+		trader.Name = strings.TrimSpace(workingInfo[:fighterPos])
+		
+		// Extract fighter count (from after ', w/' to ' ftrs')
+		fighterStart := fighterPos + 4 // After ", w/"
+		ftrsPos := strings.Index(workingInfo, " ftrs")
+		if ftrsPos > fighterStart {
+			fighterStr := workingInfo[fighterStart:ftrsPos]
+			// Strip commas as Pascal does: StripChar(S, ',');
+			fighterStr = strings.ReplaceAll(fighterStr, ",", "")
+			fighterCount := p.parseIntSafe(fighterStr)
+			
+			// Validate fighter count (must be non-negative)
+			if fighterCount >= 0 {
+				trader.Fighters = fighterCount
+			} else {
+				debug.Log("TWXParser: Invalid fighter count %d for trader %s", fighterCount, trader.Name)
+				trader.Fighters = 0
+			}
+		}
+	}
+	
+	// Validate parsed trader data
+	if trader.Name == "" {
+		debug.Log("TWXParser: Warning - trader with empty name parsed from: %s", traderInfo)
+		return // Skip traders with no name
+	}
+	
+	// Store in currentTrader for continuation line processing
+	p.currentTrader = trader
+	
+	// Don't add to list yet - wait for ship details in continuation line
+	debug.Log("TWXParser: Parsed enhanced trader (waiting for ship details): %+v", trader)
+}
+
+// parseSectorPlanets handles detailed planet parsing from sector data (mirrors Pascal logic)
+func (p *TWXParser) parseSectorPlanets(line string) {
+	debug.Log("TWXParser: Parsing sector planets: %s", line)
+	
+	// Parse format: "Planets : Terra [Owned by Federation], Stardock"
+	// Pascal mirrors TWX Process.pas planet parsing logic
+	
+	if !strings.HasPrefix(line, "Planets : ") {
+		return
+	}
+	
+	// Clear previous planets and set position
+	p.currentPlanets = nil
+	p.sectorPosition = SectorPosPlanets
+	
+	planetInfo := line[10:] // Remove "Planets : "
+	
+	// Enhanced parsing with Pascal-compliant logic
+	p.parsePlanetInfo(planetInfo)
+}
+
+// parsePlanetInfo parses planet information with Pascal-compliant logic
+func (p *TWXParser) parsePlanetInfo(planetInfo string) {
+	// Smarter planet parsing that handles fighter counts correctly
+	// First, look for fighter information and extract it
+	fighterPos := strings.Index(planetInfo, ", w/")
+	var fighterInfo string
+	var cleanPlanetInfo string
+	
+	if fighterPos >= 0 {
+		// Extract fighter info and clean planet info
+		ftrsPos := strings.Index(planetInfo, " ftrs")
+		if ftrsPos > fighterPos {
+			fighterInfo = planetInfo[fighterPos:ftrsPos+5] // Include " ftrs"
+			cleanPlanetInfo = planetInfo[:fighterPos] + planetInfo[ftrsPos+5:]
+		} else {
+			cleanPlanetInfo = planetInfo
+		}
+	} else {
+		cleanPlanetInfo = planetInfo
+	}
+	
+	// Now split by commas to handle multiple planets 
+	planets := strings.Split(cleanPlanetInfo, ",")
+	
+	for i, planetStr := range planets {
+		planetStr = strings.TrimSpace(planetStr)
+		if planetStr == "" {
+			continue
+		}
+		
+		planet := PlanetInfo{}
+		
+		// Enhanced citadel and stardock detection (mirrors Pascal exact logic)
+		planetLower := strings.ToLower(planetStr)
+		
+		// Pascal-compliant citadel detection
+		// Checks for "citadel" keyword in various positions
+		planet.Citadel = p.detectCitadel(planetStr, planetLower)
+		
+		// Pascal-compliant stardock detection  
+		// Stardock can be standalone or part of planet name
+		planet.Stardock = p.detectStardock(planetStr, planetLower)
+		
+		// Enhanced owner parsing with bracket detection
+		p.parsePlanetOwnerAndName(&planet, planetStr)
+		
+		// Parse fighter information if present and this is the first planet (fighters typically apply to first planet)
+		if i == 0 && fighterInfo != "" {
+			p.parsePlanetFightersFromString(&planet, fighterInfo)
+		}
+		
+		// Validate parsed planet data
+		p.validatePlanetData(&planet)
+		
+		p.currentPlanets = append(p.currentPlanets, planet)
+		debug.Log("TWXParser: Parsed enhanced planet: %+v", planet)
+	}
+}
+
+// detectCitadel implements Pascal-compliant citadel detection logic
+func (p *TWXParser) detectCitadel(planetStr, planetLower string) bool {
+	// Pascal logic: look for "citadel" keyword in planet description
+	// Can be in planet name or as modifier
+	if strings.Contains(planetLower, "citadel") {
+		debug.Log("TWXParser: Citadel detected in planet: %s", planetStr)
+		return true
+	}
+	
+	// Check for citadel indicators like "Cit" or "CitaDel"
+	if strings.Contains(planetLower, " cit ") || 
+	   strings.HasSuffix(planetLower, " cit") ||
+	   strings.HasPrefix(planetLower, "cit ") {
+		debug.Log("TWXParser: Citadel abbreviation detected in planet: %s", planetStr)
+		return true
+	}
+	
+	return false
+}
+
+// detectStardock implements Pascal-compliant stardock detection logic
+func (p *TWXParser) detectStardock(planetStr, planetLower string) bool {
+	// Pascal logic: Stardock can be standalone or part of planet name
+	if strings.Contains(planetLower, "stardock") {
+		debug.Log("TWXParser: Stardock detected in planet: %s", planetStr)
+		return true
+	}
+	
+	// Check for stardock abbreviations
+	if strings.Contains(planetLower, "sd ") || 
+	   strings.HasSuffix(planetLower, " sd") ||
+	   strings.HasPrefix(planetLower, "sd ") {
+		debug.Log("TWXParser: Stardock abbreviation detected in planet: %s", planetStr)
+		return true
+	}
+	
+	return false
+}
+
+// parsePlanetOwnerAndName extracts planet name and owner with Pascal-compliant bracket parsing
+func (p *TWXParser) parsePlanetOwnerAndName(planet *PlanetInfo, planetStr string) {
+	// Enhanced bracket parsing (mirrors Pascal owner extraction)
+	bracketStart := strings.Index(planetStr, "[")
+	if bracketStart > 0 {
+		// Extract planet name (before brackets)
+		planet.Name = strings.TrimSpace(planetStr[:bracketStart])
+		
+		// Extract owner information (between [ and ])
+		bracketEnd := strings.Index(planetStr, "]")
+		if bracketEnd > bracketStart {
+			ownerInfo := planetStr[bracketStart+1 : bracketEnd]
+			
+			// Pascal-compliant owner parsing
+			if strings.HasPrefix(ownerInfo, "Owned by ") {
+				planet.Owner = strings.TrimSpace(ownerInfo[9:]) // Remove "Owned by "
+			} else if strings.HasPrefix(ownerInfo, "owned by ") {
+				planet.Owner = strings.TrimSpace(ownerInfo[9:]) // Case insensitive
+			} else {
+				// Direct owner name (no "Owned by" prefix)
+				planet.Owner = strings.TrimSpace(ownerInfo)
+			}
+			
+			debug.Log("TWXParser: Parsed planet owner: %s for planet: %s", planet.Owner, planet.Name)
+		}
+	} else {
+		// No brackets - entire string is planet name
+		// Remove special flags from name for cleaner parsing
+		cleanName := planetStr
+		
+		// Remove trailing indicators that aren't part of the name
+		if planet.Stardock && strings.HasSuffix(strings.ToLower(cleanName), "stardock") {
+			// If the entire thing is "Stardock", keep it as name
+			if !strings.EqualFold(cleanName, "stardock") {
+				// Remove "Stardock" from end if it's appended to another name
+				cleanName = strings.TrimSpace(strings.TrimSuffix(cleanName, "Stardock"))
+				cleanName = strings.TrimSpace(strings.TrimSuffix(cleanName, "stardock"))
+			}
+		}
+		
+		planet.Name = strings.TrimSpace(cleanName)
+	}
+	
+	// Fallback for empty names
+	if planet.Name == "" {
+		if planet.Stardock {
+			planet.Name = "Stardock"
+		} else if planet.Citadel {
+			planet.Name = "Citadel"
+		} else {
+			planet.Name = "Unknown Planet"
+			debug.Log("TWXParser: Warning - planet with empty name, using fallback")
+		}
+	}
+}
+
+// parsePlanetFighters extracts fighter information from planet data
+func (p *TWXParser) parsePlanetFighters(planet *PlanetInfo, planetStr string) {
+	// Look for fighter information in planet string
+	// Format: "Planet [Owner], w/ 1,000 ftrs" or similar
+	fightersPos := strings.Index(planetStr, ", w/")
+	if fightersPos >= 0 {
+		// Find end of fighter count
+		ftrsPos := strings.Index(planetStr, " ftrs")
+		if ftrsPos > fightersPos {
+			fighterStr := planetStr[fightersPos+4 : ftrsPos] // After ", w/"
+			// Strip commas as Pascal does
+			fighterStr = strings.ReplaceAll(fighterStr, ",", "")
+			
+			fighterCount := p.parseIntSafe(fighterStr)
+			if fighterCount >= 0 {
+				planet.Fighters = fighterCount
+				debug.Log("TWXParser: Parsed planet fighters: %d for %s", fighterCount, planet.Name)
+			} else {
+				debug.Log("TWXParser: Invalid fighter count for planet %s: %s", planet.Name, fighterStr)
+			}
+		}
+	}
+}
+
+// parsePlanetFightersFromString extracts fighter information from a pre-extracted fighter string
+func (p *TWXParser) parsePlanetFightersFromString(planet *PlanetInfo, fighterInfo string) {
+	// fighterInfo format: ", w/ 1,000 ftrs"
+	if strings.HasPrefix(fighterInfo, ", w/") && strings.HasSuffix(fighterInfo, " ftrs") {
+		// Extract the number part
+		fighterStr := fighterInfo[4 : len(fighterInfo)-5] // Remove ", w/" and " ftrs"
+		fighterStr = strings.TrimSpace(fighterStr)
+		
+		// Strip commas as Pascal does
+		fighterStr = strings.ReplaceAll(fighterStr, ",", "")
+		
+		fighterCount := p.parseIntSafe(fighterStr)
+		if fighterCount >= 0 {
+			planet.Fighters = fighterCount
+			debug.Log("TWXParser: Parsed planet fighters from string: %d for %s", fighterCount, planet.Name)
+		} else {
+			debug.Log("TWXParser: Invalid fighter count for planet %s: %s", planet.Name, fighterStr)
+		}
+	}
+}
+
+
+// parseSectorMines handles detailed mine parsing from sector data
+func (p *TWXParser) parseSectorMines(line string) {
+	debug.Log("TWXParser: Parsing sector mines: %s", line)
+	
+	// Parse format: "Mines   : 100 Limpet Mines (belong to Kirk)"
+	//           or: "Mines   : 50 Armid Mines, 25 Limpet Mines (belong to Spock)"
+	
+	if !strings.HasPrefix(line, "Mines   : ") {
+		return
+	}
+	
+	// Clear previous mines
+	p.currentMines = nil
+	p.sectorPosition = SectorPosMines
+	
+	mineInfo := line[10:] // Remove "Mines   : "
+	
+	// Extract owner from parentheses
+	owner := ""
+	if parenStart := strings.Index(mineInfo, "("); parenStart >= 0 {
+		parenEnd := strings.Index(mineInfo, ")")
+		if parenEnd > parenStart {
+			ownerInfo := mineInfo[parenStart+1 : parenEnd]
+			if strings.HasPrefix(ownerInfo, "belong to ") {
+				owner = ownerInfo[10:] // Remove "belong to "
+			} else {
+				owner = ownerInfo
+			}
+			// Remove owner info for parsing
+			mineInfo = strings.TrimSpace(mineInfo[:parenStart])
+		}
+	}
+	
+	// Split by commas to handle multiple mine types
+	mineTypes := strings.Split(mineInfo, ",")
+	
+	for _, mineStr := range mineTypes {
+		mineStr = strings.TrimSpace(mineStr)
+		if mineStr == "" {
+			continue
+		}
+		
+		mine := MineInfo{Owner: owner}
+		
+		// Parse quantity and type (e.g., "100 Limpet Mines")
+		parts := strings.Fields(mineStr)
+		if len(parts) >= 3 {
+			mine.Quantity = p.parseIntSafeWithCommas(parts[0])
+			mine.Type = parts[1] // "Armid" or "Limpet"
+		}
+		
+		p.currentMines = append(p.currentMines, mine)
+		debug.Log("TWXParser: Parsed mine: %+v", mine)
+	}
+}
+
+// parseSectorFighters handles detailed fighter parsing from sector data
+func (p *TWXParser) parseSectorFighters(line string) {
+	debug.Log("TWXParser: Parsing sector fighters: %s", line)
+	
+	// Parse format: "Fighters: 2,500 (belong to Kirk) [Defensive]"
+	
+	if !strings.HasPrefix(line, "Fighters: ") {
+		return
+	}
+	
+	fighterInfo := line[10:] // Remove "Fighters: "
+	
+	// Extract quantity
+	parts := strings.Fields(fighterInfo)
+	if len(parts) == 0 {
+		return
+	}
+	
+	quantity := p.parseIntSafeWithCommas(parts[0])
+	
+	// Extract owner
+	owner := ""
+	if parenStart := strings.Index(fighterInfo, "("); parenStart >= 0 {
+		parenEnd := strings.Index(fighterInfo, ")")
+		if parenEnd > parenStart {
+			ownerInfo := fighterInfo[parenStart+1 : parenEnd]
+			if strings.HasPrefix(ownerInfo, "belong to ") {
+				owner = ownerInfo[10:] // Remove "belong to "
+			} else {
+				owner = ownerInfo
+			}
+		}
+	}
+	
+	// Extract fighter type from brackets
+	fighterType := FighterDefensive // Default
+	if bracketStart := strings.Index(fighterInfo, "["); bracketStart >= 0 {
+		bracketEnd := strings.Index(fighterInfo, "]")
+		if bracketEnd > bracketStart {
+			typeStr := strings.ToLower(fighterInfo[bracketStart+1 : bracketEnd])
+			switch typeStr {
+			case "offensive":
+				fighterType = FighterOffensive
+			case "defensive":
+				fighterType = FighterDefensive
+			case "toll":
+				fighterType = FighterToll
+			}
+		}
+	}
+	
+	// Store fighter data
+	fighterData := FighterData{
+		SectorNum: p.currentSectorIndex,
+		Quantity:  quantity,
+		Owner:     owner,
+		Type:      fighterType,
+	}
+	
+	debug.Log("TWXParser: Parsed sector fighters: %+v", fighterData)
+	
+	// Add to message history
+	p.addToHistory(MessageFighter, line, owner, 0)
+}
+
+// parseSectorNavHaz handles navigation hazard parsing
+func (p *TWXParser) parseSectorNavHaz(line string) {
+	defer p.recoverFromPanic("parseSectorNavHaz")
+	
+	debug.Log("TWXParser: Parsing sector navhaz: %s", line)
+	
+	// Parse format: "NavHaz  : 5% (10)"
+	
+	if !strings.HasPrefix(line, "NavHaz  : ") {
+		return
+	}
+	
+	// Safe substring extraction with bounds checking
+	if len(line) <= 10 {
+		debug.Log("TWXParser: NavHaz line too short: %d characters", len(line))
+		return
+	}
+	navHazInfo := line[10:] // Remove "NavHaz  : "
+	
+	// Extract percentage and store in current sector
+	percentPos := strings.Index(navHazInfo, "%")
+	if percentPos > 0 {
+		percentStr := strings.TrimSpace(navHazInfo[:percentPos])
+		navHazPercent := p.parseIntSafe(percentStr)
+		
+		// Validate NavHaz percentage (must be 0-100)
+		navHazPercent = p.validatePercentage(navHazPercent)
+		
+		// Store NavHaz percentage in current sector data
+		p.currentSector.NavHaz = navHazPercent
+		debug.Log("TWXParser: NavHaz percentage stored: %d%%", navHazPercent)
+	}
+	
+	// Extract actual count from parentheses (for logging/validation)
+	if parenStart := strings.Index(navHazInfo, "("); parenStart >= 0 {
+		parenEnd := strings.Index(navHazInfo, ")")
+		if parenEnd > parenStart {
+			countStr := navHazInfo[parenStart+1 : parenEnd]
+			navHazCount := p.parseIntSafe(countStr)
+			debug.Log("TWXParser: NavHaz count: %d", navHazCount)
+		}
+	}
+}
+
+// Enhanced sector continuation handling (mirrors Pascal logic from lines 775-844)
+func (p *TWXParser) handleSectorContinuation(line string) {
+	// Pascal: if (Copy(Line, 1, 8) = '        ') then
+	if !strings.HasPrefix(line, "        ") {
+		return
+	}
+	
+	// Enhanced continuation line handling based on current sector position
+	switch p.sectorPosition {
+	case SectorPosShips:
+		p.handleShipContinuation(line)
+	case SectorPosPorts:
+		p.handlePortContinuation(line)
+	case SectorPosTraders:
+		p.handleTraderContinuation(line)
+	case SectorPosPlanets:
+		p.handlePlanetContinuation(line)
+	case SectorPosMines:
+		p.handleMineContinuation(line)
+	default:
+		debug.Log("TWXParser: Sector continuation for position %d", p.sectorPosition)
+	}
+}
+
+// handleTraderContinuation handles trader continuation lines (mirrors Pascal lines 795-818)
+func (p *TWXParser) handleTraderContinuation(line string) {
+	debug.Log("TWXParser: Processing trader continuation: %s", line)
+	
+	// Pascal logic:
+	// if (GetParameter(Line, 1) = 'in') then
+	firstParam := p.getParameter(line, 1)
+	if firstParam == "in" {
+		// Ship info for current trader - parse ship details
+		// Pascal logic:
+		// I := GetParameterPos(Line, 2);
+		// NewTrader^.ShipName := Copy(Line, I, Pos('(', Line) - I - 1);
+		// I := Pos('(', Line);
+		// NewTrader^.ShipType := Copy(Line, I + 1, Pos(')', Line) - I - 1);
+		
+		if p.currentTrader.Name == "" {
+			debug.Log("TWXParser: Ship continuation without pending trader")
+			return
+		}
+		
+		// Find the position of the second parameter (ship name starts here)
+		// The line format is: "        in ShipName (ShipType)"
+		shipInfoStart := strings.Index(line, "in ") + 3 // After "in "
+		if shipInfoStart < 3 {
+			debug.Log("TWXParser: Invalid trader ship continuation format")
+			// Add trader without ship details
+			p.finalizeCurrentTrader()
+			return
+		}
+		
+		shipInfo := strings.TrimSpace(line[shipInfoStart:])
+		
+		// Extract ship name (before the opening parenthesis)
+		parenStart := strings.Index(shipInfo, "(")
+		if parenStart > 0 {
+			// Copy the currentTrader and add ship details
+			trader := p.currentTrader
+			trader.ShipName = strings.TrimSpace(shipInfo[:parenStart])
+			
+			// Extract ship type (between parentheses)
+			parenEnd := strings.Index(shipInfo, ")")
+			if parenEnd > parenStart {
+				trader.ShipType = shipInfo[parenStart+1 : parenEnd]
+			}
+			
+			// Validate completed trader data
+			p.validateTraderData(&trader)
+			
+			// Add completed trader to list
+			p.currentTraders = append(p.currentTraders, trader)
+			debug.Log("TWXParser: Completed trader with ship details: %+v", trader)
+			
+			// Reset currentTrader to prevent duplicate addition in sectorCompleted
+			p.currentTrader = TraderInfo{}
+		} else {
+			// No parentheses found, but still extract ship name
+			trader := p.currentTrader
+			trader.ShipName = strings.TrimSpace(shipInfo)
+			
+			// Look for alignment in ship info if no ship type parentheses
+			if alignStart := strings.Index(shipInfo, "["); alignStart >= 0 {
+				alignEnd := strings.Index(shipInfo[alignStart:], "]")
+				if alignEnd > 0 {
+					alignmentCandidate := strings.TrimSpace(shipInfo[alignStart+1 : alignStart+alignEnd])
+					alignmentLower := strings.ToLower(alignmentCandidate)
+					if alignmentLower == "good" || alignmentLower == "evil" || alignmentLower == "neutral" ||
+						alignmentLower == "outlaw" || alignmentLower == "criminal" {
+						trader.Alignment = alignmentCandidate
+						// Remove alignment from ship name
+						trader.ShipName = strings.TrimSpace(shipInfo[:alignStart])
+					}
+				}
+			}
+			
+			// Validate completed trader data
+			p.validateTraderData(&trader)
+			
+			// Add completed trader to list
+			p.currentTraders = append(p.currentTraders, trader)
+			debug.Log("TWXParser: Added trader with ship name only: %+v", trader)
+			
+			// Reset currentTrader to prevent duplicate addition in sectorCompleted
+			p.currentTrader = TraderInfo{}
+		}
+	} else {
+		// New trader on continuation line
+		// Mirror same logic as parseSectorTraders but for continuation line
+		
+		// Finalize any pending trader first
+		if p.currentTrader.Name != "" {
+			p.finalizeCurrentTrader()
+		}
+		
+		// Extract trader info from continuation line
+		traderInfo := strings.TrimSpace(line[8:]) // Skip 8 spaces
+		
+		fighterPos := strings.Index(traderInfo, ", w/")
+		if fighterPos == -1 {
+			// No fighter info - just extract trader name
+			trader := TraderInfo{
+				Name:     strings.TrimSpace(traderInfo),
+				Fighters: 0,
+			}
+			p.currentTrader = trader
+			debug.Log("TWXParser: Parsed continuation trader without fighters (waiting for ship details): %+v", trader)
+			return
+		}
+		
+		trader := TraderInfo{}
+		
+		// Extract trader name (from start to ', w/' position)
+		trader.Name = strings.TrimSpace(traderInfo[:fighterPos])
+		
+		// Extract fighter count (from after ', w/' to ' ftrs')
+		fighterStart := fighterPos + 4 // After ", w/"
+		ftrsPos := strings.Index(traderInfo, " ftrs")
+		if ftrsPos > fighterStart {
+			fighterStr := traderInfo[fighterStart:ftrsPos]
+			// Strip commas as Pascal does: StripChar(S, ',');
+			fighterStr = strings.ReplaceAll(fighterStr, ",", "")
+			fighterCount := p.parseIntSafe(fighterStr)
+			
+			// Validate fighter count (must be non-negative)
+			if fighterCount >= 0 {
+				trader.Fighters = fighterCount
+			} else {
+				debug.Log("TWXParser: Invalid fighter count %d for continuation trader %s", fighterCount, trader.Name)
+				trader.Fighters = 0
+			}
+		}
+		
+		// Validate trader name
+		if trader.Name == "" {
+			debug.Log("TWXParser: Warning - continuation trader with empty name, skipping")
+			return
+		}
+		
+		// Store as current trader for potential ship details
+		p.currentTrader = trader
+		debug.Log("TWXParser: Parsed enhanced continuation trader (waiting for ship details): %+v", trader)
+	}
+}
+
+// finalizeCurrentTrader adds the current trader to the list if it has valid data
+func (p *TWXParser) finalizeCurrentTrader() {
+	if p.currentTrader.Name != "" {
+		p.validateTraderData(&p.currentTrader)
+		p.currentTraders = append(p.currentTraders, p.currentTrader)
+		debug.Log("TWXParser: Finalized trader without ship details: %+v", p.currentTrader)
+		p.currentTrader = TraderInfo{} // Reset
+	}
+}
+
+
+// handlePlanetContinuation handles planet continuation lines (mirrors Pascal lines 819-822)
+func (p *TWXParser) handlePlanetContinuation(line string) {
+	// Pascal logic: NewPlanet^.Name := Copy(Line, 11, length(Line) - 10);
+	// Enhanced to match Pascal exact behavior
+	debug.Log("TWXParser: Processing planet continuation: %s", line)
+	
+	if len(line) <= 8 {
+		debug.Log("TWXParser: Planet continuation line too short")
+		return
+	}
+	
+	// Pascal: Copy(Line, 11, length(Line) - 10) 
+	// In Pascal, indices are 1-based, so position 11 = Go index 10
+	// Length - 10 means take all characters except first 10
+	// But we also need to handle the 8 spaces at the start properly
+	planetInfo := strings.TrimSpace(line[8:]) // Remove 8 spaces at start
+	if planetInfo != "" {
+		// Use the same enhanced parsing logic as main planet parsing
+		p.parsePlanetInfo(planetInfo)
+	}
+}
+
+// handleMineContinuation handles mine continuation lines
+func (p *TWXParser) handleMineContinuation(line string) {
+	// Pascal logic for second mine type (usually Limpet)
+	debug.Log("TWXParser: Processing mine continuation: %s", line)
+	
+	// Extract owner from parentheses if present
+	owner := ""
+	if parenStart := strings.Index(line, "("); parenStart >= 0 {
+		parenEnd := strings.Index(line, ")")
+		if parenEnd > parenStart {
+			ownerInfo := line[parenStart+1 : parenEnd]
+			if strings.HasPrefix(ownerInfo, "belong to ") {
+				owner = ownerInfo[10:] // Remove "belong to "
+			}
+		}
+	}
+	
+	// Parse mine info similar to main mine parsing
+	parts := strings.Fields(line)
+	if len(parts) >= 3 {
+		mine := MineInfo{Owner: owner}
+		mine.Quantity = p.parseIntSafeWithCommas(parts[0])
+		mine.Type = parts[1] // "Armid" or "Limpet"
+		
+		p.currentMines = append(p.currentMines, mine)
+		debug.Log("TWXParser: Parsed continuation mine: %+v", mine)
+	}
+}
+
+// handlePortContinuation handles port-specific continuation lines (mirrors Pascal lines 785-786)
+func (p *TWXParser) handlePortContinuation(line string) {
+	debug.Log("TWXParser: Processing port continuation: %s", line)
+	
+	// Pascal: FCurrentSector.SPort.BuildTime := StrToIntSafe(GetParameter(Line, 4))
+	// However, the actual format varies, so we need to be flexible in parsing
+	
+	buildTime := -1
+	
+	// Try Pascal GetParameter(Line, 4) first for exact compatibility
+	param4 := p.getParameter(line, 4)
+	if param4 != "" && isNumeric(param4) {
+		pascalParam4 := p.parseIntSafe(param4)
+		buildTime = pascalParam4
+		debug.Log("TWXParser: Found build time via Pascal parameter 4: %d", buildTime)
+	} else {
+		// Fall back to flexible parsing for common formats
+		fields := strings.Fields(line)
+		for i, field := range fields {
+			// Look for numeric values that could be build time
+			if isNumeric(field) {
+				val := p.parseIntSafe(field)
+				if val >= 0 && val <= 9999 { // Reasonable build time range
+					// Check if this looks like a build time context
+					if i > 0 && (strings.Contains(strings.ToLower(fields[i-1]), "build") ||
+						strings.Contains(strings.ToLower(fields[i-1]), "time")) {
+						buildTime = val
+						debug.Log("TWXParser: Found build time via flexible parsing: %d", buildTime)
+						break
+					}
+					// Also check if previous field contains ":"
+					if i > 0 && strings.HasSuffix(fields[i-1], ":") {
+						buildTime = val
+						debug.Log("TWXParser: Found build time after colon: %d", buildTime)
+						break
+					}
+				}
+			}
+		}
+	}
+	
+	if buildTime >= 0 {
+		// Store build time in current sector's port data
+		p.currentSector.Port.BuildTime = buildTime
+		debug.Log("TWXParser: Port build time set to %d hours", buildTime)
+	} else {
+		debug.Log("TWXParser: Could not extract build time from continuation: %s", line)
+	}
+}
+
+// parseEnhancedPortInfo handles enhanced port parsing with detailed class and trade pattern analysis
+func (p *TWXParser) parseEnhancedPortInfo(line string) {
+	// Parse port data (mirrors TWX Pascal logic)
+	if strings.Contains(line, "<=-DANGER-=>") {
+		debug.Log("TWXParser: Port is destroyed")
+		// Port is destroyed
+		return
+	}
+	
+	if len(line) <= 10 {
+		return
+	}
+	
+	portInfo := line[10:] // Remove "Ports   : "
+	
+	// Extract port name (before ", Class")
+	classPos := strings.Index(portInfo, ", Class")
+	if classPos > 0 {
+		portName := strings.TrimSpace(portInfo[:classPos])
+		debug.Log("TWXParser: Port name: %s", portName)
+		
+		// Extract and parse class information
+		classInfo := portInfo[classPos:]
+		portClass := p.parsePortClass(classInfo)
+		debug.Log("TWXParser: Port class: %d", portClass)
+		
+		// Parse buy/sell indicators and trade pattern
+		if strings.Contains(classInfo, "(") && strings.Contains(classInfo, ")") {
+			start := strings.Index(classInfo, "(")
+			end := strings.Index(classInfo, ")")
+			if end > start {
+				tradePattern := classInfo[start+1 : end]
+				debug.Log("TWXParser: Port trade pattern: %s", tradePattern)
+				
+				// Determine actual port class from trade pattern if not explicit
+				if portClass == 0 {
+					portClass = p.classFromTradePattern(tradePattern)
+					debug.Log("TWXParser: Derived port class from pattern: %d", portClass)
+				}
+			}
+		}
+		
+		// Store port information
+		p.storePortInfo(portName, portClass, portInfo)
+	}
+}
+
+// storePortInfo stores parsed port information
+func (p *TWXParser) storePortInfo(name string, class int, fullInfo string) {
+	// This would typically store to a database or data structure
+	// For now, we'll just log the structured information
+	debug.Log("TWXParser: Storing port info - Name: %s, Class: %d", name, class)
+	
+	// In a full implementation, this would:
+	// 1. Create/update port record in database
+	// 2. Parse trade status from various indicators
+	// 3. Store build time and other metadata
+	// 4. Update sector data with port reference
+}

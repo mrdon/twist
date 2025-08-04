@@ -90,6 +90,7 @@ type GameDetector struct {
 	// Streaming input handling
 	currentBuffer         string  // Small buffer for current potential match
 	patternMatchers       map[string]*PatternMatcher // Active pattern matchers
+	recentContent         string  // Larger buffer for context analysis (last ~500 chars)
 	
 	// ANSI stripping for streaming content
 	ansiStripper          *ansi.StreamingStripper
@@ -144,6 +145,7 @@ func (l *GameDetector) initializePatterns() {
 		"Thank you for playing":     TokenGameExit,
 		"Connection terminated":     TokenGameExit,
 		"Disconnected":             TokenGameExit,
+		"session has been terminated": TokenGameExit,  // More specific termination signal
 		"TWGS v":                   TokenMainMenu,
 		"TradeWars Game Server":    TokenMainMenu,
 		"Your choice: ":            TokenUserPrompt,
@@ -184,7 +186,7 @@ func (l *GameDetector) ProcessUserInput(input string) {
 	// Update activity timestamp
 	l.lastActivity = time.Now()
 	
-	// Only process isolated letters from user input in game menu state
+	// Process isolated letters from user input in game menu state
 	if l.currentState == StateGameMenuVisible && len(input) == 1 {
 		// Extract the character and convert to uppercase
 		char := rune(input[0])
@@ -210,6 +212,11 @@ func (l *GameDetector) ProcessLine(text string) {
 	// Strip ANSI codes before processing using streaming stripper
 	cleanText := l.ansiStripper.StripChunk(text)
 	
+	// Maintain recent content buffer for context analysis (keep last ~500 chars)
+	l.recentContent += cleanText
+	if len(l.recentContent) > 500 {
+		l.recentContent = l.recentContent[len(l.recentContent)-500:]
+	}
 	
 	// Process each character
 	for _, char := range cleanText {
@@ -254,7 +261,8 @@ func (l *GameDetector) processCharacter(char rune) {
 	case StateGameMenuVisible:
 		// Look for game options from server output 
 		l.processGameOptionPattern(char)          // <X> Game Name format
-		// Note: isolated letters are now handled via ProcessUserInput(), not from server output
+		// Also check for isolated letters from server output (could be echoed user input)
+		l.processIsolatedLetter(char)
 		
 	case StateGameSelected:
 		// Look for game start pattern (log prompt)
@@ -442,15 +450,90 @@ type isolatedLetterState struct {
 
 var iLetterState = &isolatedLetterState{}
 
-// processIsolatedLetter is no longer used - isolated letters are handled via ProcessUserInput
-// This method is kept for backward compatibility but does nothing
+// processIsolatedLetter handles isolated letters from server output (could be echoed user input)
 func (l *GameDetector) processIsolatedLetter(char rune) {
-	// Update state tracking for any remaining usage
+	// Store the current previous character before updating
+	currentPrevChar := iLetterState.prevChar
+	
+	// Update state tracking
 	iLetterState.prevPrevChar = iLetterState.prevChar
 	iLetterState.prevChar = char
+	
+	// Only process if we're in game menu state and have game options
+	if l.currentState != StateGameMenuVisible || len(l.gameOptions) == 0 {
+		return
+	}
+	
+	// Skip isolated letter detection if we're currently parsing a game option pattern
+	// This prevents letters inside <A> patterns from being treated as user input
+	if gOptionState.state != 0 {
+		debug.Log("GameDetector: Skipping isolated letter detection for %c - inside game option pattern (state: %d)", char, gOptionState.state)
+		return
+	}
+	
+	// Check if this is an isolated letter (A-Z)
+	if char >= 'A' && char <= 'Z' {
+		letterStr := string(char)
+		
+		// Check if this letter corresponds to a game option
+		if _, exists := l.gameOptions[letterStr]; exists {
+			// Only accept isolated letters with appropriate context
+			// This helps avoid false positives from letters embedded in text
+			if l.isValidIsolatedLetterContext(currentPrevChar) {
+				debug.Log("GameDetector: Isolated letter detected from server output: %s (prev char: %v %c)", letterStr, currentPrevChar, currentPrevChar)
+				l.emitIsolatedLetterToken(letterStr)
+			} else {
+				debug.Log("GameDetector: Isolated letter %s ignored due to context (prev char: %v %c)", letterStr, currentPrevChar, currentPrevChar)
+			}
+		}
+	}
 }
 
-// isValidPrecedingChar checks if the preceding character is valid for isolated letters
+// isValidIsolatedLetterContext checks if the context is appropriate for isolated letter detection
+func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
+	// Strategy: Only accept isolated letters if we've recently detected a user prompt
+	// This covers both direct responses (after colon) and echoed input (after various chars)
+	
+	// Check if we recently saw a user prompt - this is the key gate
+	recentContext := l.recentContent
+	if len(recentContext) > 50 {
+		recentContext = recentContext[len(recentContext)-50:] // Check last 50 chars for prompts
+	}
+	
+	// Look for user prompt patterns that indicate we're expecting user input
+	promptIndicators := []string{
+		"choice:", "selection:", "enter", "your choice", "please enter", 
+		"choice :", "selection :", // Handle spacing variations
+		"select a game", // Game menu prompt
+	}
+	
+	hasRecentPrompt := false
+	for _, indicator := range promptIndicators {
+		if strings.Contains(strings.ToLower(recentContext), indicator) {
+			hasRecentPrompt = true
+			break
+		}
+	}
+	
+	// If no recent prompt, reject the letter
+	if !hasRecentPrompt {
+		return false
+	}
+	
+	// If we have a recent prompt, accept letters in reasonable contexts:
+	// - After colons, spaces, newlines, start of input
+	// - This handles both direct input ("choice: A") and echoed input ("\n A" or " A")
+	acceptableChars := []rune{':', ' ', '\n', '\r', '\t', 0}
+	for _, acceptableChar := range acceptableChars {
+		if prevChar == acceptableChar {
+			return true
+		}
+	}
+	
+	return false
+}
+
+// isValidPrecedingChar checks if the preceding character is valid for isolated letters (legacy)
 func (l *GameDetector) isValidPrecedingChar(prevChar rune) bool {
 	validChars := []rune{' ', ':', '>', '\n', '\r', '\t', '[', '(', ')'}
 	for _, validChar := range validChars {
@@ -552,8 +635,16 @@ func (l *GameDetector) handleToken(token Token) {
 		
 	case TokenMainMenu:
 		if l.currentState == StateGameActive {
-			debug.Log("Main menu detected via lexer, resetting game state")
-			l.resetGameState()
+			// TWGS patterns can appear in game content (like config screens)
+			// Only reset if this appears to be an actual return to main menu
+			// Heuristic: if we see "TWGS v" or "TradeWars Game Server" in game content,
+			// it's likely just informational text, not a menu transition
+			if !l.isLikelyGameContent(token.Value) {
+				debug.Log("Main menu detected via lexer, resetting game state")
+				l.resetGameState()
+			} else {
+				debug.Log("Ignoring main menu pattern '%s' - appears to be game content", token.Value)
+			}
 		}
 		
 	case TokenUserPrompt:
@@ -583,6 +674,7 @@ func (l *GameDetector) resetGameState() {
 	l.selectedGame = ""
 	l.gameOptions = make(map[string]string)
 	l.expectingUserInput = false
+	l.recentContent = "" // Clear recent content buffer
 	
 	// Reset pattern matchers
 	for _, matcher := range l.patternMatchers {
@@ -602,6 +694,50 @@ func (l *GameDetector) resetGameState() {
 }
 
 // Helper functions
+
+// isLikelyGameContent determines if a main menu pattern is likely appearing
+// within game content rather than as an actual menu transition
+func (l *GameDetector) isLikelyGameContent(pattern string) bool {
+	// Use the recent content buffer for context analysis
+	recentContext := l.recentContent
+	
+	// Look for indicators that we're in game content:
+	// - Version info patterns ("Ver#", "running under")  
+	// - Game stats patterns ("Stats for", "ports are open", "Traders")
+	// - Command prompts ("Command [", "?=Help")
+	// - Configuration screens ("Configuration", "Status")
+	
+	gameContentIndicators := []string{
+		"Ver#", "running under", "registered to",
+		"Stats for", "ports are open", "Traders", "business",
+		"Command [", "?=Help", "(?=Help)",
+		"Configuration", "Status", "days",
+		"Universe", "Corporations", "Fighters",
+		"sectors", "planets", "Citadels", "net worth",
+	}
+	
+	// Check if any recent content suggests we're viewing game information
+	for _, indicator := range gameContentIndicators {
+		if strings.Contains(recentContext, indicator) {
+			debug.Log("GameDetector: Found game content indicator '%s' in recent context, treating '%s' as content", indicator, pattern)
+			return true
+		}
+	}
+	
+	// Additional heuristic: if the pattern is "TWGS v" in certain contexts,
+	// it's likely version info rather than a menu header
+	if strings.HasPrefix(pattern, "TWGS v") {
+		// If it's "TWGS v" followed by a number > 2, or contains "running under", it's version info
+		if strings.Contains(recentContext, "running under") || 
+		   strings.Contains(recentContext, "Ver#") {
+			debug.Log("GameDetector: Pattern '%s' looks like version info in context, treating as content", pattern)
+			return true
+		}
+	}
+	
+	debug.Log("GameDetector: Pattern '%s' does not appear to be game content", pattern)
+	return false
+}
 
 // isAlphaNum checks if character is alphanumeric
 func (l *GameDetector) isAlphaNum(char byte) bool {

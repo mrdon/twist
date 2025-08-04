@@ -18,3 +18,9 @@ UI Development (tview):
 * Use goroutines for async UI updates: `go func() { app.QueueUpdateDraw(func() { ... }) }()`
 * Handle connection events asynchronously to prevent blocking the main event loop
 * Always use non-blocking patterns for event handling to ensure UI responsiveness
+
+Lexer Development (golex):
+* NEVER modify generated lexer files (game_lexer_generated.go) - they are auto-generated from .l files
+* Only modify the .l lexer definition file (game_lexer.l) and regenerate using golex
+* Use `~/go/bin/golex -o game_lexer_generated.go game_lexer.l` to regenerate lexer code
+* Debug lexer issues by modifying the .l file patterns and regenerating, not by editing generated code

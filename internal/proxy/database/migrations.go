@@ -30,6 +30,47 @@ CREATE TABLE IF NOT EXISTS schema_version (
 -- Check if column exists and add it if it doesn't
 -- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we'll handle this gracefully`,
 	},
+	{
+		ID:          3,
+		Description: "Add message history table for parser integration",
+		SQL: `
+CREATE TABLE IF NOT EXISTS message_history (
+	id INTEGER PRIMARY KEY AUTOINCREMENT,
+	message_type INTEGER NOT NULL,
+	timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+	content TEXT NOT NULL,
+	sender TEXT,
+	channel INTEGER DEFAULT 0
+);
+
+CREATE INDEX IF NOT EXISTS idx_message_history_type ON message_history(message_type);
+CREATE INDEX IF NOT EXISTS idx_message_history_timestamp ON message_history(timestamp);`,
+	},
+	{
+		ID:          4,
+		Description: "Add player stats table for parser integration",
+		SQL: `
+CREATE TABLE IF NOT EXISTS player_stats (
+	id INTEGER PRIMARY KEY,
+	turns INTEGER DEFAULT 0,
+	credits INTEGER DEFAULT 0,
+	fighters INTEGER DEFAULT 0,
+	shields INTEGER DEFAULT 0,
+	ship_number INTEGER DEFAULT 0,
+	ship_class TEXT,
+	last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Insert default record if none exists
+INSERT OR IGNORE INTO player_stats (id) VALUES (1);`,
+	},
+	{
+		ID:          5,
+		Description: "Enhance planets table for parser data support",
+		SQL: `
+-- Add new columns to planets table if they don't exist
+-- These will be handled by a special migration function like figs_type`,
+	},
 	// Future migrations can be added here
 }
 
@@ -93,6 +134,9 @@ func (d *SQLiteDatabase) applyMigration(migration Migration) error {
 	if migration.ID == 2 {
 		return d.applyFighterTypeMigration(migration)
 	}
+	if migration.ID == 5 {
+		return d.applyPlanetsEnhancementMigration(migration)
+	}
 	
 	// Start transaction
 	tx, err := d.db.Begin()
@@ -152,6 +196,59 @@ func (d *SQLiteDatabase) applyFighterTypeMigration(migration Migration) error {
 			return fmt.Errorf("failed to add figs_type column: %w", err)
 		}
 	} else {
+	}
+	
+	// Record migration as applied
+	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
+	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
+		return fmt.Errorf("failed to record migration: %w", err)
+	}
+	
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration: %w", err)
+	}
+	
+	return nil
+}
+
+// applyPlanetsEnhancementMigration safely adds new columns to planets table
+func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) error {
+	// List of columns to add to planets table
+	newColumns := []struct {
+		name        string
+		definition  string
+	}{
+		{"owner", "TEXT"},
+		{"fighters", "INTEGER DEFAULT 0"},
+		{"citadel", "INTEGER DEFAULT 0"}, // 0=false, 1=true
+		{"stardock", "INTEGER DEFAULT 0"}, // 0=false, 1=true
+	}
+	
+	// Start transaction
+	tx, err := d.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+	
+	// Add each column if it doesn't exist
+	for _, col := range newColumns {
+		// Check if column exists
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM pragma_table_info('planets') WHERE name = '%s';`, col.name)
+		var count int
+		err := tx.QueryRow(query).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check for %s column: %w", col.name, err)
+		}
+		
+		// Add column if it doesn't exist
+		if count == 0 {
+			alterQuery := fmt.Sprintf(`ALTER TABLE planets ADD COLUMN %s %s;`, col.name, col.definition)
+			if _, err := tx.Exec(alterQuery); err != nil {
+				return fmt.Errorf("failed to add %s column: %w", col.name, err)
+			}
+		}
 	}
 	
 	// Record migration as applied

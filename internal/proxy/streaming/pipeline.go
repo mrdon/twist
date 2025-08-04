@@ -9,7 +9,6 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/telnet"
 	"twist/internal/proxy/database"
-	"twist/internal/proxy/streaming/parser"
 	"twist/internal/api"
 	// "twist/internal/debug" // Keep for future debugging
 )
@@ -39,7 +38,7 @@ type Pipeline struct {
 	telnetHandler  *telnet.Handler
 	tuiAPI         api.TuiAPI  // Direct TuiAPI reference
 	decoder        *encoding.Decoder
-	sectorParser   *parser.SectorParser
+	twxParser      *TWXParser
 	scriptManager  ScriptManager
 	stateManager   StateManager  // Game state updates
 	gameDetector   GameDetector  // Game detection
@@ -68,7 +67,7 @@ func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		sectorParser:  parser.NewSectorParser(db),
+		twxParser:     NewTWXParser(db),
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
 		batchTimeout:  0,     // No timeout needed
@@ -82,7 +81,7 @@ func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scrip
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		sectorParser:  parser.NewSectorParser(db),
+		twxParser:     NewTWXParser(db),
 		scriptManager: scriptManager,
 		batchBuffer:   make([]byte, 0, 4096),
 		batchSize:     1,     // Process immediately - no batching
@@ -102,6 +101,7 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
 		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
+		twxParser:     NewTWXParser(db),
 		scriptManager: scriptManager,
 		stateManager:  stateManager,
 		gameDetector:  gameDetector,
@@ -109,11 +109,6 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 		batchSize:     1,     // Process immediately - no batching
 		batchTimeout:  0,     // No timeout needed
 		stopChan:      make(chan struct{}),
-	}
-	
-	// Initialize sector parser only if database is available
-	if db != nil && stateManager != nil {
-		p.sectorParser = parser.NewSectorParserWithStateManager(db, stateManager)
 	}
 	
 	// Initialize telnet handler with proper writer for negotiation
@@ -201,8 +196,8 @@ func (p *Pipeline) batchProcessor() {
 				}
 				
 				// Parse the decoded text for sector information (only if parser available)
-				if p.sectorParser != nil {
-					p.sectorParser.ProcessData(decoded)
+				if p.twxParser != nil {
+					p.twxParser.ProcessChunk(decoded)
 				}
 				
 				if p.tuiAPI != nil {
