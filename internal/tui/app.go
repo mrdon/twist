@@ -39,6 +39,9 @@ type TwistApp struct {
 	inputHandler        *handlers.InputHandler
 	globalShortcuts     *twistComponents.GlobalShortcutManager
 
+	// Sixel rendering layer
+	sixelLayer *components.SixelLayer
+
 	// State
 	connected     bool
 	serverAddress string
@@ -57,10 +60,13 @@ func NewApplication() *TwistApp {
 	// Create the main application
 	app := tview.NewApplication()
 
+	// Create sixel layer first
+	sixelLayer := components.NewSixelLayer()
+
 	// Create UI components
 	menuComp := components.NewMenuComponent()
 	terminalComp := components.NewTerminalComponent(app)
-	panelComp := components.NewPanelComponent()
+	panelComp := components.NewPanelComponent(sixelLayer)
 	statusComp := components.NewStatusComponent()
 
 	// Create input handler
@@ -78,6 +84,7 @@ func NewApplication() *TwistApp {
 		statusComponent:    statusComp,
 		inputHandler:       inputHandler,
 		globalShortcuts:    twistComponents.NewGlobalShortcutManager(),
+		sixelLayer:         sixelLayer,
 		panelsVisible:      false, // Start with panels hidden
 		animating:          false,
 	}
@@ -127,6 +134,14 @@ func (ta *TwistApp) setupUI() {
 	ta.pages.AddPage("main", ta.mainGrid, true, true)
 
 	ta.app.SetRoot(ta.pages, true)
+	
+	// Set up sixel layer rendering after tview draws
+	ta.app.SetAfterDrawFunc(func(screen tcell.Screen) {
+		// Render sixel layer after tview completes its drawing
+		if ta.sixelLayer != nil {
+			ta.sixelLayer.Render()
+		}
+	})
 	
 	// Always keep terminal focused and in terminal input mode
 	ta.app.SetFocus(ta.terminalComponent.GetView())
@@ -382,6 +397,9 @@ func (ta *TwistApp) disconnect() {
 // exit shuts down the application
 func (ta *TwistApp) exit() {
 	ta.disconnect()
+	if ta.sixelLayer != nil {
+		ta.sixelLayer.Close()
+	}
 	ta.app.Stop()
 }
 

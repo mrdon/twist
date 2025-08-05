@@ -8,7 +8,7 @@ import (
 func TestTWXParser_EnhancedTraderParsing(t *testing.T) {
 	// Create parser
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test Pascal-compliant trader parsing
 	testCases := []struct {
@@ -140,7 +140,7 @@ func TestTWXParser_EnhancedTraderParsing(t *testing.T) {
 func TestTWXParser_MultipleTradersParsing(t *testing.T) {
 	// Test parsing multiple traders in continuation lines (Pascal behavior)
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Process multiple trader lines
 	traderLines := []string{
@@ -200,7 +200,7 @@ func TestTWXParser_MultipleTradersParsing(t *testing.T) {
 func TestTWXParser_TraderParsingValidation(t *testing.T) {
 	// Test validation and error handling
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name             string
@@ -275,7 +275,7 @@ func TestTWXParser_TraderParsingValidation(t *testing.T) {
 func TestTWXParser_TraderParsingEdgeCases(t *testing.T) {
 	// Test edge cases and malformed input
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name            string
@@ -356,7 +356,7 @@ func TestTWXParser_TraderParsingEdgeCases(t *testing.T) {
 func TestTWXParser_TraderDataConsistency(t *testing.T) {
 	// Test data consistency validation
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test trader with ship name but no ship type
 	parser.currentTraders = nil
@@ -392,7 +392,7 @@ func TestTWXParser_TraderDataConsistency(t *testing.T) {
 func TestTWXParser_TraderStateManagement(t *testing.T) {
 	// Test proper state management for multi-line trader data
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Reset parser state
 	parser.currentTraders = nil

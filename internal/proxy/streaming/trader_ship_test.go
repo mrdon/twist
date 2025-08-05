@@ -8,7 +8,7 @@ import (
 func TestTraderShipDetailsParsing(t *testing.T) {
 	// Create a test database
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 
 	testCases := []struct {
 		name           string
@@ -130,7 +130,7 @@ Traders : Test Trader, w/ 50 ftrs
 
 func TestTraderContinuationEdgeCases(t *testing.T) {
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Trader with comma in ship name", func(t *testing.T) {
 		sectorData := `Sector  : 2222 in Test Space

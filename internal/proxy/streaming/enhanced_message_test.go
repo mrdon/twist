@@ -14,7 +14,7 @@ func TestEnhancedMessageHandling(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	// Test cases based on Pascal Process.pas logic
 	tests := []struct {

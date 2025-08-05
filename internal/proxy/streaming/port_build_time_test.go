@@ -13,7 +13,7 @@ func TestPortBuildTimeParsing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 	
 	t.Run("Pascal Build Time Extraction", func(t *testing.T) {
 		// Test exact Pascal GetParameter(Line, 4) logic for build time extraction
@@ -215,7 +215,7 @@ func TestPortBuildTimeIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Multiple Ports with Build Times", func(t *testing.T) {
 		// Test multiple sectors with different port build times

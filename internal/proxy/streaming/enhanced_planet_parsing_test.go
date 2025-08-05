@@ -8,7 +8,7 @@ import (
 func TestTWXParser_EnhancedPlanetParsing(t *testing.T) {
 	// Create parser
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test Pascal-compliant planet parsing
 	testCases := []struct {
@@ -170,7 +170,7 @@ func TestTWXParser_EnhancedPlanetParsing(t *testing.T) {
 func TestTWXParser_MultiplePlanetsParsing(t *testing.T) {
 	// Test parsing multiple planets in one line
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Reset parser state
 	parser.currentPlanets = nil
@@ -211,7 +211,7 @@ func TestTWXParser_MultiplePlanetsParsing(t *testing.T) {
 func TestTWXParser_PlanetCitadelStardockDetection(t *testing.T) {
 	// Test various citadel and stardock detection scenarios
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name            string
@@ -295,7 +295,7 @@ func TestTWXParser_PlanetCitadelStardockDetection(t *testing.T) {
 func TestTWXParser_PlanetContinuationParsing(t *testing.T) {
 	// Test planet continuation line parsing
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Reset parser state
 	parser.currentPlanets = nil
@@ -339,7 +339,7 @@ func TestTWXParser_PlanetContinuationParsing(t *testing.T) {
 func TestTWXParser_PlanetParsingValidation(t *testing.T) {
 	// Test validation and error handling
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name        string
@@ -400,7 +400,7 @@ func TestTWXParser_PlanetParsingValidation(t *testing.T) {
 func TestTWXParser_PlanetDataConsistency(t *testing.T) {
 	// Test data consistency validation
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test planet with both citadel and stardock
 	parser.currentPlanets = nil

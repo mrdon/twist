@@ -10,7 +10,7 @@ func TestDatabaseIntegrationEndToEnd(t *testing.T) {
 	db := NewTestDatabase()
 	
 	// Create parser with database
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	t.Run("MessageHistoryIntegration", func(t *testing.T) {
 		// Test message being added to database
@@ -149,7 +149,7 @@ func TestDatabaseIntegrationEndToEnd(t *testing.T) {
 func TestDatabaseErrorHandling(t *testing.T) {
 	// Create test database
 	db := NewTestDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	t.Run("DatabaseUnavailable", func(t *testing.T) {
 		// Close the database to simulate unavailability

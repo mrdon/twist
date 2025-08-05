@@ -13,7 +13,7 @@ func TestNavHazParsingInAllModes(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("NavHaz Parsing in Sector Display", func(t *testing.T) {
 		// Test NavHaz parsing in normal sector display mode
@@ -179,7 +179,7 @@ func TestAnomalyDetectionValidation(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Anomaly Only From Density Scanner", func(t *testing.T) {
 		// Test that anomalies are only detected through density scanner mode
@@ -249,7 +249,7 @@ func TestNavHazErrorRecovery(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Malformed NavHaz Data", func(t *testing.T) {
 		// Test graceful handling of invalid NavHaz formats

@@ -14,7 +14,7 @@ func TestErrorRecovery(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("MalformedLineHandling", func(t *testing.T) {
 		// Test various malformed inputs that should be handled gracefully

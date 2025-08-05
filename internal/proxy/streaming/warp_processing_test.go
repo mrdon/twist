@@ -8,7 +8,7 @@ import (
 func TestWarpProcessing(t *testing.T) {
 	// Setup
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 
 	tests := []struct {
 		name           string
@@ -122,7 +122,7 @@ func TestWarpProcessing(t *testing.T) {
 
 func TestWarpValidation(t *testing.T) {
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 
 	tests := []struct {
 		sector   int
@@ -150,7 +150,7 @@ func TestWarpValidation(t *testing.T) {
 }
 
 func TestWarpSorting(t *testing.T) {
-	parser := NewTWXParser(nil)
+	parser := NewTWXParser(nil, nil)
 
 	tests := []struct {
 		name     string
@@ -211,7 +211,7 @@ func TestWarpSorting(t *testing.T) {
 }
 
 func TestContainsWarp(t *testing.T) {
-	parser := NewTWXParser(nil)
+	parser := NewTWXParser(nil, nil)
 
 	tests := []struct {
 		warps    []int
@@ -248,7 +248,7 @@ func TestWarpProcessingIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	// Test complete warp processing flow
 	t.Run("Complete warp processing flow", func(t *testing.T) {
@@ -328,7 +328,7 @@ func TestWarpProcessingIntegration(t *testing.T) {
 func TestRealWorldWarpData(t *testing.T) {
 	// Test cases based on actual data from raw.log
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 
 	realWorldTests := []struct {
 		name           string
@@ -413,7 +413,7 @@ func TestCompleteRealWorldSectorParsing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	// Real sector data from raw.log
 	realSectorData := []string{
@@ -465,7 +465,7 @@ func TestCompleteRealWorldSectorParsing(t *testing.T) {
 
 // Benchmark warp processing performance
 func BenchmarkWarpProcessing(b *testing.B) {
-	parser := NewTWXParser(nil)
+	parser := NewTWXParser(nil, nil)
 	testData := "1000 - 2000 - 3000 - 4000 - 5000 - 6000"
 
 	b.ResetTimer()
@@ -475,7 +475,7 @@ func BenchmarkWarpProcessing(b *testing.B) {
 }
 
 func BenchmarkWarpSorting(b *testing.B) {
-	parser := NewTWXParser(nil)
+	parser := NewTWXParser(nil, nil)
 	testWarps := []int{5000, 1000, 3000, 2000, 4000, 6000}
 
 	b.ResetTimer()
@@ -488,7 +488,7 @@ func BenchmarkWarpSorting(b *testing.B) {
 }
 
 func BenchmarkRealWorldWarpProcessing(b *testing.B) {
-	parser := NewTWXParser(nil)
+	parser := NewTWXParser(nil, nil)
 	// Real data from raw.log
 	testData := " 2142 - (13975) - (16563) - (16589)"
 

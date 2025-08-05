@@ -20,10 +20,11 @@ type PanelComponent struct {
 	graphvizMap  *GraphvizSectorMap              // Graphviz-based sector map component (new default)
 	useGraphviz  bool                     // Flag to switch between map types
 	proxyAPI     api.ProxyAPI             // API access for game data
+	sixelLayer   *SixelLayer              // Sixel rendering layer
 }
 
 // NewPanelComponent creates new panel components
-func NewPanelComponent() *PanelComponent {
+func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 	// Left panel for trader info using theme
 	leftPanel := theme.NewPanelView().
 		SetDynamicColors(true).
@@ -37,7 +38,7 @@ func NewPanelComponent() *PanelComponent {
 	// Create all sector map components for right panel
 	sectorMap := NewSectorMapComponent()
 	sixelMap := NewProperSixelSectorMapComponent()
-	graphvizMap := NewGraphvizSectorMap() // Use graphviz as default
+	graphvizMap := NewGraphvizSectorMap(sixelLayer) // Use graphviz as default
 	
 	// Use graphviz map as default
 	useGraphviz := true
@@ -61,6 +62,7 @@ func NewPanelComponent() *PanelComponent {
 		sixelMap:     sixelMap,
 		graphvizMap:  graphvizMap,
 		useGraphviz:  useGraphviz,
+		sixelLayer:   sixelLayer,
 	}
 }
 

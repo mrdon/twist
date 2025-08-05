@@ -14,7 +14,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Density Scanner Start Detection", func(t *testing.T) {
 		// Test density scanner start (Pascal: Copy(Line, 27, 16) = 'Relative Density')
@@ -311,7 +311,7 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Complete Density Scan Workflow", func(t *testing.T) {
 		// Simulate complete density scanning session

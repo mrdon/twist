@@ -13,7 +13,7 @@ func TestStardockDetection(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("V Screen Stardock Detection", func(t *testing.T) {
 		// Test the exact Pascal pattern: Copy(Line, 14, 8) = 'StarDock' and Copy(Line, 37, 6) = 'sector'
@@ -63,7 +63,7 @@ func TestStardockDetection(t *testing.T) {
 
 	t.Run("Multiple Stardock Detection Prevention", func(t *testing.T) {
 		// Reset for clean test
-		parser2 := NewTWXParserWithAPI(db, nil)
+		parser2 := NewTWXParser(db, nil)
 		
 		// First detection
 		stardockLine1 := "             StarDock                   sector 1234."
@@ -110,7 +110,7 @@ func TestStardockDetection(t *testing.T) {
 		}
 		defer db2.CloseDatabase()
 		
-		parser3 := NewTWXParserWithAPI(db2, nil)
+		parser3 := NewTWXParser(db2, nil)
 		
 		for _, line := range invalidLines {
 			parser3.ProcessString(line + "\r")
@@ -155,7 +155,7 @@ func TestStardockDetection(t *testing.T) {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
 			
-			parserTest := NewTWXParserWithAPI(dbTest, nil)
+			parserTest := NewTWXParser(dbTest, nil)
 			
 			// Process the line
 			parserTest.ProcessString(tc.line + "\r")
@@ -196,7 +196,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Configuration Storage and Retrieval", func(t *testing.T) {
 		// Set Stardock sector
@@ -209,7 +209,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 		}
 		
 		// Create new parser instance with same database
-		parser2 := NewTWXParserWithAPI(db, nil)
+		parser2 := NewTWXParser(db, nil)
 		
 		// Should retrieve the same value
 		retrieved2 := parser2.getStardockSector()
@@ -228,7 +228,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 		}
 		defer db2.CloseDatabase()
 
-		parser3 := NewTWXParserWithAPI(db2, nil)
+		parser3 := NewTWXParser(db2, nil)
 		
 		// Should return 0 for unknown Stardock
 		unknown := parser3.getStardockSector()

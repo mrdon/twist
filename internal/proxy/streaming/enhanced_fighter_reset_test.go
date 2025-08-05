@@ -8,7 +8,7 @@ import (
 func TestTWXParser_EnhancedFighterDatabaseReset(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test should not panic even with unopened database
 	defer func() {
@@ -26,7 +26,7 @@ func TestTWXParser_EnhancedFighterDatabaseReset(t *testing.T) {
 func TestTWXParser_FighterResetStardockExclusion(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test should not panic
 	defer func() {
@@ -44,7 +44,7 @@ func TestTWXParser_FighterResetStardockExclusion(t *testing.T) {
 func TestTWXParser_FighterResetOwnerVerification(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test should not panic
 	defer func() {
@@ -62,7 +62,7 @@ func TestTWXParser_FighterResetOwnerVerification(t *testing.T) {
 func TestTWXParser_IsPersonalOrCorpFighter(t *testing.T) {
 	// Create parser for testing
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		owner    string
@@ -95,7 +95,7 @@ func TestTWXParser_IsPersonalOrCorpFighter(t *testing.T) {
 func TestTWXParser_FindStardockSector(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Setup test sectors
 	err := setupTestSectorsWithFighters(db, []fighterTestData{

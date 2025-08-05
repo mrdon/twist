@@ -13,7 +13,7 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("CIM Prompt Detection", func(t *testing.T) {
 		// Test CIM prompt detection (Pascal ": " handling)
@@ -311,7 +311,7 @@ func TestCIMIntegrationWithRealData(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 	
 	t.Run("Complete CIM workflow", func(t *testing.T) {
 		// Simulate complete CIM download workflow

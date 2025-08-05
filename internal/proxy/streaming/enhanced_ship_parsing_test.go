@@ -9,7 +9,7 @@ import (
 func TestTWXParser_EnhancedShipParsing(t *testing.T) {
 	// Create parser
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test Pascal-compliant ship parsing
 	testCases := []struct {
@@ -134,7 +134,7 @@ func TestTWXParser_EnhancedShipParsing(t *testing.T) {
 func TestTWXParser_PascalShipContinuationLogic(t *testing.T) {
 	// Test Pascal-specific continuation logic
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Test Pascal exact position matching for ship type
 	testCases := []struct {
@@ -208,7 +208,7 @@ func TestTWXParser_PascalShipContinuationLogic(t *testing.T) {
 func TestTWXParser_ShipParsingValidation(t *testing.T) {
 	// Test validation and error handling
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name          string
@@ -285,7 +285,7 @@ func TestTWXParser_ShipParsingValidation(t *testing.T) {
 func TestTWXParser_MultipleShipsInSector(t *testing.T) {
 	// Test parsing multiple ships in the same sector
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	// Process multiple ship lines
 	shipLines := []string{
@@ -331,7 +331,7 @@ func TestTWXParser_MultipleShipsInSector(t *testing.T) {
 func TestTWXParser_ShipParsingEdgeCases(t *testing.T) {
 	// Test edge cases and malformed input
 	db := database.NewDatabase()
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	
 	testCases := []struct {
 		name        string

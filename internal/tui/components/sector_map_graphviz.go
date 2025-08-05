@@ -5,10 +5,13 @@ import (
 	"context"
 	"fmt"
 	"image"
+	"image/color"
 	"image/color/palette"
 	"image/draw"
 	"image/png"
 	"os"
+	"os/exec"
+	"strings"
 	"twist/internal/api"
 	"twist/internal/debug"
 
@@ -16,7 +19,9 @@ import (
 	"github.com/dominikbraun/graph"
 	"github.com/gdamore/tcell/v2"
 	"github.com/goccy/go-graphviz"
+	"github.com/goccy/go-graphviz/cgraph"
 	"github.com/rivo/tview"
+	xdraw "golang.org/x/image/draw"
 )
 
 // GraphvizSectorMap manages the sector map visualization using graphviz and sixels
@@ -30,14 +35,20 @@ type GraphvizSectorMap struct {
 	cachedWidth   int
 	cachedHeight  int
 	needsRedraw   bool
+	hasBorder     bool
+	sixelLayer    *SixelLayer
+	regionID      string
 }
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
-func NewGraphvizSectorMap() *GraphvizSectorMap {
+func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 	gsm := &GraphvizSectorMap{
 		Box:         tview.NewBox(),
 		sectorData:  make(map[int]api.SectorInfo),
 		needsRedraw: true,
+		hasBorder:   true,
+		sixelLayer:  sixelLayer,
+		regionID:    "sector_map", // Unique ID for this component
 	}
 	gsm.SetBorder(true).SetTitle("Sector Map (Graphviz)")
 	return gsm
@@ -52,11 +63,17 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
-	gsm.Box.DrawForSubclass(screen, gsm)
+	// Skip Box.DrawForSubclass to avoid screen clearing that causes flicker
+	// Instead, manually draw border if needed
+	if gsm.hasBorder {
+		gsm.drawCustomBorder(screen)
+	}
 
 	x, y, width, height := gsm.GetInnerRect()
+	debug.Log("GraphvizSectorMap: Draw() GetInnerRect returned x=%d, y=%d, width=%d, height=%d", x, y, width, height)
 
 	if width <= 0 || height <= 0 {
+		debug.Log("GraphvizSectorMap: Invalid dimensions, skipping draw")
 		return
 	}
 
@@ -65,6 +82,13 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		debug.Log("GraphvizSectorMap: Dimensions changed from %dx%d to %dx%d, clearing caches", gsm.cachedWidth, gsm.cachedHeight, width, height)
 		gsm.cachedImage = nil
 		gsm.cachedSixel = ""
+		
+		// Clear the region thoroughly before updating dimensions
+		if gsm.sixelLayer != nil {
+			gsm.sixelLayer.ClearRegion(gsm.regionID)
+			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
+		}
+		
 		gsm.cachedWidth = width
 		gsm.cachedHeight = height
 		gsm.needsRedraw = true
@@ -86,17 +110,21 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// Render sixel graphics if we have cached image
-	if gsm.cachedImage != nil {
-		gsm.renderSixelInPanel(screen, x, y, width, height)
+	// Register sixel region with the layer if we have cached image
+	if gsm.cachedImage != nil && gsm.sixelLayer != nil {
+		gsm.registerSixelRegion(x, y, width, height)
 	} else {
 		// Show status text
 		gsm.drawStatusText(screen, x, y, width, height, "Generating sector map...")
+		// Hide sixel region when not ready
+		if gsm.sixelLayer != nil {
+			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
+		}
 	}
 }
 
-// renderSixelInPanel renders sixel graphics within the tview panel
-func (gsm *GraphvizSectorMap) renderSixelInPanel(screen tcell.Screen, x, y, width, height int) {
+// registerSixelRegion registers this component's sixel region with the layer
+func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 	// Generate sixel data if not cached
 	if gsm.cachedSixel == "" {
 		// Decode the cached PNG image
@@ -123,20 +151,61 @@ func (gsm *GraphvizSectorMap) renderSixelInPanel(screen tcell.Screen, x, y, widt
 		debug.Log("GraphvizSectorMap: Generated and cached sixel data, size: %d bytes", len(gsm.cachedSixel))
 	}
 
-	// Use the proven dual-method approach from working sixel implementation
-
-	// Method 1: Try the original tview-sixel approach
-	screen.ShowCursor(x, y+2)
-	//fmt.Print(gsm.cachedSixel)
-	screen.Sync()
-
-	// Method 2: Bypass modern tview screen buffer isolation
-	if tty, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
-		defer tty.Close()
-		// Position cursor and output sixel to bypass tview
-		fmt.Fprintf(tty, "\x1b[%d;%dH%s", y+3, x+1, gsm.cachedSixel)
+	// Register with the sixel layer instead of direct TTY writing
+	region := &SixelRegion{
+		X:         x,
+		Y:         y + 2, // Offset to avoid border
+		Width:     width,
+		Height:    height,
+		SixelData: gsm.cachedSixel,
+		Visible:   true,
 	}
 
+	gsm.sixelLayer.AddRegion(gsm.regionID, region)
+}
+
+// drawCustomBorder draws border without clearing background
+func (gsm *GraphvizSectorMap) drawCustomBorder(screen tcell.Screen) {
+	x, y, width, height := gsm.GetRect()
+	style := tcell.StyleDefault.Foreground(tcell.ColorWhite)
+
+	// Top border
+	for i := x; i < x+width; i++ {
+		screen.SetContent(i, y, '─', nil, style)
+	}
+
+	// Bottom border
+	for i := x; i < x+width; i++ {
+		screen.SetContent(i, y+height-1, '─', nil, style)
+	}
+
+	// Left border
+	for i := y; i < y+height; i++ {
+		screen.SetContent(x, i, '│', nil, style)
+	}
+
+	// Right border
+	for i := y; i < y+height; i++ {
+		screen.SetContent(x+width-1, i, '│', nil, style)
+	}
+
+	// Corners
+	screen.SetContent(x, y, '┌', nil, style)
+	screen.SetContent(x+width-1, y, '┐', nil, style)
+	screen.SetContent(x, y+height-1, '└', nil, style)
+	screen.SetContent(x+width-1, y+height-1, '┘', nil, style)
+
+	// Title
+	if gsm.Box != nil {
+		// Use reflection or a different approach since GetTitle() might not be available
+		titleX := x + 2
+		title := "Sector Map (Graphviz)" // Hardcode for now
+		for i, r := range title {
+			if titleX+i < x+width-1 {
+				screen.SetContent(titleX+i, y, r, nil, style)
+			}
+		}
+	}
 }
 
 // drawStatusText draws simple status text in the panel
@@ -160,6 +229,11 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 		gsm.currentSector = sectorNumber
 		gsm.needsRedraw = true
 		gsm.cachedSixel = "" // Clear sixel cache
+
+		// Hide the region while regenerating to prevent overlap
+		if gsm.sixelLayer != nil {
+			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
+		}
 	}
 }
 
@@ -169,6 +243,11 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 		gsm.currentSector = sectorInfo.Number
 		gsm.needsRedraw = true
 		gsm.cachedSixel = "" // Clear sixel cache
+
+		// Hide the region while regenerating to prevent overlap
+		if gsm.sixelLayer != nil {
+			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
+		}
 	}
 	gsm.sectorData[sectorInfo.Number] = sectorInfo
 }
@@ -219,59 +298,40 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 		return nil, fmt.Errorf("failed to add current sector vertex: %w", err)
 	}
 
-	// Add connected sectors and their connections
+	// Build complete graph with all warp connections
+	// Step 1: Add all first-level vertices and edges from current sector
+	for _, warpSector := range currentInfo.Warps {
+		if warpSector <= 0 {
+			continue
+		}
+		g.AddVertex(warpSector) // Ignore errors - vertex might already exist
+		g.AddEdge(gsm.currentSector, warpSector) // Ignore errors - edge might already exist
+	}
+
+	// Step 2: Fetch warp info for all first-level sectors and add their connections
 	for _, warpSector := range currentInfo.Warps {
 		if warpSector <= 0 {
 			continue
 		}
 
-		// Add warp sector as vertex
-		err = g.AddVertex(warpSector)
-		if err != nil {
-			debug.Log("GraphvizSectorMap: Failed to add vertex %d: %v", warpSector, err)
-			continue
-		}
-
-		// Add edge from current sector to warp sector
-		err = g.AddEdge(gsm.currentSector, warpSector)
-		if err != nil {
-			debug.Log("GraphvizSectorMap: Failed to add edge %d->%d: %v", gsm.currentSector, warpSector, err)
-		} else {
-			debug.Log("GraphvizSectorMap: Added edge %d->%d to dominikbraun graph", gsm.currentSector, warpSector)
-		}
-
-		// Get warp sector info to find its connections
+		// Get warp sector info
 		warpInfo, err := gsm.proxyAPI.GetSectorInfo(warpSector)
 		if err != nil {
-			debug.Log("GraphvizSectorMap: Failed to get info for sector %d: %v", warpSector, err)
-			continue
+			continue // Skip sectors we can't get info for
 		}
 		gsm.sectorData[warpSector] = warpInfo
 
-		// Add second-level connections (warps of warps)
-		for _, secondLevelWarp := range warpInfo.Warps {
-			if secondLevelWarp <= 0 || secondLevelWarp == gsm.currentSector {
-				continue // Skip invalid sectors and avoid loops back to current
-			}
-
-			// Add second-level sector as vertex
-			err = g.AddVertex(secondLevelWarp)
-			if err != nil {
-				debug.Log("GraphvizSectorMap: Failed to add second-level vertex %d: %v", secondLevelWarp, err)
+		// Add all connections from this sector
+		for _, targetSector := range warpInfo.Warps {
+			if targetSector <= 0 {
 				continue
 			}
+			g.AddVertex(targetSector) // Ignore errors - vertex might already exist
+			g.AddEdge(warpSector, targetSector) // Ignore errors - edge might already exist
 
-			// Add edge from warp sector to second-level warp
-			err = g.AddEdge(warpSector, secondLevelWarp)
-			if err != nil {
-				debug.Log("GraphvizSectorMap: Failed to add second-level edge %d->%d: %v", warpSector, secondLevelWarp, err)
-			} else {
-				debug.Log("GraphvizSectorMap: Added second-level edge %d->%d to dominikbraun graph", warpSector, secondLevelWarp)
-			}
-
-			// Store basic info for the second-level sector (don't fetch full details to avoid deep recursion)
-			if _, exists := gsm.sectorData[secondLevelWarp]; !exists {
-				gsm.sectorData[secondLevelWarp] = api.SectorInfo{Number: secondLevelWarp}
+			// Store basic info for target sectors (avoid infinite recursion)
+			if _, exists := gsm.sectorData[targetSector]; !exists {
+				gsm.sectorData[targetSector] = api.SectorInfo{Number: targetSector}
 			}
 		}
 	}
@@ -281,6 +341,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 
 // generateGraphvizImage creates a PNG image from the graph using graphviz
 func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], componentWidth, componentHeight int) ([]byte, error) {
+	debug.Log("GraphvizSectorMap: generateGraphvizImage called with component dimensions %dx%d", componentWidth, componentHeight)
 	ctx := context.Background()
 	gv, err := graphviz.New(ctx)
 	if err != nil {
@@ -295,24 +356,45 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	}
 	defer gvGraph.Close()
 
-	// Set graph attributes for layout that fits component dimensions
-	aspectRatio := float64(componentWidth) / float64(componentHeight)
-
-	// Choose layout direction based on aspect ratio
-	if aspectRatio > 1.5 {
-		gvGraph.SetRankDir("LR") // Left to right for wide components
-	} else {
-		gvGraph.SetRankDir("TB") // Top to bottom for tall/square components
+	// Use neato engine with increased spacing for better layout
+	gvGraph.SetLayout("neato")          // Force-directed layout engine
+	gvGraph.SetBackgroundColor("black") // Black background
+	gvGraph.SetDPI(150.0)              // Higher DPI for better border rendering
+	
+	// Set default edge color to white for visibility on black background
+	_, err = gvGraph.Attr(int(cgraph.EDGE), "color", "white")
+	if err != nil {
+		debug.Log("GraphvizSectorMap: Failed to set default edge color: %v", err)
+	}
+	
+	// Set default node attributes with visible borders and rounded corners
+	_, err = gvGraph.Attr(int(cgraph.NODE), "style", "filled,rounded")
+	if err != nil {
+		debug.Log("GraphvizSectorMap: Failed to set default node style: %v", err)
+	}
+	_, err = gvGraph.Attr(int(cgraph.NODE), "penwidth", "3")
+	if err != nil {
+		debug.Log("GraphvizSectorMap: Failed to set default node penwidth: %v", err)
+	}
+	_, err = gvGraph.Attr(int(cgraph.NODE), "color", "white")
+	if err != nil {
+		debug.Log("GraphvizSectorMap: Failed to set default node border color: %v", err)
 	}
 
-	// Set size based on component dimensions (scale down to fit)
-	graphWidth := float64(componentWidth) * 0.15 // Scale to character units
-	graphHeight := float64(componentHeight) * 0.3
-	gvGraph.SetSize(graphWidth, graphHeight)
+	// Calculate aspect ratio - we expect much more height than width
+	aspectRatio := float64(componentWidth) / float64(componentHeight)
+	debug.Log("GraphvizSectorMap: Component aspect ratio: %.3f (width=%d, height=%d)", aspectRatio, componentWidth, componentHeight)
 
-	gvGraph.SetNodeSeparator(0.2)       // Tight node separation
-	gvGraph.SetRankSeparator(0.3)       // Tight rank separation
-	gvGraph.SetBackgroundColor("black") // Black background
+	// Configure layout spacing for neato engine using proper neato attributes
+	gvGraph.SetOverlap(false)      // Prevent node overlap
+	gvGraph.SetSplines("true")     // Enable curved edges for better readability
+	gvGraph.Set("center", "true")  // Center the graph
+	
+	// Use neato-specific attributes for better spacing
+	gvGraph.Set("len", "3.0")           // Preferred edge length in inches - larger for more spacing
+	gvGraph.Set("sep", "1.0")           // Margin around nodes when removing overlap 
+	gvGraph.Set("defaultdist", "4.0")   // Distance between separate components
+	gvGraph.Set("overlap_scaling", "2.0") // Scale layout to reduce overlap
 
 	// Create a map of graphviz nodes
 	gvNodes := make(map[int]*graphviz.Node)
@@ -328,10 +410,9 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		// Create node with sector information
 		sectorInfo, exists := gsm.sectorData[sector]
 
-		var label, color, fillColor string
+		var label, fillColor string
 		if sector == gsm.currentSector {
 			label = fmt.Sprintf("YOU\\n%d", sector)
-			color = "red"
 			fillColor = "yellow"
 		} else if exists && sectorInfo.HasTraders > 0 {
 			portType := sectorInfo.PortType
@@ -339,11 +420,9 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 				portType = fmt.Sprintf("T%d", sectorInfo.HasTraders)
 			}
 			label = fmt.Sprintf("%d\\n(%s)", sector, portType)
-			color = "blue"
 			fillColor = "lightblue"
 		} else {
 			label = fmt.Sprintf("%d", sector)
-			color = "white"
 			fillColor = "gray"
 		}
 
@@ -354,19 +433,21 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		}
 
 		node.SetLabel(label)
-		node.SetColor(color)
 		node.SetFillColor(fillColor)
-		node.SetStyle("filled")
 		node.SetShape("box")
-		node.SetPenWidth(2.0) // Make borders more visible
+		// DO NOT set fixed size - let graphviz size based on content
+		node.SetFontSize(18.0)     // Large readable font
+		node.SetFontColor("black") // Black text on colored background
 
 		gvNodes[sector] = node
 	}
 
-	// Add edges using the adjacency map we already have
+	// Add edges using the adjacency map, avoiding duplicates for bidirectional edges
 	debug.Log("GraphvizSectorMap: AdjacencyMap has %d sources", len(adjacencyMap))
 
 	edgeCount := 0
+	processedEdges := make(map[string]bool) // Track processed edge pairs
+
 	for source, targets := range adjacencyMap {
 		debug.Log("GraphvizSectorMap: Source %d has %d targets", source, len(targets))
 		sourceNode, sourceExists := gvNodes[source]
@@ -376,6 +457,21 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		}
 
 		for target := range targets {
+			// Create a unique key for this edge pair (always smaller->larger to avoid duplicates)
+			var edgeKey string
+			if source < target {
+				edgeKey = fmt.Sprintf("%d-%d", source, target)
+			} else {
+				edgeKey = fmt.Sprintf("%d-%d", target, source)
+			}
+
+			// Skip if we've already processed this edge pair
+			if processedEdges[edgeKey] {
+				debug.Log("GraphvizSectorMap: Skipping duplicate edge pair %s", edgeKey)
+				continue
+			}
+			processedEdges[edgeKey] = true
+
 			targetNode, targetExists := gvNodes[target]
 			if !targetExists {
 				debug.Log("GraphvizSectorMap: Target node %d not found in gvNodes", target)
@@ -388,26 +484,27 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 				continue
 			}
 
-			// Style the edge to be highly visible on black background
-			edge.SetColor("cyan")  // Bright cyan should be more visible
-			edge.SetPenWidth(12.0) // Much thicker
+			// Style the edge with thinner lines and better arrow spacing
+			edge.SetPenWidth(1.5) // Thinner line thickness
 			edge.SetStyle("solid")
+			edge.SetConstraint(true) // Keep layout constraints
+			edge.SetArrowSize(0.8)   // Smaller arrows to reduce overlap with nodes
 
-			// Check if it's a bidirectional connection and set arrow direction
+			// Check if it's a bidirectional connection
 			if reverseTargets, exists := adjacencyMap[target]; exists {
 				if _, isBidirectional := reverseTargets[source]; isBidirectional {
-					edge.SetDir("both") // Bidirectional arrows
-					edge.SetArrowHead("normal")
-					edge.SetArrowTail("normal")
+					edge.SetDir("both")         // Bidirectional arrows
+					edge.SetArrowHead("normal") // Standard arrow shape
+					edge.SetArrowTail("normal") // Standard arrow shape
 					debug.Log("GraphvizSectorMap: Created bidirectional edge %d<->%d", source, target)
 				} else {
-					edge.SetDir("forward") // Unidirectional arrow
-					edge.SetArrowHead("normal")
+					edge.SetDir("forward")      // Unidirectional arrow
+					edge.SetArrowHead("normal") // Standard arrow shape
 					debug.Log("GraphvizSectorMap: Created unidirectional edge %d->%d", source, target)
 				}
 			} else {
-				edge.SetDir("forward") // Default to unidirectional
-				edge.SetArrowHead("normal")
+				edge.SetDir("forward")      // Default to unidirectional
+				edge.SetArrowHead("normal") // Standard arrow shape
 				debug.Log("GraphvizSectorMap: Created default unidirectional edge %d->%d", source, target)
 			}
 
@@ -417,11 +514,78 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 
 	debug.Log("GraphvizSectorMap: Created %d total edges", edgeCount)
 
-	// Render to PNG
+	// Save warp direction analysis for debugging
+	var warpDebug strings.Builder
+	warpDebug.WriteString("=== SECTOR WARP ANALYSIS ===\n\n")
+
+	// List all sectors and their warps
+	warpDebug.WriteString("Raw sector warp data:\n")
+	for sector, info := range gsm.sectorData {
+		warpDebug.WriteString(fmt.Sprintf("Sector %d warps to: %v\n", sector, info.Warps))
+	}
+
+	warpDebug.WriteString("\nAdjacency map analysis:\n")
+	for source, targets := range adjacencyMap {
+		warpDebug.WriteString(fmt.Sprintf("Source %d connects to: ", source))
+		targetList := make([]int, 0, len(targets))
+		for target := range targets {
+			targetList = append(targetList, target)
+		}
+		warpDebug.WriteString(fmt.Sprintf("%v\n", targetList))
+	}
+
+	warpDebug.WriteString("\nBidirectional analysis:\n")
+	for source, targets := range adjacencyMap {
+		for target := range targets {
+			if reverseTargets, exists := adjacencyMap[target]; exists {
+				if _, isBidirectional := reverseTargets[source]; isBidirectional {
+					warpDebug.WriteString(fmt.Sprintf("BIDIRECTIONAL: %d <-> %d\n", source, target))
+				} else {
+					warpDebug.WriteString(fmt.Sprintf("UNIDIRECTIONAL: %d -> %d (no reverse)\n", source, target))
+				}
+			} else {
+				warpDebug.WriteString(fmt.Sprintf("UNIDIRECTIONAL: %d -> %d (target not in adjacency map)\n", source, target))
+			}
+		}
+	}
+
+	// Write to file
+	if err := os.WriteFile("/tmp/sector_debug.txt", []byte(warpDebug.String()), 0644); err != nil {
+		debug.Log("GraphvizSectorMap: Failed to save debug file: %v", err)
+	} else {
+		debug.Log("GraphvizSectorMap: Saved warp analysis to /tmp/sector_debug.txt")
+	}
+
+	// Save DOT file for debugging
+	var dotBuf bytes.Buffer
+	err = gv.Render(ctx, gvGraph, "dot", &dotBuf)
+	if err == nil {
+		if err := os.WriteFile("/tmp/sector_map.dot", dotBuf.Bytes(), 0644); err != nil {
+			debug.Log("GraphvizSectorMap: Failed to save DOT file: %v", err)
+		} else {
+			debug.Log("GraphvizSectorMap: Saved DOT file to /tmp/sector_map.dot")
+		}
+	}
+
+	// Use command line graphviz as the primary approach since it renders borders properly
+	// The go-graphviz library's WASM backend doesn't render borders correctly
+	cmd := exec.Command("neato", "-Tpng", "/tmp/sector_map.dot")
 	var buf bytes.Buffer
-	err = gv.Render(ctx, gvGraph, graphviz.PNG, &buf)
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	
+	err = cmd.Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to render graph to PNG: %w", err)
+		debug.Log("GraphvizSectorMap: Command line neato failed: %v, output: %s", err, buf.String())
+		// Fallback to library rendering as last resort
+		buf.Reset()
+		err = gv.Render(ctx, gvGraph, graphviz.PNG, &buf)
+		if err != nil {
+			return nil, fmt.Errorf("both command line and library rendering failed: %w", err)
+		}
+		debug.Log("GraphvizSectorMap: Used library PNG rendering as fallback")
+	} else {
+		debug.Log("GraphvizSectorMap: Successfully used command line neato, PNG size: %d bytes", buf.Len())
 	}
 
 	// Validate PNG output has content
@@ -429,9 +593,121 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		return nil, fmt.Errorf("graphviz render produced no PNG output")
 	}
 
-	debug.Log("GraphvizSectorMap: Generated PNG image, size: %d bytes", buf.Len())
+	// Decode the natural-sized image
+	img, err := png.Decode(bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode PNG: %w", err)
+	}
 
-	return buf.Bytes(), nil
+	// Get the natural dimensions
+	bounds := img.Bounds()
+	naturalWidth := bounds.Dx()
+	naturalHeight := bounds.Dy()
+
+	// Convert character dimensions to pixel dimensions based on typical monospace font metrics
+	// For a 12pt monospace font at 72 DPI (more appropriate for terminal character sizing):
+	// - Character width: ~7.2 pixels (12pt * 72dpi / 72pts_per_inch * 0.6 width_ratio)
+	// - Character height: ~15.6 pixels (12pt * 72dpi / 72pts_per_inch * 1.3 line_height)
+	fontSize := 12.0                // Font size in points
+	dpi := 72.0                    // Lower DPI for more appropriate terminal sizing
+	pointsPerInch := 72.0          // Standard points per inch
+	monospaceWidthRatio := 0.6     // Monospace chars are typically 60% of their height
+	lineHeightRatio := 1.3         // Line height is typically 130% of font size
+	
+	pixelsPerPoint := dpi / pointsPerInch
+	charHeightPixels := fontSize * pixelsPerPoint * lineHeightRatio
+	charWidthPixels := fontSize * pixelsPerPoint * monospaceWidthRatio
+	
+	componentWidthPixels := int(float64(componentWidth) * charWidthPixels)
+	componentHeightPixels := int(float64(componentHeight) * charHeightPixels)
+
+	debug.Log("GraphvizSectorMap: Font metrics - charWidth=%.1fpx, charHeight=%.1fpx", charWidthPixels, charHeightPixels)
+
+	// Scale to fit the estimated pixel component size while maintaining aspect ratio
+	scaleX := float64(componentWidthPixels) / float64(naturalWidth)
+	scaleY := float64(componentHeightPixels) / float64(naturalHeight)
+	scale := scaleX
+	if scaleY < scaleX {
+		scale = scaleY
+	}
+
+	// Apply a conservative scaling factor - use 85% to leave some margin for borders/padding
+	scale = scale * 0.85
+
+	// Ensure reasonable scale bounds to preserve quality and readability
+	if scale < 0.4 {
+		scale = 0.4 // Don't scale down too much or we lose readability
+	}
+	if scale > 1.5 {
+		scale = 1.5 // Don't scale up too much or we get pixelation
+	}
+
+	newWidth := int(float64(naturalWidth) * scale)
+	newHeight := int(float64(naturalHeight) * scale)
+
+	debug.Log("GraphvizSectorMap: Natural size %dx%d pixels, component size %dx%d chars (%dx%d pixels)", 
+		naturalWidth, naturalHeight, componentWidth, componentHeight, componentWidthPixels, componentHeightPixels)
+	debug.Log("GraphvizSectorMap: Calculated scale factors: X=%.2f, Y=%.2f, chosen=%.2f, adjusted=%.2f", scaleX, scaleY, scale/0.85, scale)
+	debug.Log("GraphvizSectorMap: Scaling to %dx%d", newWidth, newHeight)
+
+	// Scale the image using golang.org/x/image/draw
+	scaledImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
+	xdraw.BiLinear.Scale(scaledImg, scaledImg.Bounds(), img, bounds, xdraw.Over, nil)
+
+	// Create a panel-sized canvas to center the scaled image
+	panelImg := image.NewRGBA(image.Rect(0, 0, componentWidthPixels, componentHeightPixels))
+	
+	// Fill with black background
+	black := color.RGBA{0, 0, 0, 255}
+	for y := 0; y < componentHeightPixels; y++ {
+		for x := 0; x < componentWidthPixels; x++ {
+			panelImg.Set(x, y, black)
+		}
+	}
+	
+	// Calculate position to center the scaled image in the panel
+	centerX := (componentWidthPixels - newWidth) / 2
+	centerY := (componentHeightPixels - newHeight) / 2
+	
+	// Ensure we don't go negative (clip if image is larger than panel)
+	if centerX < 0 {
+		centerX = 0
+	}
+	if centerY < 0 {
+		centerY = 0
+	}
+	
+	// Calculate clipping if the scaled image is larger than the panel
+	srcX := 0
+	srcY := 0
+	targetWidth := newWidth
+	targetHeight := newHeight
+	
+	if centerX + newWidth > componentWidthPixels {
+		targetWidth = componentWidthPixels - centerX
+	}
+	if centerY + newHeight > componentHeightPixels {
+		targetHeight = componentHeightPixels - centerY
+	}
+	
+	// Draw the scaled image centered (and clipped if necessary) in the panel
+	if targetWidth > 0 && targetHeight > 0 {
+		targetRect := image.Rect(centerX, centerY, centerX+targetWidth, centerY+targetHeight)
+		sourceRect := image.Rect(srcX, srcY, srcX+targetWidth, srcY+targetHeight)
+		draw.Draw(panelImg, targetRect, scaledImg, sourceRect.Min, draw.Over)
+	}
+
+	// Encode the final panel-sized image
+	var panelBuf bytes.Buffer
+	err = png.Encode(&panelBuf, panelImg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode panel PNG: %w", err)
+	}
+
+	debug.Log("GraphvizSectorMap: Centered %dx%d scaled image in %dx%d panel at (%d,%d)", 
+		newWidth, newHeight, componentWidthPixels, componentHeightPixels, centerX, centerY)
+
+	return panelBuf.Bytes(), nil
 }
 
 // Note: outputSixelImage and outputSixelToTerminal methods removed - now handled in renderSixelInPanel

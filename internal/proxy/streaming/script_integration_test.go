@@ -209,7 +209,7 @@ func TestTWXParser_ScriptIntegration(t *testing.T) {
 	db := database.NewDatabase()
 	
 	// Create parser with script integration
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	mockEngine := NewMockScriptEngine()
 	parser.SetScriptEngine(mockEngine)
 	
@@ -241,7 +241,7 @@ func TestTWXParser_VersionDetectionScriptEvent(t *testing.T) {
 	db := database.NewDatabase()
 	
 	// Create parser with script integration
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	mockEngine := NewMockScriptEngine()
 	parser.SetScriptEngine(mockEngine)
 	
@@ -300,7 +300,7 @@ func TestTWXParser_PascalIntegrationBehavior(t *testing.T) {
 	db := database.NewDatabase()
 	
 	// Create parser with script integration
-	parser := NewTWXParser(db)
+	parser := NewTWXParser(db, nil)
 	mockEngine := NewMockScriptEngine()
 	parser.SetScriptEngine(mockEngine)
 	

@@ -13,7 +13,7 @@ func TestCitadelTreasuryDetection(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Basic Citadel Treasury Detection", func(t *testing.T) {
 		// Test basic citadel treasury detection (Pascal: Copy(Line, 1, 25) = 'Citadel treasury contains')
@@ -189,7 +189,7 @@ func TestCitadelTreasuryEdgeCases(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Multiple Treasury Lines", func(t *testing.T) {
 		// Test multiple citadel treasury lines in sequence
@@ -289,7 +289,7 @@ func TestCitadelTreasuryIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParserWithAPI(db, nil)
+	parser := NewTWXParser(db, nil)
 
 	t.Run("Complete Citadel Visit Workflow", func(t *testing.T) {
 		// Simulate a complete workflow of visiting a citadel planet
