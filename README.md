@@ -1,6 +1,7 @@
-# Twist - Trade Wars 2002 Proxy
+# Twist - Trade Wars 2002 TUI
 
-A modern Go-based proxy and automation tool for Trade Wars 2002, featuring real-time game parsing, scripting support, and an interactive terminal interface.
+A modern text UI (TUI) client helper for Trade Wars 2002, featuring real-time game info, TWX-compatible 
+scripting, and an interactive terminal interface.
 
 <img src="docs/2025-08-05_00-44.png" alt="Twist Interface" width="800">
 
@@ -8,7 +9,7 @@ A modern Go-based proxy and automation tool for Trade Wars 2002, featuring real-
 
 - **Real-time Game Parsing**: Automatically parses Trade Wars 2002 game data including sectors, traders, ships, and ports
 - **Interactive Terminal UI**: Clean terminal interface with sector maps, trader info, and game statistics
-- **Scripting Engine**: Supports custom scripts for game automation
+- **Scripting Engine**: Supports custom TWX-based scripts for game automation
 - **Database Integration**: Stores game data with SQLite for persistence
 - **Sector Mapping**: Visual sector map with warp connections and hazard indicators
 - **Multi-game Support**: Works with various Trade Wars 2002 servers and game types
