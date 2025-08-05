@@ -46,11 +46,11 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 		Box:         tview.NewBox(),
 		sectorData:  make(map[int]api.SectorInfo),
 		needsRedraw: true,
-		hasBorder:   true,
+		hasBorder:   false,  // Disable tview border, use only content border
 		sixelLayer:  sixelLayer,
 		regionID:    "sector_map", // Unique ID for this component
 	}
-	gsm.SetBorder(true).SetTitle("Sector Map (Graphviz)")
+	gsm.SetBorder(false).SetTitle("Sector Map (Graphviz)")
 	return gsm
 }
 
@@ -64,10 +64,7 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	// Skip Box.DrawForSubclass to avoid screen clearing that causes flicker
-	// Instead, manually draw border if needed
-	if gsm.hasBorder {
-		gsm.drawCustomBorder(screen)
-	}
+	// We rely on the content border drawn directly in the image instead of tview borders
 
 	x, y, width, height := gsm.GetInnerRect()
 	debug.Log("GraphvizSectorMap: Draw() GetInnerRect returned x=%d, y=%d, width=%d, height=%d", x, y, width, height)
@@ -97,6 +94,12 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	// Generate map image and sixel if needed
 	if gsm.needsRedraw || gsm.cachedImage == nil || gsm.cachedSixel == "" {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil {
+			// Clear the region before generating new content to prevent artifacts
+			if gsm.sixelLayer != nil {
+				gsm.sixelLayer.ClearRegion(gsm.regionID)
+				gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
+			}
+			
 			// Generate new graphviz image
 			g, err := gsm.buildSectorGraph()
 			if err == nil {
@@ -154,9 +157,9 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 	// Register with the sixel layer instead of direct TTY writing
 	region := &SixelRegion{
 		X:         x,
-		Y:         y + 2, // Offset to avoid border
+		Y:         y + 1, // Minimal offset to avoid title overlap
 		Width:     width,
-		Height:    height,
+		Height:    height - 1, // Minimal height adjustment
 		SixelData: gsm.cachedSixel,
 		Visible:   true,
 	}
@@ -299,6 +302,9 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 	}
 
 	// Build complete graph with all warp connections
+	// Track which sectors we've fully processed to avoid infinite recursion
+	processedSectors := make(map[int]bool)
+	
 	// Step 1: Add all first-level vertices and edges from current sector
 	for _, warpSector := range currentInfo.Warps {
 		if warpSector <= 0 {
@@ -307,10 +313,12 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 		g.AddVertex(warpSector) // Ignore errors - vertex might already exist
 		g.AddEdge(gsm.currentSector, warpSector) // Ignore errors - edge might already exist
 	}
+	processedSectors[gsm.currentSector] = true
 
 	// Step 2: Fetch warp info for all first-level sectors and add their connections
+	secondLevelSectors := make([]int, 0)
 	for _, warpSector := range currentInfo.Warps {
-		if warpSector <= 0 {
+		if warpSector <= 0 || processedSectors[warpSector] {
 			continue
 		}
 
@@ -320,6 +328,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			continue // Skip sectors we can't get info for
 		}
 		gsm.sectorData[warpSector] = warpInfo
+		processedSectors[warpSector] = true
 
 		// Add all connections from this sector
 		for _, targetSector := range warpInfo.Warps {
@@ -329,9 +338,101 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			g.AddVertex(targetSector) // Ignore errors - vertex might already exist
 			g.AddEdge(warpSector, targetSector) // Ignore errors - edge might already exist
 
-			// Store basic info for target sectors (avoid infinite recursion)
-			if _, exists := gsm.sectorData[targetSector]; !exists {
-				gsm.sectorData[targetSector] = api.SectorInfo{Number: targetSector}
+			// Track sectors for next level processing if not already processed
+			if !processedSectors[targetSector] {
+				secondLevelSectors = append(secondLevelSectors, targetSector)
+			}
+		}
+	}
+
+	// Step 3: Fetch warp info for all second-level sectors and add their connections (3rd level)
+	thirdLevelSectors := make([]int, 0)
+	for _, secondLevelSector := range secondLevelSectors {
+		if secondLevelSector <= 0 || processedSectors[secondLevelSector] {
+			continue
+		}
+
+		// Get second-level sector info
+		secondLevelInfo, err := gsm.proxyAPI.GetSectorInfo(secondLevelSector)
+		if err != nil {
+			continue // Skip sectors we can't get info for
+		}
+		gsm.sectorData[secondLevelSector] = secondLevelInfo
+		processedSectors[secondLevelSector] = true
+
+		// Add all connections from this second-level sector (creating 3rd level)
+		for _, thirdLevelSector := range secondLevelInfo.Warps {
+			if thirdLevelSector <= 0 {
+				continue
+			}
+			g.AddVertex(thirdLevelSector) // Ignore errors - vertex might already exist
+			g.AddEdge(secondLevelSector, thirdLevelSector) // Ignore errors - edge might already exist
+
+			// Track sectors for next level processing if not already processed
+			if !processedSectors[thirdLevelSector] {
+				thirdLevelSectors = append(thirdLevelSectors, thirdLevelSector)
+			}
+		}
+	}
+
+	// Step 4: Fetch warp info for all third-level sectors and add their connections (4th level)
+	fourthLevelSectors := make([]int, 0)
+	for _, thirdLevelSector := range thirdLevelSectors {
+		if thirdLevelSector <= 0 || processedSectors[thirdLevelSector] {
+			continue
+		}
+
+		// Get third-level sector info
+		thirdLevelInfo, err := gsm.proxyAPI.GetSectorInfo(thirdLevelSector)
+		if err != nil {
+			continue // Skip sectors we can't get info for
+		}
+		gsm.sectorData[thirdLevelSector] = thirdLevelInfo
+		processedSectors[thirdLevelSector] = true
+
+		// Add all connections from this third-level sector (creating 4th level)
+		for _, fourthLevelSector := range thirdLevelInfo.Warps {
+			if fourthLevelSector <= 0 {
+				continue
+			}
+			g.AddVertex(fourthLevelSector) // Ignore errors - vertex might already exist
+			g.AddEdge(thirdLevelSector, fourthLevelSector) // Ignore errors - edge might already exist
+
+			// Track sectors for next level processing if not already processed
+			if !processedSectors[fourthLevelSector] {
+				fourthLevelSectors = append(fourthLevelSectors, fourthLevelSector)
+			}
+		}
+	}
+
+	// Step 5: Fetch warp info for all fourth-level sectors and add their connections (5th level)
+	for _, fourthLevelSector := range fourthLevelSectors {
+		if fourthLevelSector <= 0 || processedSectors[fourthLevelSector] {
+			continue
+		}
+
+		// Get fourth-level sector info
+		fourthLevelInfo, err := gsm.proxyAPI.GetSectorInfo(fourthLevelSector)
+		if err != nil {
+			continue // Skip sectors we can't get info for
+		}
+		gsm.sectorData[fourthLevelSector] = fourthLevelInfo
+		processedSectors[fourthLevelSector] = true
+
+		// Add all connections from this fourth-level sector (creating 5th level)
+		for _, fifthLevelSector := range fourthLevelInfo.Warps {
+			if fifthLevelSector <= 0 {
+				continue
+			}
+			g.AddVertex(fifthLevelSector) // Ignore errors - vertex might already exist
+			g.AddEdge(fourthLevelSector, fifthLevelSector) // Ignore errors - edge might already exist
+
+			// Store basic info for fifth-level sectors only if not already processed
+			// This prevents infinite expansion while allowing recursive connections
+			if !processedSectors[fifthLevelSector] {
+				if _, exists := gsm.sectorData[fifthLevelSector]; !exists {
+					gsm.sectorData[fifthLevelSector] = api.SectorInfo{Number: fifthLevelSector}
+				}
 			}
 		}
 	}
@@ -414,16 +515,23 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		if sector == gsm.currentSector {
 			label = fmt.Sprintf("YOU\\n%d", sector)
 			fillColor = "yellow"
-		} else if exists && sectorInfo.HasTraders > 0 {
-			portType := sectorInfo.PortType
-			if portType == "" {
-				portType = fmt.Sprintf("T%d", sectorInfo.HasTraders)
+		} else if exists && len(sectorInfo.Warps) > 0 {
+			// Explored sector - has warp data from database
+			if sectorInfo.HasTraders > 0 {
+				portType := sectorInfo.PortType
+				if portType == "" {
+					portType = fmt.Sprintf("T%d", sectorInfo.HasTraders)
+				}
+				label = fmt.Sprintf("%d\\n(%s)", sector, portType)
+				fillColor = "lightblue"
+			} else {
+				label = fmt.Sprintf("%d", sector)
+				fillColor = "gray"
 			}
-			label = fmt.Sprintf("%d\\n(%s)", sector, portType)
-			fillColor = "lightblue"
 		} else {
+			// Unexplored sector - only known from warp references
 			label = fmt.Sprintf("%d", sector)
-			fillColor = "gray"
+			fillColor = "lightcoral"
 		}
 
 		node, err := gvGraph.CreateNodeByName(fmt.Sprintf("s%d", sector))
@@ -604,42 +712,61 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	naturalWidth := bounds.Dx()
 	naturalHeight := bounds.Dy()
 
-	// Convert character dimensions to pixel dimensions based on typical monospace font metrics
-	// For a 12pt monospace font at 72 DPI (more appropriate for terminal character sizing):
-	// - Character width: ~7.2 pixels (12pt * 72dpi / 72pts_per_inch * 0.6 width_ratio)
-	// - Character height: ~15.6 pixels (12pt * 72dpi / 72pts_per_inch * 1.3 line_height)
-	fontSize := 12.0                // Font size in points
-	dpi := 72.0                    // Lower DPI for more appropriate terminal sizing
-	pointsPerInch := 72.0          // Standard points per inch
-	monospaceWidthRatio := 0.6     // Monospace chars are typically 60% of their height
-	lineHeightRatio := 1.3         // Line height is typically 130% of font size
+	// Fixed font size approach - maintain consistent text size regardless of graph size
+	targetFontSizePixels := 12.0   // Target font size in final rendered image (pixels)
+	graphvizFontSizePoints := 18.0 // The font size we set in graphviz (from node.SetFontSize)
+	graphvizDPI := 150.0          // The DPI we set in graphviz (from gvGraph.SetDPI)
 	
-	pixelsPerPoint := dpi / pointsPerInch
-	charHeightPixels := fontSize * pixelsPerPoint * lineHeightRatio
-	charWidthPixels := fontSize * pixelsPerPoint * monospaceWidthRatio
+	// Calculate what the graphviz font renders as in pixels
+	graphvizFontPixels := (graphvizFontSizePoints / 72.0) * graphvizDPI
 	
+	// Calculate the scale needed to achieve our target font size
+	fontScale := targetFontSizePixels / graphvizFontPixels
+	
+	debug.Log("GraphvizSectorMap: Target font size: %.1fpx, Graphviz renders at: %.1fpx, Font scale: %.3f", 
+		targetFontSizePixels, graphvizFontPixels, fontScale)
+
+	// Calculate panel size in pixels using typical terminal character dimensions
+	terminalFontSize := 11.0       // Typical terminal font size  
+	terminalDPI := 96.0           // Standard screen DPI
+	charWidthRatio := 0.6         // Monospace width ratio
+	lineHeightRatio := 0.85       // Line height ratio
+	
+	pixelsPerPoint := terminalDPI / 72.0
+	charHeightPixels := terminalFontSize * pixelsPerPoint * lineHeightRatio
+	charWidthPixels := terminalFontSize * pixelsPerPoint * charWidthRatio
+	
+	adjustedHeight := componentHeight - 1 // Reserve space for title
 	componentWidthPixels := int(float64(componentWidth) * charWidthPixels)
-	componentHeightPixels := int(float64(componentHeight) * charHeightPixels)
+	componentHeightPixels := int(float64(adjustedHeight) * charHeightPixels)
 
-	debug.Log("GraphvizSectorMap: Font metrics - charWidth=%.1fpx, charHeight=%.1fpx", charWidthPixels, charHeightPixels)
+	debug.Log("GraphvizSectorMap: Panel size %dx%d chars = %dx%d pixels", 
+		componentWidth, componentHeight, componentWidthPixels, componentHeightPixels)
 
-	// Scale to fit the estimated pixel component size while maintaining aspect ratio
-	scaleX := float64(componentWidthPixels) / float64(naturalWidth)
-	scaleY := float64(componentHeightPixels) / float64(naturalHeight)
-	scale := scaleX
-	if scaleY < scaleX {
-		scale = scaleY
+	// Use the font-based scale as our primary scale
+	scale := fontScale
+	
+	// But ensure we don't exceed panel bounds - if the scaled image would be too big, we'll crop
+	scaledWidth := int(float64(naturalWidth) * scale)
+	scaledHeight := int(float64(naturalHeight) * scale)
+	shouldCrop := false
+	
+	if scaledWidth > componentWidthPixels || scaledHeight > componentHeightPixels {
+		shouldCrop = true
+		debug.Log("GraphvizSectorMap: Scaled size %dx%d exceeds panel %dx%d, will crop", 
+			scaledWidth, scaledHeight, componentWidthPixels, componentHeightPixels)
 	}
-
-	// Apply a conservative scaling factor - use 85% to leave some margin for borders/padding
-	scale = scale * 0.85
-
-	// Ensure reasonable scale bounds to preserve quality and readability
-	if scale < 0.4 {
-		scale = 0.4 // Don't scale down too much or we lose readability
-	}
-	if scale > 1.5 {
-		scale = 1.5 // Don't scale up too much or we get pixelation
+	
+	// Set reasonable bounds on scaling to prevent extreme cases
+	maxScale := 2.0 // Don't scale up too much
+	minScale := 0.2 // Don't scale down too much - text becomes unreadable
+	
+	if scale > maxScale {
+		scale = maxScale
+		debug.Log("GraphvizSectorMap: Clamped scale to maximum %.2f", maxScale)
+	} else if scale < minScale {
+		scale = minScale
+		debug.Log("GraphvizSectorMap: Clamped scale to minimum %.2f", minScale)
 	}
 
 	newWidth := int(float64(naturalWidth) * scale)
@@ -647,12 +774,17 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 
 	debug.Log("GraphvizSectorMap: Natural size %dx%d pixels, component size %dx%d chars (%dx%d pixels)", 
 		naturalWidth, naturalHeight, componentWidth, componentHeight, componentWidthPixels, componentHeightPixels)
-	debug.Log("GraphvizSectorMap: Calculated scale factors: X=%.2f, Y=%.2f, chosen=%.2f, adjusted=%.2f", scaleX, scaleY, scale/0.85, scale)
+	debug.Log("GraphvizSectorMap: Font-based scale: %.3f, final scale: %.3f", fontScale, scale)
 	debug.Log("GraphvizSectorMap: Scaling to %dx%d", newWidth, newHeight)
 
 	// Scale the image using golang.org/x/image/draw
 	scaledImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
 	xdraw.BiLinear.Scale(scaledImg, scaledImg.Bounds(), img, bounds, xdraw.Over, nil)
+	
+	// Find the actual content bounds of the scaled image (non-black pixels)
+	contentBounds := findContentBounds(scaledImg)
+	debug.Log("GraphvizSectorMap: Content bounds: x=%d, y=%d, w=%d, h=%d", 
+		contentBounds.Min.X, contentBounds.Min.Y, contentBounds.Dx(), contentBounds.Dy())
 
 	// Create a panel-sized canvas to center the scaled image
 	panelImg := image.NewRGBA(image.Rect(0, 0, componentWidthPixels, componentHeightPixels))
@@ -665,29 +797,57 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		}
 	}
 	
-	// Calculate position to center the scaled image in the panel
-	centerX := (componentWidthPixels - newWidth) / 2
-	centerY := (componentHeightPixels - newHeight) / 2
+	// Handle centering and cropping based on whether we're cropping or fitting
+	var centerX, centerY, srcX, srcY, targetWidth, targetHeight int
 	
-	// Ensure we don't go negative (clip if image is larger than panel)
-	if centerX < 0 {
+	if shouldCrop || newWidth > componentWidthPixels || newHeight > componentHeightPixels {
+		// Cropping mode: center the source image and crop edges that don't fit
 		centerX = 0
-	}
-	if centerY < 0 {
 		centerY = 0
-	}
-	
-	// Calculate clipping if the scaled image is larger than the panel
-	srcX := 0
-	srcY := 0
-	targetWidth := newWidth
-	targetHeight := newHeight
-	
-	if centerX + newWidth > componentWidthPixels {
-		targetWidth = componentWidthPixels - centerX
-	}
-	if centerY + newHeight > componentHeightPixels {
-		targetHeight = componentHeightPixels - centerY
+		targetWidth = componentWidthPixels
+		targetHeight = componentHeightPixels
+		
+		// Calculate which part of the source image to show (center crop)
+		srcX = (newWidth - componentWidthPixels) / 2
+		srcY = (newHeight - componentHeightPixels) / 2
+		
+		// Ensure source coordinates are not negative
+		if srcX < 0 {
+			srcX = 0
+			targetWidth = newWidth
+		}
+		if srcY < 0 {
+			srcY = 0
+			targetHeight = newHeight
+		}
+		
+		// Ensure target dimensions don't exceed panel or scaled image size
+		if targetWidth > componentWidthPixels {
+			targetWidth = componentWidthPixels
+		}
+		if targetHeight > componentHeightPixels {
+			targetHeight = componentHeightPixels
+		}
+		if targetWidth > newWidth - srcX {
+			targetWidth = newWidth - srcX
+		}
+		if targetHeight > newHeight - srcY {
+			targetHeight = newHeight - srcY
+		}
+		
+		debug.Log("GraphvizSectorMap: Cropping mode - showing source region (%d,%d) %dx%d in panel region (%d,%d) %dx%d", 
+			srcX, srcY, targetWidth, targetHeight, centerX, centerY, targetWidth, targetHeight)
+	} else {
+		// Fitting mode: center the entire scaled image in the panel
+		centerX = (componentWidthPixels - newWidth) / 2
+		centerY = (componentHeightPixels - newHeight) / 2
+		srcX = 0
+		srcY = 0
+		targetWidth = newWidth
+		targetHeight = newHeight
+		
+		debug.Log("GraphvizSectorMap: Fitting mode - centering %dx%d image at (%d,%d) in %dx%d panel", 
+			newWidth, newHeight, centerX, centerY, componentWidthPixels, componentHeightPixels)
 	}
 	
 	// Draw the scaled image centered (and clipped if necessary) in the panel
@@ -707,7 +867,110 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	debug.Log("GraphvizSectorMap: Centered %dx%d scaled image in %dx%d panel at (%d,%d)", 
 		newWidth, newHeight, componentWidthPixels, componentHeightPixels, centerX, centerY)
 
+	// Re-encode the panel image before adding borders
+	panelBuf.Reset()
+	err = png.Encode(&panelBuf, panelImg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode panel PNG before borders: %w", err)
+	}
+
+	// Add borders around the content area
+	drawContentBorders(panelImg, contentBounds, centerX, centerY)
+
+	// Final encode with borders
+	panelBuf.Reset()
+	err = png.Encode(&panelBuf, panelImg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode final panel PNG: %w", err)
+	}
+
 	return panelBuf.Bytes(), nil
 }
+
+// findContentBounds finds the bounding box of non-black pixels in an image
+func findContentBounds(img *image.RGBA) image.Rectangle {
+	bounds := img.Bounds()
+	minX, minY := bounds.Max.X, bounds.Max.Y
+	maxX, maxY := bounds.Min.X, bounds.Min.Y
+
+	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
+		for x := bounds.Min.X; x < bounds.Max.X; x++ {
+			r, g, b, a := img.At(x, y).RGBA()
+			// Check if pixel is not black (allowing for small variations)
+			if a > 0 && (r > 1000 || g > 1000 || b > 1000) {
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+				if y < minY {
+					minY = y
+				}
+				if y > maxY {
+					maxY = y
+				}
+			}
+		}
+	}
+
+	// If no content found, return zero rectangle
+	if minX > maxX || minY > maxY {
+		return image.Rectangle{}
+	}
+
+	// Add a small padding around the content
+	padding := 3
+	minX = max(bounds.Min.X, minX-padding)
+	minY = max(bounds.Min.Y, minY-padding)
+	maxX = min(bounds.Max.X-1, maxX+padding)
+	maxY = min(bounds.Max.Y-1, maxY+padding)
+
+	return image.Rect(minX, minY, maxX+1, maxY+1)
+}
+
+// drawContentBorders draws borders around the content area in the panel
+func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, offsetX, offsetY int) {
+	if contentBounds.Empty() {
+		return
+	}
+
+	white := color.RGBA{255, 255, 255, 255}
+	
+	// Adjust content bounds by the centering offset
+	left := contentBounds.Min.X + offsetX
+	top := contentBounds.Min.Y + offsetY
+	right := contentBounds.Max.X + offsetX - 1
+	bottom := contentBounds.Max.Y + offsetY - 1
+
+	panelBounds := panelImg.Bounds()
+	
+	// Ensure borders are within the panel bounds
+	left = max(0, left)
+	top = max(0, top)
+	right = min(panelBounds.Max.X-1, right)
+	bottom = min(panelBounds.Max.Y-1, bottom)
+
+	// Draw top and bottom borders
+	for x := left; x <= right; x++ {
+		if top >= 0 && top < panelBounds.Max.Y {
+			panelImg.Set(x, top, white)
+		}
+		if bottom >= 0 && bottom < panelBounds.Max.Y && bottom != top {
+			panelImg.Set(x, bottom, white)
+		}
+	}
+
+	// Draw left and right borders
+	for y := top; y <= bottom; y++ {
+		if left >= 0 && left < panelBounds.Max.X {
+			panelImg.Set(left, y, white)
+		}
+		if right >= 0 && right < panelBounds.Max.X && right != left {
+			panelImg.Set(right, y, white)
+		}
+	}
+}
+
 
 // Note: outputSixelImage and outputSixelToTerminal methods removed - now handled in renderSixelInPanel

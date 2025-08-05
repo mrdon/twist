@@ -104,6 +104,9 @@ func (sl *SixelLayer) ClearRegion(id string) {
 	defer sl.mutex.Unlock()
 	if region, exists := sl.regions[id]; exists {
 		sl.clearRegionArea(region)
+		// Reset max dimensions to prevent artifacts from previous larger content
+		region.MaxWidth = region.Width
+		region.MaxHeight = region.Height
 	}
 }
 
