@@ -65,6 +65,9 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
 	
+	// Setup script manager connections immediately so sendHandler is available
+	p.scriptManager.SetupConnections(p, nil)
+	
 	return p
 }
 
@@ -134,6 +137,7 @@ func (p *Proxy) Connect(address string) error {
 	
 	// Setup database state change callback
 	p.gameDetector.SetDatabaseStateChangedCallback(p.onDatabaseStateChanged)
+	
 
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
@@ -164,6 +168,21 @@ func (p *Proxy) Connect(address string) error {
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("telnet negotiation failed: %w", err)
+	}
+
+	// Load and run login script automatically on connection
+	debug.Log("Checking script manager availability...")
+	if p.scriptManager != nil {
+		debug.Log("Script manager is available, attempting to load login script")
+		loginScriptPath := "login.ts"
+		debug.Log("Loading login script from path: %s", loginScriptPath)
+		if err := p.scriptManager.LoadAndRunScript(loginScriptPath); err != nil {
+			debug.Log("Warning: Failed to load login script %s: %v", loginScriptPath, err)
+		} else {
+			debug.Log("Login script %s loaded and started successfully", loginScriptPath)
+		}
+	} else {
+		debug.Log("Script manager is nil - scripts not available")
 	}
 
 	// Start goroutines for handling I/O
@@ -423,6 +442,7 @@ func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.
 		p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
 		p.pipeline.Start()
 	}
+	
 	
 	return nil
 }

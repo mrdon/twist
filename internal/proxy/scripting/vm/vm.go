@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/manager"
 	"twist/internal/proxy/scripting/parser"
@@ -94,8 +95,11 @@ func (vm *VirtualMachine) LoadScript(ast *parser.ASTNode, script types.ScriptInt
 
 // Execute runs the script execution loop
 func (vm *VirtualMachine) Execute() error {
+	debug.Log("VM.Execute starting - IsRunning: %v, IsWaiting: %v", vm.state.IsRunning(), vm.state.IsWaiting())
 	for vm.state.IsRunning() && !vm.state.IsWaiting() {
+		debug.Log("VM.Execute executing step at position %d", vm.state.Position)
 		if err := vm.execution.ExecuteStep(); err != nil {
+			debug.Log("VM.Execute ExecuteStep failed: %v", err)
 			vm.lastError = err
 			return err
 		}
@@ -103,10 +107,14 @@ func (vm *VirtualMachine) Execute() error {
 		// Handle pause state - in test mode, continue execution automatically
 		// In real mode, this would return control to caller
 		if vm.state.IsPaused() {
+			debug.Log("VM.Execute script paused, continuing automatically")
 			// For testing, treat pause as a no-op and continue
 			vm.state.SetRunning()
 		}
+		
+		debug.Log("VM.Execute after step - IsRunning: %v, IsWaiting: %v", vm.state.IsRunning(), vm.state.IsWaiting())
 	}
+	debug.Log("VM.Execute finished - IsRunning: %v, IsWaiting: %v", vm.state.IsRunning(), vm.state.IsWaiting())
 	return nil
 }
 
@@ -120,6 +128,7 @@ func (vm *VirtualMachine) SetEchoHandler(handler func(string) error) {
 }
 
 func (vm *VirtualMachine) SetSendHandler(handler func(string) error) {
+	debug.Log("VM.SetSendHandler called - handler is nil: %v", handler == nil)
 	vm.sendHandler = handler
 }
 
@@ -207,8 +216,12 @@ func (vm *VirtualMachine) ClientMessage(message string) error {
 }
 
 func (vm *VirtualMachine) Send(data string) error {
+	debug.Log("VM.Send called with data: %q", data)
 	if vm.sendHandler != nil {
+		debug.Log("VM.Send calling sendHandler")
 		return vm.sendHandler(data)
+	} else {
+		debug.Log("VM.Send no sendHandler set")
 	}
 	return nil
 }
@@ -310,6 +323,9 @@ func (vm *VirtualMachine) ProcessTriggers(text string) error {
 }
 
 func (vm *VirtualMachine) ProcessIncomingText(text string) error {
+	debug.Log("VM.ProcessIncomingText: %q", text)
+	debug.Log("VM.ProcessIncomingText IsWaiting: %v, WaitText: %q", vm.state.IsWaiting(), vm.state.WaitText)
+	
 	// Process triggers first
 	if err := vm.ProcessTriggers(text); err != nil {
 		return err
@@ -319,9 +335,12 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 	if vm.state.IsWaiting() && vm.state.WaitText != "" {
 		// Use substring matching like TWX does with Pos(FWaitText, Text) > 0
 		if strings.Contains(text, vm.state.WaitText) {
+			debug.Log("VM.ProcessIncomingText MATCH FOUND! Clearing wait and resuming")
 			vm.state.ClearWait()
 			// Resume execution - the position was already advanced by ExecuteStep
 			return vm.Execute()
+		} else {
+			debug.Log("VM.ProcessIncomingText No match - looking for %q in %q", vm.state.WaitText, text)
 		}
 	}
 	

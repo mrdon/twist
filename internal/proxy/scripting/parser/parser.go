@@ -3,6 +3,7 @@ package parser
 import (
 	"fmt"
 	"strings"
+	"twist/internal/debug"
 )
 
 // NodeType represents the type of an AST node
@@ -125,6 +126,17 @@ func (p *Parser) parseStatement() (*ASTNode, error) {
 	case TokenVariable:
 		return p.parseAssignmentOrCommand()
 	case TokenCommand:
+		// Check if this is actually a variable assignment (identifier = value)
+		nextToken := p.peek()
+		if nextToken.Type == TokenEqual ||
+			nextToken.Type == TokenLeftBracket ||
+			nextToken.Type == TokenPlusAssign || nextToken.Type == TokenMinusAssign ||
+			nextToken.Type == TokenMultiplyAssign || nextToken.Type == TokenDivideAssign ||
+			nextToken.Type == TokenConcatAssign ||
+			nextToken.Type == TokenIncrement || nextToken.Type == TokenDecrement {
+			// This is a variable assignment, not a command
+			return p.parseAssignmentOrCommand()
+		}
 		return p.parseCommand()
 	case TokenGoto, TokenGosub, TokenReturn:
 		return p.parseControlFlow()
@@ -288,10 +300,14 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	// Look ahead to see if this is an assignment
 	nextToken := p.peek()
+	debug.Log("Parser: parseAssignmentOrCommand current=%s(Type=%d) next=%s(Type=%d)", p.current.Value, int(p.current.Type), nextToken.Value, int(nextToken.Type))
+	
 	if nextToken.Type == TokenLeftBracket ||
+		nextToken.Type == TokenEqual ||  // Support TWX-style = assignments
 		nextToken.Type == TokenPlusAssign || nextToken.Type == TokenMinusAssign ||
 		nextToken.Type == TokenMultiplyAssign || nextToken.Type == TokenDivideAssign ||
 		nextToken.Type == TokenConcatAssign {
+		debug.Log("Parser: detected assignment, calling parseAssignment()")
 		return p.parseAssignment()
 	}
 	
@@ -302,10 +318,12 @@ func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	
 	// Check for increment/decrement operators
 	if nextToken.Type == TokenIncrement || nextToken.Type == TokenDecrement {
+		debug.Log("Parser: detected increment/decrement, calling parseIncrementDecrement()")
 		return p.parseIncrementDecrement()
 	}
 	
 	// Otherwise, it's a command
+	debug.Log("Parser: defaulting to parseCommand()")
 	return p.parseCommand()
 }
 
@@ -318,7 +336,28 @@ func (p *Parser) parseAssignment() (*ASTNode, error) {
 	}
 	
 	// Check what kind of assignment this is
-	if p.current.Type == TokenPlusAssign || p.current.Type == TokenMinusAssign ||
+	if p.current.Type == TokenEqual {
+		// Regular assignment (TWX style: variable = value)
+		node := &ASTNode{
+			Type:     NodeAssignment,
+			Value:    "=",
+			Line:     p.current.Line,
+			Column:   p.current.Column,
+			Children: []*ASTNode{variable},
+		}
+		
+		p.advance() // skip = operator
+		
+		// Parse expression
+		expr, err := p.parseExpression()
+		if err != nil {
+			return nil, err
+		}
+		node.Children = append(node.Children, expr)
+		
+		return node, nil
+		
+	} else if p.current.Type == TokenPlusAssign || p.current.Type == TokenMinusAssign ||
 		p.current.Type == TokenMultiplyAssign || p.current.Type == TokenDivideAssign ||
 		p.current.Type == TokenConcatAssign {
 		
@@ -403,8 +442,10 @@ func (p *Parser) parseInclude() (*ASTNode, error) {
 
 // parseVariableAccess parses a variable with optional array access
 func (p *Parser) parseVariableAccess() (*ASTNode, error) {
-	if p.current.Type != TokenVariable {
-		return nil, fmt.Errorf("expected variable at line %d", p.current.Line)
+	// In TWX scripts, variables can be identifiers without $ prefix
+	// They may be lexed as TokenCommand if they're not reserved keywords
+	if p.current.Type != TokenVariable && p.current.Type != TokenCommand {
+		return nil, fmt.Errorf("expected variable at line %d, got %v", p.current.Line, p.current.Type)
 	}
 	
 	variable := &ASTNode{
@@ -508,10 +549,11 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 		return p.parseVariableAccess()
 	}
 	
-	// Handle system constants and identifiers that should be treated as variables
-	// Only in command parameter context (not in expressions)
-	if p.current.Type == TokenCommand && p.isSystemConstant(p.current.Value) {
-		// In TWX, system constants like TRUE, FALSE, CURRENTLINE are variable references
+	// Handle identifiers that should be treated as variables in command parameters
+	// In TWX, bare identifiers (without quotes) in command parameters are variable references
+	if p.current.Type == TokenCommand {
+		// In TWX, all identifiers in command parameters are treated as variables
+		// This includes system constants and user-defined variables like LoginName
 		token := p.current
 		p.advance()
 		return &ASTNode{

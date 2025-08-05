@@ -7,7 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	// "twist/internal/debug" // Keep for future debugging
+	"twist/internal/ansi"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/include"
 	"twist/internal/proxy/scripting/parser"
 	"twist/internal/proxy/scripting/triggers"
@@ -68,6 +69,9 @@ type Engine struct {
 	mutex          sync.RWMutex
 	nextScriptID   int
 	
+	// ANSI stripper for streaming text processing
+	ansiStripper   *ansi.StreamingStripper
+	
 	// Event handlers
 	outputHandler func(string) error
 	echoHandler   func(string) error
@@ -80,6 +84,7 @@ func NewEngine(gameInterface types.GameInterface) *Engine {
 		scripts:        make(map[string]*Script),
 		gameInterface:  gameInterface,
 		nextScriptID:   1,
+		ansiStripper:   ansi.NewStreamingStripper(),
 	}
 	
 	// Create a dummy VM for the trigger manager
@@ -101,19 +106,41 @@ func (e *Engine) SetEchoHandler(handler func(string) error) {
 
 // SetSendHandler sets the handler for send messages
 func (e *Engine) SetSendHandler(handler func(string) error) {
+	debug.Log("Engine.SetSendHandler called")
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	
 	e.sendHandler = handler
+	
+	// Update all existing script VMs with the new sendHandler
+	debug.Log("Engine.SetSendHandler updating %d existing scripts", len(e.scripts))
+	for _, script := range e.scripts {
+		if script.VM != nil {
+			debug.Log("Engine.SetSendHandler updating sendHandler for script %s", script.ID)
+			script.VM.SetSendHandler(handler)
+		}
+	}
 }
 
 // LoadScript loads a script from a file
 func (e *Engine) LoadScript(filename string) (*Script, error) {
+	debug.Log("Engine.LoadScript called with filename: %s", filename)
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
 	
 	// Read script file
+	debug.Log("Attempting to read script file: %s", filename)
 	content, err := os.ReadFile(filename)
 	if err != nil {
+		debug.Log("Failed to read script file %s: %v", filename, err)
 		return nil, fmt.Errorf("failed to read script file %s: %v", filename, err)
 	}
+	debug.Log("Successfully read %d bytes from script file %s", len(content), filename)
+	previewLen := 200
+	if len(content) < previewLen {
+		previewLen = len(content)
+	}
+	debug.Log("Script content preview: %q", string(content)[:previewLen])
 	
 	// Parse script with proper base path for includes
 	basePath := filepath.Dir(filename)
@@ -204,15 +231,25 @@ func (e *Engine) RunScript(scriptID string) error {
 	}
 	
 	script.Running = true
+	debug.Log("Engine.RunScript set script %s Running=true, total scripts: %d", scriptID, len(e.scripts))
 	
 	// Execute script in a goroutine
 	go func() {
 		defer func() {
-			script.Running = false
+			// Only mark as not running if the script truly finished or errored
+			// Don't mark as not running if it's just waiting for input
+			if !script.VM.IsWaiting() {
+				script.Running = false
+				debug.Log("Engine.RunScript script %s finished execution, Running=false", scriptID)
+			} else {
+				debug.Log("Engine.RunScript script %s is waiting for input, keeping Running=true", scriptID)
+			}
 		}()
 		
 		if err := script.VM.Execute(); err != nil {
 			// Handle script error
+			script.Running = false
+			debug.Log("Engine.RunScript script %s error: %v, Running=false", scriptID, err)
 			if e.outputHandler != nil {
 				e.outputHandler(fmt.Sprintf("Script error in %s: %v", script.Name, err))
 			}
@@ -344,7 +381,39 @@ func (e *Engine) GetRunningScripts() []*Script {
 
 // ProcessText processes incoming text through triggers
 func (e *Engine) ProcessText(text string) error {
-	return e.triggerManager.ProcessText(text)
+	debug.Log("Engine.ProcessText called with text: %q", text)
+	
+	// Process global triggers first
+	if err := e.triggerManager.ProcessText(text); err != nil {
+		return err
+	}
+	
+	// Strip ANSI escape sequences using streaming stripper to handle chunks properly
+	// This ensures waitfor triggers match properly against clean text
+	strippedText := e.ansiStripper.StripChunk(text)
+	debug.Log("Engine.ProcessText stripped text: %q", strippedText)
+	
+	// Forward stripped text to all running script VMs for waitfor processing
+	e.mutex.RLock()
+	scriptCount := 0
+	debug.Log("Engine.ProcessText checking %d total scripts", len(e.scripts))
+	for _, script := range e.scripts {
+		debug.Log("Engine.ProcessText script %s: Running=%v, VM=%v", script.ID, script.Running, script.VM != nil)
+		if script.Running && script.VM != nil {
+			scriptCount++
+			debug.Log("Engine.ProcessText forwarding to script %s", script.ID)
+			debug.Log("Engine.ProcessText calling ProcessIncomingText with: %q", strippedText)
+			if err := script.VM.ProcessIncomingText(strippedText); err != nil {
+				debug.Log("Error processing text in script %s: %v", script.ID, err)
+			} else {
+				debug.Log("Engine.ProcessText ProcessIncomingText returned successfully")
+			}
+		}
+	}
+	debug.Log("Engine.ProcessText forwarded to %d running scripts", scriptCount)
+	e.mutex.RUnlock()
+	
+	return nil
 }
 
 // ProcessTextLine processes incoming text line through triggers
@@ -360,6 +429,20 @@ func (e *Engine) ProcessTextOut(text string) error {
 // ProcessEvent processes system events through triggers
 func (e *Engine) ProcessEvent(eventName string) error {
 	return e.triggerManager.ProcessEvent(eventName)
+}
+
+// ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
+func (e *Engine) ActivateTriggers() error {
+	// In Pascal TWX, ActivateTriggers processes delay triggers and reactivates disabled triggers
+	// For now, we'll process delay triggers which is the main functionality
+	return e.triggerManager.ProcessDelayTriggers()
+}
+
+// ProcessAutoText processes auto text events (mirrors Pascal TWXInterpreter.AutoTextEvent)
+func (e *Engine) ProcessAutoText(text string) error {
+	// Auto text events are similar to regular text events but for automated text
+	// For now, delegate to regular text processing
+	return e.ProcessText(text)
 }
 
 // GetTriggerManager returns the trigger manager
@@ -386,20 +469,36 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 	processedSource := strings.Join(processedLines, "\n")
 	
 	// Step 2: Create lexer
+	debug.Log("Creating lexer for processed source (%d bytes)", len(processedSource))
 	lexer := parser.NewLexer(strings.NewReader(processedSource))
 	
 	// Step 3: Tokenize
+	debug.Log("Starting tokenization")
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
+		debug.Log("Tokenization failed: %v", err)
 		return nil, fmt.Errorf("lexer error: %v", err)
+	}
+	debug.Log("Tokenization successful: %d tokens generated", len(tokens))
+	
+	// Debug: Show first few tokens
+	for i, token := range tokens {
+		if i >= 10 { // Show first 10 tokens
+			debug.Log("... (%d more tokens)", len(tokens)-i)
+			break
+		}
+		debug.Log("Token %d: Type=%v Value=%q Line=%d", i, token.Type, token.Value, token.Line)
 	}
 	
 	// Step 4: Parse
+	debug.Log("Starting parsing with %d tokens", len(tokens))
 	parser := parser.NewParser(tokens)
 	ast, err := parser.Parse()
 	if err != nil {
+		debug.Log("Parsing failed: %v", err)
 		return nil, fmt.Errorf("parser error: %v", err)
 	}
+	debug.Log("Parsing successful")
 	
 	// Step 5: Process includes
 	includeProcessor := include.NewIncludeProcessor(basePath)

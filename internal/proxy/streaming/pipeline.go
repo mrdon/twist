@@ -13,9 +13,39 @@ import (
 	// "twist/internal/debug" // Keep for future debugging
 )
 
+// External script engine interface from scripting package
+type ExternalScriptEngine interface {
+	ProcessText(text string) error
+	ProcessTextLine(line string) error
+	ActivateTriggers() error
+	ProcessAutoText(text string) error
+}
+
+// scriptEngineAdapter adapts between external and internal interfaces
+type scriptEngineAdapter struct {
+	engine ExternalScriptEngine
+}
+
+func (a *scriptEngineAdapter) ProcessText(text string) error {
+	return a.engine.ProcessText(text)
+}
+
+func (a *scriptEngineAdapter) ProcessTextLine(line string) error {
+	return a.engine.ProcessTextLine(line)
+}
+
+func (a *scriptEngineAdapter) ActivateTriggers() error {
+	return a.engine.ActivateTriggers()
+}
+
+func (a *scriptEngineAdapter) ProcessAutoText(text string) error {
+	return a.engine.ProcessAutoText(text)
+}
+
 // ScriptManager interface for script processing
 type ScriptManager interface {
 	ProcessGameLine(line string) error
+	GetEngine() interface{}  // Return generic interface to avoid import cycles
 }
 
 // StateManager interface for game state updates (avoids circular import with proxy)
@@ -113,6 +143,19 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 	
 	// Initialize telnet handler with proper writer for negotiation
 	p.telnetHandler = telnet.NewHandler(writer)
+	
+	// Connect script engine to TWX parser for script events
+	if scriptManager != nil {
+		engineInterface := scriptManager.GetEngine()
+		if engineInterface != nil {
+			// Type assert the engine to our external interface
+			if engine, ok := engineInterface.(ExternalScriptEngine); ok {
+				// Create adapter to convert between interface types
+				adapter := &scriptEngineAdapter{engine: engine}
+				p.twxParser.SetScriptEngine(adapter)
+			}
+		}
+	}
 	
 	return p
 }

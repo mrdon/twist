@@ -15,8 +15,11 @@ type PanelComponent struct {
 	leftView     *tview.TextView
 	leftWrapper  *tview.Flex
 	rightWrapper *tview.Flex
-	sectorMap    *SectorMapComponent  // New sector map component
-	proxyAPI     api.ProxyAPI  // API access for game data
+	sectorMap    *SectorMapComponent             // Original sector map component
+	sixelMap     *ProperSixelSectorMapComponent // Sixel-based sector map component
+	graphvizMap  *GraphvizSectorMap              // Graphviz-based sector map component (new default)
+	useGraphviz  bool                     // Flag to switch between map types
+	proxyAPI     api.ProxyAPI             // API access for game data
 }
 
 // NewPanelComponent creates new panel components
@@ -31,18 +34,33 @@ func NewPanelComponent() *PanelComponent {
 	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(leftPanel, 0, 1, false)
 	
-	// Create sector map component for right panel
+	// Create all sector map components for right panel
 	sectorMap := NewSectorMapComponent()
+	sixelMap := NewProperSixelSectorMapComponent()
+	graphvizMap := NewGraphvizSectorMap() // Use graphviz as default
 	
-	// Right panel is just the sector map
+	// Use graphviz map as default
+	useGraphviz := true
+	
+	// Right panel shows the active map
+	var activeMapView tview.Primitive
+	if useGraphviz {
+		activeMapView = graphvizMap // graphvizMap is a tview.Primitive directly
+	} else {
+		activeMapView = sectorMap.GetView()
+	}
+	
 	rightWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(sectorMap.GetView(), 0, 1, false)
+		AddItem(activeMapView, 0, 1, false)
 	
 	return &PanelComponent{
 		leftView:     leftPanel,
 		leftWrapper:  leftWrapper,
 		rightWrapper: rightWrapper,
 		sectorMap:    sectorMap,
+		sixelMap:     sixelMap,
+		graphvizMap:  graphvizMap,
+		useGraphviz:  useGraphviz,
 	}
 }
 
@@ -56,11 +74,27 @@ func (pc *PanelComponent) GetRightWrapper() *tview.Flex {
 	return pc.rightWrapper
 }
 
+// RenderSixelGraphics renders sixel graphics for the active map
+func (pc *PanelComponent) RenderSixelGraphics() {
+	if pc.useGraphviz && pc.graphvizMap != nil {
+		// GraphvizSectorMap handles sixel rendering in its Draw() method
+		return
+	} else if pc.sixelMap != nil {
+		pc.sixelMap.RenderSixelGraphics()
+	}
+}
+
 // SetProxyAPI sets the API reference for accessing game data
 func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	pc.proxyAPI = proxyAPI
 	if pc.sectorMap != nil {
 		pc.sectorMap.SetProxyAPI(proxyAPI)
+	}
+	if pc.sixelMap != nil {
+		pc.sixelMap.SetProxyAPI(proxyAPI)
+	}
+	if pc.graphvizMap != nil {
+		pc.graphvizMap.SetProxyAPI(proxyAPI)
 	}
 	
 	// Don't load data immediately - wait for database to be ready
@@ -113,7 +147,13 @@ func (pc *PanelComponent) LoadRealData() {
 	pc.UpdateSectorInfo(sectorInfo)
 	
 	// Also trigger sector map data loading
-	if pc.sectorMap != nil {
+	if pc.useGraphviz && pc.graphvizMap != nil {
+		debug.Log("PanelComponent: Triggering graphviz sector map data load")
+		pc.graphvizMap.LoadRealMapData()
+	} else if pc.sixelMap != nil {
+		debug.Log("PanelComponent: Triggering sixel sector map data load")
+		pc.sixelMap.LoadRealMapData()
+	} else if pc.sectorMap != nil {
 		debug.Log("PanelComponent: Triggering sector map data load")
 		pc.sectorMap.LoadRealMapData()
 	}
@@ -219,7 +259,12 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 
 // UpdateSectorInfo updates the sector map with current sector info
 func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
-	if pc.sectorMap != nil {
+	debug.Log("PanelComponent: UpdateSectorInfo called for sector %d, useGraphviz=%v", sector.Number, pc.useGraphviz)
+	if pc.useGraphviz && pc.graphvizMap != nil {
+		pc.graphvizMap.UpdateCurrentSectorWithInfo(sector)
+	} else if pc.sixelMap != nil {
+		pc.sixelMap.UpdateCurrentSectorWithInfo(sector)
+	} else if pc.sectorMap != nil {
 		pc.sectorMap.UpdateCurrentSectorWithInfo(sector)
 	}
 }
@@ -232,4 +277,50 @@ func (pc *PanelComponent) SetTraderInfoText(text string) {
 // SetPlaceholderPlayerText sets placeholder text for when data is not available
 func (pc *PanelComponent) SetPlaceholderPlayerText() {
 	pc.leftView.SetText("[yellow]Player Info[-]\n\n[gray]Database not loaded - real data unavailable[-]")
+}
+
+// ToggleMapType switches between graphviz, sixel, and traditional sector maps
+func (pc *PanelComponent) ToggleMapType() {
+	// Cycle through: graphviz -> sixel -> traditional -> graphviz
+	if pc.useGraphviz {
+		pc.useGraphviz = false
+		// Now using sixel map
+	}
+	// Add more toggle states here if needed
+	
+	// Update the right wrapper to show the new map type
+	pc.rightWrapper.Clear()
+	
+	var activeMapView tview.Primitive
+	var mapTypeName string
+	
+	if pc.useGraphviz && pc.graphvizMap != nil {
+		activeMapView = pc.graphvizMap
+		mapTypeName = "graphviz map"
+	} else if pc.sixelMap != nil {
+		activeMapView = pc.sixelMap
+		mapTypeName = "sixel map"
+	} else {
+		activeMapView = pc.sectorMap.GetView()
+		mapTypeName = "traditional map"
+	}
+	
+	debug.Log("PanelComponent: Switched to %s", mapTypeName)
+	pc.rightWrapper.AddItem(activeMapView, 0, 1, false)
+	
+	// Trigger data reload for the new active map
+	if pc.proxyAPI != nil {
+		if pc.useGraphviz && pc.graphvizMap != nil {
+			pc.graphvizMap.LoadRealMapData()
+		} else if pc.sixelMap != nil {
+			pc.sixelMap.LoadRealMapData()
+		} else if pc.sectorMap != nil {
+			pc.sectorMap.LoadRealMapData()
+		}
+	}
+}
+
+// GetMapType returns the current map type (true for graphviz, false for others)
+func (pc *PanelComponent) GetMapType() bool {
+	return pc.useGraphviz
 }

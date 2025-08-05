@@ -2,6 +2,8 @@ package commands
 
 import (
 	"fmt"
+	"strings"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -42,6 +44,15 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 			message += param.Value.ToString()
 		}
 	}
+	
+	// TWX compatibility: convert '*' suffix to carriage return
+	if strings.HasSuffix(message, "*") {
+		debug.Log("cmdSend: Converting '*' suffix to carriage return: %q -> %q", message, strings.TrimSuffix(message, "*") + "\r")
+		message = strings.TrimSuffix(message, "*") + "\r"
+	} else {
+		debug.Log("cmdSend: No '*' suffix found in message: %q", message)
+	}
+	
 	return vm.Send(message)
 }
 

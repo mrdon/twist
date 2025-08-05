@@ -874,6 +874,7 @@ func (l *GameDetector) SetDatabaseStateChangedCallback(callback func(gameName, s
 	l.onDatabaseStateChanged = callback
 }
 
+
 func (l *GameDetector) GetCurrentGame() string {
 	l.mu.RLock()
 	defer l.mu.RUnlock()
@@ -939,3 +940,4 @@ func (l *GameDetector) Close() error {
 	
 	return nil
 }
+

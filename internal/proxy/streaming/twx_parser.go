@@ -2358,6 +2358,13 @@ func (p *TWXParser) FireTextEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.TextEvent(line, outbound)
 	}
+	
+	// Also fire through the ScriptEventProcessor for the new scripting engine
+	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
+		if err := p.scriptEventProcessor.FireTextEvent(line, false); err != nil {
+			debug.Log("TWXParser: Error firing script event: %v", err)
+		}
+	}
 }
 
 // FireTextLineEvent fires a text line event to the script system (Pascal: TWXInterpreter.TextLineEvent)

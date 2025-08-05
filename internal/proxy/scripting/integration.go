@@ -2,6 +2,7 @@ package scripting
 
 import (
 	"fmt"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/constants"
 	"twist/internal/proxy/scripting/types"
@@ -332,6 +333,7 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 	
 	// Set up engine handlers for script output
 	sm.engine.SetSendHandler(func(text string) error {
+		debug.Log("ScriptManager sendHandler called with: %q", text)
 		return sm.gameAdapter.SendCommand(text)
 	})
 	
@@ -349,19 +351,29 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 	})
 }
 
-// GetEngine returns the scripting engine
-func (sm *ScriptManager) GetEngine() *Engine {
+// GetEngine returns the scripting engine as interface{} to avoid import cycles
+func (sm *ScriptManager) GetEngine() interface{} {
 	return sm.engine
 }
 
 // LoadAndRunScript loads and runs a script file
 func (sm *ScriptManager) LoadAndRunScript(filename string) error {
+	debug.Log("ScriptManager.LoadAndRunScript called with filename: %s", filename)
 	script, err := sm.engine.LoadScript(filename)
 	if err != nil {
+		debug.Log("Failed to load script %s: %v", filename, err)
 		return err
 	}
 	
-	return sm.engine.RunScript(script.ID)
+	debug.Log("Script %s loaded successfully with ID: %s", filename, script.ID)
+	err = sm.engine.RunScript(script.ID)
+	if err != nil {
+		debug.Log("Failed to run script %s (ID: %s): %v", filename, script.ID, err)
+		return err
+	}
+	
+	debug.Log("Script %s (ID: %s) started successfully", filename, script.ID)
+	return nil
 }
 
 // ExecuteCommand executes a single script command
@@ -383,6 +395,7 @@ func (sm *ScriptManager) ProcessGameLine(line string) error {
 func (sm *ScriptManager) ProcessOutgoingText(text string) error {
 	return sm.engine.ProcessTextOut(text)
 }
+
 
 // ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
 func (sm *ScriptManager) ActivateTriggers() error {

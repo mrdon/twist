@@ -82,14 +82,8 @@ func (tc *TerminalComponent) Write(p []byte) (n int, err error) {
 	// Always write to terminal view, even during transition
 	n, err = tc.terminalView.Write(p)
 	
-	// Force a redraw after writing - do this asynchronously to avoid deadlocks
-	if tc.app != nil {
-		go func() {
-			tc.app.QueueUpdateDraw(func() {
-				// Just trigger a redraw
-			})
-		}()
-	}
+	// Don't add extra QueueUpdateDraw here - the terminal view handles its own updates
+	// via the changedFunc callback to avoid double-drawing
 	
 	return n, err
 }

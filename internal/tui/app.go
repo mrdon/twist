@@ -88,9 +88,8 @@ func NewApplication() *TwistApp {
 
 	// Set up terminal update callback for TerminalComponent
 	terminalComp.SetChangedFunc(func() {
-		// Trigger UI update
 		app.QueueUpdateDraw(func() {
-			twistApp.updateTerminalView()
+			// Terminal update
 		})
 	})
 
@@ -100,7 +99,7 @@ func NewApplication() *TwistApp {
 	twistApp.setupUI()
 	twistApp.setupInputHandling()
 	twistApp.registerMenuShortcuts() // Register all menu shortcuts globally
-	twistApp.startUpdateWorker()
+	// twistApp.startUpdateWorker() // Commented out - appears to be unused legacy code causing double redraws
 
 	// Auto-show connection dialog on startup for easy testing
 	go func() {
@@ -919,3 +918,4 @@ func (ta *TwistApp) updatePanels() {
 	// Update status bar
 	ta.statusComponent.UpdateStatus()
 }
+
