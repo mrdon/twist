@@ -70,8 +70,8 @@ func (t *TelixTheme) DialogColors() DialogColors {
 // MenuColors returns the menu color scheme
 func (t *TelixTheme) MenuColors() MenuColors {
 	return MenuColors{
-		Background:  DOSBlue,        // Blue background for dropdown
-		Foreground:  DOSLightGray,   // Light gray text for normal items
+		Background:  DOSBlue,        // Blue background for menu bar
+		Foreground:  DOSWhite,       // White text for menu bar items
 		SelectedBg:  DOSRed,         // Red background for selected items (like reference)
 		SelectedFg:  DOSWhite,       // White text on red background
 		DisabledFg:  DOSDarkGray,    // Dark gray for disabled items
@@ -92,8 +92,8 @@ func (t *TelixTheme) TerminalColors() TerminalColors {
 // StatusColors returns the status bar color scheme (menu bar)
 func (t *TelixTheme) StatusColors() StatusColors {
 	return StatusColors{
-		Background:     DOSBlue,        // Use blue #000080 for menu bar background
-		Foreground:     DOSLightGray,   // Light gray text on blue background (normal items)
+		Background:     DOSRed,         // Use red #800000 for status bar background
+		Foreground:     DOSYellow,      // Yellow text on red background
 		HighlightBg:    DOSRed,         // Red background for selected menu items (like reference)
 		HighlightFg:    DOSWhite,       // White text on red background
 		ErrorBg:        DOSRed,

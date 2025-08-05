@@ -14,6 +14,7 @@ import (
 	"strings"
 	"twist/internal/api"
 	"twist/internal/debug"
+	"twist/internal/theme"
 
 	"github.com/BourgeoisBear/rasterm"
 	"github.com/dominikbraun/graph"
@@ -30,6 +31,7 @@ type GraphvizSectorMap struct {
 	proxyAPI      api.ProxyAPI
 	currentSector int
 	sectorData    map[int]api.SectorInfo
+	sectorLevels  map[int]int // Track which level each sector is at (0=current, 1-5=hop levels)
 	cachedImage   []byte
 	cachedSixel   string
 	cachedWidth   int
@@ -42,13 +44,23 @@ type GraphvizSectorMap struct {
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
 func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
+	// Get theme colors for panels
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	
+	box := tview.NewBox()
+	box.SetBackgroundColor(panelColors.Background)
+	box.SetBorderColor(panelColors.Border)
+	box.SetTitleColor(panelColors.Title)
+	
 	gsm := &GraphvizSectorMap{
-		Box:         tview.NewBox(),
-		sectorData:  make(map[int]api.SectorInfo),
-		needsRedraw: true,
-		hasBorder:   false,  // Disable tview border, use only content border
-		sixelLayer:  sixelLayer,
-		regionID:    "sector_map", // Unique ID for this component
+		Box:          box,
+		sectorData:   make(map[int]api.SectorInfo),
+		sectorLevels: make(map[int]int),
+		needsRedraw:  true,
+		hasBorder:    false,  // Disable tview border, use only content border
+		sixelLayer:   sixelLayer,
+		regionID:     "sector_map", // Unique ID for this component
 	}
 	gsm.SetBorder(false).SetTitle("Sector Map (Graphviz)")
 	return gsm
@@ -63,8 +75,8 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
-	// Skip Box.DrawForSubclass to avoid screen clearing that causes flicker
-	// We rely on the content border drawn directly in the image instead of tview borders
+	// Draw the background first to ensure proper theming
+	gsm.Box.DrawForSubclass(screen, gsm)
 
 	x, y, width, height := gsm.GetInnerRect()
 	debug.Log("GraphvizSectorMap: Draw() GetInnerRect returned x=%d, y=%d, width=%d, height=%d", x, y, width, height)
@@ -232,6 +244,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 		gsm.currentSector = sectorNumber
 		gsm.needsRedraw = true
 		gsm.cachedSixel = "" // Clear sixel cache
+		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
@@ -246,6 +259,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 		gsm.currentSector = sectorInfo.Number
 		gsm.needsRedraw = true
 		gsm.cachedSixel = "" // Clear sixel cache
+		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
@@ -274,6 +288,7 @@ func (gsm *GraphvizSectorMap) LoadRealMapData() {
 		gsm.currentSector = playerInfo.CurrentSector
 		gsm.needsRedraw = true
 		gsm.cachedSixel = "" // Clear sixel cache
+		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 	}
 }
 
@@ -305,6 +320,10 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 	// Track which sectors we've fully processed to avoid infinite recursion
 	processedSectors := make(map[int]bool)
 	
+	// Clear and initialize sector levels tracking
+	gsm.sectorLevels = make(map[int]int)
+	gsm.sectorLevels[gsm.currentSector] = 0 // Current sector is level 0
+	
 	// Step 1: Add all first-level vertices and edges from current sector
 	for _, warpSector := range currentInfo.Warps {
 		if warpSector <= 0 {
@@ -312,6 +331,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 		}
 		g.AddVertex(warpSector) // Ignore errors - vertex might already exist
 		g.AddEdge(gsm.currentSector, warpSector) // Ignore errors - edge might already exist
+		gsm.sectorLevels[warpSector] = 1 // First level sectors
 	}
 	processedSectors[gsm.currentSector] = true
 
@@ -341,6 +361,10 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			// Track sectors for next level processing if not already processed
 			if !processedSectors[targetSector] {
 				secondLevelSectors = append(secondLevelSectors, targetSector)
+				// Set level for new sectors if not already set
+				if _, exists := gsm.sectorLevels[targetSector]; !exists {
+					gsm.sectorLevels[targetSector] = 2 // Second level sectors
+				}
 			}
 		}
 	}
@@ -371,6 +395,10 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			// Track sectors for next level processing if not already processed
 			if !processedSectors[thirdLevelSector] {
 				thirdLevelSectors = append(thirdLevelSectors, thirdLevelSector)
+				// Set level for new sectors if not already set
+				if _, exists := gsm.sectorLevels[thirdLevelSector]; !exists {
+					gsm.sectorLevels[thirdLevelSector] = 3 // Third level sectors
+				}
 			}
 		}
 	}
@@ -401,6 +429,10 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			// Track sectors for next level processing if not already processed
 			if !processedSectors[fourthLevelSector] {
 				fourthLevelSectors = append(fourthLevelSectors, fourthLevelSector)
+				// Set level for new sectors if not already set
+				if _, exists := gsm.sectorLevels[fourthLevelSector]; !exists {
+					gsm.sectorLevels[fourthLevelSector] = 4 // Fourth level sectors
+				}
 			}
 		}
 	}
@@ -432,6 +464,10 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			if !processedSectors[fifthLevelSector] {
 				if _, exists := gsm.sectorData[fifthLevelSector]; !exists {
 					gsm.sectorData[fifthLevelSector] = api.SectorInfo{Number: fifthLevelSector}
+				}
+				// Set level for new sectors if not already set - this is the outermost level
+				if _, exists := gsm.sectorLevels[fifthLevelSector]; !exists {
+					gsm.sectorLevels[fifthLevelSector] = 5 // Fifth level sectors (outermost)
 				}
 			}
 		}
@@ -546,6 +582,14 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		// DO NOT set fixed size - let graphviz size based on content
 		node.SetFontSize(18.0)     // Large readable font
 		node.SetFontColor("black") // Black text on colored background
+
+		// Apply dotted border style only to 5th level (outermost) sectors
+		if level, exists := gsm.sectorLevels[sector]; exists && level == 5 {
+			node.SetStyle("filled,rounded,dotted")
+			debug.Log("GraphvizSectorMap: Applied dotted border to 5th level sector %d", sector)
+		} else {
+			node.SetStyle("filled,rounded")
+		}
 
 		gvNodes[sector] = node
 	}
@@ -929,19 +973,21 @@ func findContentBounds(img *image.RGBA) image.Rectangle {
 	return image.Rect(minX, minY, maxX+1, maxY+1)
 }
 
-// drawContentBorders draws borders around the content area in the panel
+// drawContentBorders draws high-tech styled borders around the content area in the panel
 func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, offsetX, offsetY int) {
 	if contentBounds.Empty() {
 		return
 	}
 
-	white := color.RGBA{255, 255, 255, 255}
+	// Simple white border
+	white := color.RGBA{255, 255, 255, 255}         // White lines
 	
-	// Adjust content bounds by the centering offset
-	left := contentBounds.Min.X + offsetX
-	top := contentBounds.Min.Y + offsetY
-	right := contentBounds.Max.X + offsetX - 1
-	bottom := contentBounds.Max.Y + offsetY - 1
+	// Adjust content bounds by the centering offset with small padding for simple border
+	borderWidth := 3
+	left := contentBounds.Min.X + offsetX - borderWidth
+	top := contentBounds.Min.Y + offsetY - borderWidth
+	right := contentBounds.Max.X + offsetX + borderWidth - 1
+	bottom := contentBounds.Max.Y + offsetY + borderWidth - 1
 
 	panelBounds := panelImg.Bounds()
 	
@@ -951,23 +997,28 @@ func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, off
 	right = min(panelBounds.Max.X-1, right)
 	bottom = min(panelBounds.Max.Y-1, bottom)
 
-	// Draw top and bottom borders
+	// Draw simple white line border
+	// Top and bottom borders
 	for x := left; x <= right; x++ {
-		if top >= 0 && top < panelBounds.Max.Y {
-			panelImg.Set(x, top, white)
-		}
-		if bottom >= 0 && bottom < panelBounds.Max.Y && bottom != top {
-			panelImg.Set(x, bottom, white)
+		if x >= 0 && x < panelBounds.Max.X {
+			if top >= 0 && top < panelBounds.Max.Y {
+				panelImg.Set(x, top, white)
+			}
+			if bottom >= 0 && bottom < panelBounds.Max.Y && bottom != top {
+				panelImg.Set(x, bottom, white)
+			}
 		}
 	}
 
-	// Draw left and right borders
+	// Left and right borders
 	for y := top; y <= bottom; y++ {
-		if left >= 0 && left < panelBounds.Max.X {
-			panelImg.Set(left, y, white)
-		}
-		if right >= 0 && right < panelBounds.Max.X && right != left {
-			panelImg.Set(right, y, white)
+		if y >= 0 && y < panelBounds.Max.Y {
+			if left >= 0 && left < panelBounds.Max.X {
+				panelImg.Set(left, y, white)
+			}
+			if right >= 0 && right < panelBounds.Max.X && right != left {
+				panelImg.Set(right, y, white)
+			}
 		}
 	}
 }

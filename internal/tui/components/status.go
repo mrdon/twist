@@ -35,9 +35,13 @@ func NewStatusComponent() *StatusComponent {
 		SetTextAlign(tview.AlignLeft).
 		SetWrap(false)
 	
-	// Set background and text color to match traditional status bars
-	statusBar.SetBackgroundColor(tview.Styles.PrimitiveBackgroundColor)
-	statusBar.SetTextColor(tview.Styles.PrimaryTextColor)
+	// Get theme colors for status bar
+	currentTheme := theme.Current()
+	statusColors := currentTheme.StatusColors()
+	
+	// Set background and text color using themed colors
+	statusBar.SetBackgroundColor(statusColors.Background)
+	statusBar.SetTextColor(statusColors.Foreground)
 	
 	// Set initial status
 	statusBar.SetText(" Scripts: 0 active | Status: Ready | F1=Help")
@@ -93,7 +97,8 @@ func (sc *StatusComponent) UpdateStatus() {
 	currentTheme := theme.Current()
 	statusColors := currentTheme.StatusColors()
 	
-	// Set the overall status bar to normal foreground color
+	// Set the overall status bar colors using theme
+	sc.wrapper.SetBackgroundColor(statusColors.Background)
 	sc.wrapper.SetTextColor(statusColors.Foreground)
 	
 	// Build status text with colored connection status

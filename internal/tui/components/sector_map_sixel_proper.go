@@ -9,6 +9,7 @@ import (
 	"os"
 	"twist/internal/api"
 	"twist/internal/debug"
+	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-sixel"
@@ -29,8 +30,17 @@ type ProperSixelSectorMapComponent struct {
 
 // NewProperSixelSectorMapComponent creates a new properly integrated sixel sector map
 func NewProperSixelSectorMapComponent() *ProperSixelSectorMapComponent {
+	// Get theme colors for panels
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	
+	box := tview.NewBox()
+	box.SetBackgroundColor(panelColors.Background)
+	box.SetBorderColor(panelColors.Border)
+	box.SetTitleColor(panelColors.Title)
+	
 	component := &ProperSixelSectorMapComponent{
-		Box:           tview.NewBox(),
+		Box:           box,
 		sectorData:    make(map[int]api.SectorInfo),
 		needsRedraw:   true,
 	}

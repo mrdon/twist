@@ -156,6 +156,18 @@ func (tc *ThemedComponents) NewStatusBar() *tview.TextView {
 	return textView
 }
 
+// NewMenuBar creates a new text view styled for menu bars
+func (tc *ThemedComponents) NewMenuBar() *tview.TextView {
+	textView := tview.NewTextView()
+	colors := tc.theme.MenuColors()
+	
+	textView.SetBackgroundColor(colors.Background)
+	textView.SetTextColor(colors.Foreground)
+	textView.SetDynamicColors(true)
+	
+	return textView
+}
+
 // NewPanelView creates a new text view styled for side panels
 func (tc *ThemedComponents) NewPanelView() *tview.TextView {
 	textView := tview.NewTextView()
@@ -242,6 +254,11 @@ func NewTwistMenu() *components.TwistMenu {
 func NewStatusBar() *tview.TextView {
 	updateDefaultFactory()
 	return defaultFactory.NewStatusBar()
+}
+
+func NewMenuBar() *tview.TextView {
+	updateDefaultFactory()
+	return defaultFactory.NewMenuBar()
 }
 
 func NewPanelView() *tview.TextView {

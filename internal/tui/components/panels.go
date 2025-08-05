@@ -21,10 +21,15 @@ type PanelComponent struct {
 	useGraphviz  bool                     // Flag to switch between map types
 	proxyAPI     api.ProxyAPI             // API access for game data
 	sixelLayer   *SixelLayer              // Sixel rendering layer
+	lastContentHeight int                 // Track last calculated content height
 }
 
 // NewPanelComponent creates new panel components
 func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
+	// Get theme colors for consistent styling
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	
 	// Left panel for trader info using theme
 	leftPanel := theme.NewPanelView().
 		SetDynamicColors(true).
@@ -32,8 +37,10 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 	leftPanel.SetBorder(true).SetTitle("Trader Info")
 	leftPanel.SetText("[yellow]Player Info[-]\n\n[cyan]Connect and load database to see player info[-]")
 	
-	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(leftPanel, 0, 1, false)
+	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow)
+	
+	// Explicitly set the left wrapper background to panel colors for consistency
+	leftWrapper.SetBackgroundColor(panelColors.Background)
 	
 	// Create all sector map components for right panel
 	sectorMap := NewSectorMapComponent()
@@ -54,7 +61,10 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 	rightWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(activeMapView, 0, 1, false)
 	
-	return &PanelComponent{
+	// Explicitly set the right wrapper background to panel colors to fix red background bleeding
+	rightWrapper.SetBackgroundColor(panelColors.Background)
+	
+	pc := &PanelComponent{
 		leftView:     leftPanel,
 		leftWrapper:  leftWrapper,
 		rightWrapper: rightWrapper,
@@ -64,6 +74,11 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 		useGraphviz:  useGraphviz,
 		sixelLayer:   sixelLayer,
 	}
+	
+	// Set initial size based on content
+	pc.UpdateLeftPanelSize()
+	
+	return pc
 }
 
 // GetLeftWrapper returns the left panel wrapper
@@ -171,12 +186,18 @@ func (pc *PanelComponent) setWaitingMessage() {
 	waitingText := fmt.Sprintf("[yellow]Player Info[-]\n\n[%s::bl]Waiting...[-]", 
 		defaultColors.Waiting.String())
 	pc.leftView.SetText(waitingText)
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // setErrorMessage displays an error message in the left panel
 func (pc *PanelComponent) setErrorMessage(message string) {
 	errorText := fmt.Sprintf("[red]Error[-]\n\n%s", message)
 	pc.leftView.SetText(errorText)
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // showTestTraderInfo displays test trader information (kept for fallback)
@@ -195,6 +216,9 @@ func (pc *PanelComponent) showTestTraderInfo() {
 	info.WriteString("Equipment: 25\n")
 	
 	pc.leftView.SetText(info.String())
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // UpdateTraderInfo updates the trader information panel using API PlayerInfo
@@ -257,6 +281,9 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 	info.WriteString(formatLine("Experience", "?", "gray"))
 	
 	pc.leftView.SetText(info.String())
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // UpdateSectorInfo updates the sector map with current sector info
@@ -274,11 +301,17 @@ func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
 // SetTraderInfoText sets custom text in the trader info panel
 func (pc *PanelComponent) SetTraderInfoText(text string) {
 	pc.leftView.SetText(text)
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // SetPlaceholderPlayerText sets placeholder text for when data is not available
 func (pc *PanelComponent) SetPlaceholderPlayerText() {
 	pc.leftView.SetText("[yellow]Player Info[-]\n\n[gray]Database not loaded - real data unavailable[-]")
+	
+	// Update panel size based on new content
+	pc.UpdateLeftPanelSize()
 }
 
 // ToggleMapType switches between graphviz, sixel, and traditional sector maps
@@ -310,6 +343,11 @@ func (pc *PanelComponent) ToggleMapType() {
 	debug.Log("PanelComponent: Switched to %s", mapTypeName)
 	pc.rightWrapper.AddItem(activeMapView, 0, 1, false)
 	
+	// Ensure right wrapper has correct background color
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	pc.rightWrapper.SetBackgroundColor(panelColors.Background)
+	
 	// Trigger data reload for the new active map
 	if pc.proxyAPI != nil {
 		if pc.useGraphviz && pc.graphvizMap != nil {
@@ -325,4 +363,53 @@ func (pc *PanelComponent) ToggleMapType() {
 // GetMapType returns the current map type (true for graphviz, false for others)
 func (pc *PanelComponent) GetMapType() bool {
 	return pc.useGraphviz
+}
+
+// CalculateContentHeight calculates the required height for the trader info content
+func (pc *PanelComponent) CalculateContentHeight() int {
+	text := pc.leftView.GetText(false) // Get text without color tags
+	if text == "" {
+		return 5 // Minimum height for empty content
+	}
+	
+	// Count lines in the text
+	lines := strings.Split(text, "\n")
+	contentHeight := len(lines)
+	
+	// Add padding for border and title (2 for borders + 1 for title)
+	totalHeight := contentHeight + 3
+	
+	// Set reasonable bounds
+	minHeight := 8  // Minimum useful height
+	maxHeight := 25 // Maximum height to avoid taking too much space
+	
+	if totalHeight < minHeight {
+		totalHeight = minHeight
+	}
+	if totalHeight > maxHeight {
+		totalHeight = maxHeight
+	}
+	
+	pc.lastContentHeight = totalHeight
+	debug.Log("PanelComponent: Calculated content height: %d lines, total height: %d", contentHeight, totalHeight)
+	return totalHeight
+}
+
+// GetContentHeight returns the last calculated content height
+func (pc *PanelComponent) GetContentHeight() int {
+	if pc.lastContentHeight == 0 {
+		return pc.CalculateContentHeight()
+	}
+	return pc.lastContentHeight
+}
+
+// UpdateLeftPanelSize updates the left panel size based on content
+func (pc *PanelComponent) UpdateLeftPanelSize() {
+	requiredHeight := pc.CalculateContentHeight()
+	
+	// Clear and rebuild the wrapper with new height
+	pc.leftWrapper.Clear()
+	pc.leftWrapper.AddItem(pc.leftView, requiredHeight, 0, false) // Fixed height, no flex
+	
+	debug.Log("PanelComponent: Updated left panel size to height %d", requiredHeight)
 }

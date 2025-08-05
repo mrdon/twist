@@ -19,8 +19,8 @@ type MenuComponent struct {
 
 // NewMenuComponent creates a new menu component
 func NewMenuComponent() *MenuComponent {
-	// Use theme factory for status bar styling
-	menuBar := theme.NewStatusBar().
+	// Use theme factory for menu bar styling
+	menuBar := theme.NewMenuBar().
 		SetDynamicColors(true).
 		SetRegions(false).
 		SetWrap(false).
