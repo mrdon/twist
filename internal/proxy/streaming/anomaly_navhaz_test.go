@@ -222,6 +222,11 @@ func TestAnomalyDetectionValidation(t *testing.T) {
 			parser.ProcessString(line + "\r")
 		}
 		
+		// Force sector completion to ensure database save
+		if !parser.sectorSaved {
+			parser.sectorCompleted()
+		}
+		
 		// Verify no anomaly was set (should remain false by default)
 		sector, err := db.LoadSector(8888)
 		if err != nil {

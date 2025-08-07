@@ -2,7 +2,6 @@ package streaming
 
 import (
 	"strings"
-	"twist/internal/debug"
 )
 
 // ============================================================================
@@ -11,7 +10,6 @@ import (
 
 // parseProductLine handles detailed product line parsing from port data
 func (p *TWXParser) parseProductLine(line string) {
-	debug.Log("TWXParser: Parsing product line: %s", line)
 	
 	// Parse formats:
 	// "Fuel Ore     Selling       10,000 units at 100%"
@@ -34,12 +32,10 @@ func (p *TWXParser) parseProductLine(line string) {
 	} else if strings.Contains(line, " at ") {
 		p.parseAlternateProductFormat(line, &product)
 	} else {
-		debug.Log("TWXParser: Unknown product line format")
 		return
 	}
 	
 	p.currentProducts = append(p.currentProducts, product)
-	debug.Log("TWXParser: Parsed product: %+v", product)
 }
 
 // getProductTypeFromLine determines the product type from the line
@@ -138,7 +134,6 @@ func (p *TWXParser) parseAlternateProductFormat(line string, product *ProductInf
 
 // processPortLine handles port commerce lines (enhanced version)
 func (p *TWXParser) processPortLine(line string) {
-	debug.Log("TWXParser: Processing port line: %s", line)
 	
 	// Check if this is a product line
 	if p.isProductLine(line) {
@@ -148,25 +143,20 @@ func (p *TWXParser) processPortLine(line string) {
 	
 	// Handle other port-specific lines
 	if strings.Contains(line, "What do you want to") {
-		debug.Log("TWXParser: Port trade prompt detected")
 		return
 	}
 	
 	if strings.Contains(line, "holds left") {
-		debug.Log("TWXParser: Hold space information")
 		return
 	}
 	
 	// Default product type detection (fallback to simpler logic)
 	lineLower := strings.ToLower(line)
 	if strings.Contains(lineLower, "fuel ore") {
-		debug.Log("TWXParser: Fuel Ore data")
 		p.extractProductInfo(line, ProductFuelOre)
 	} else if strings.Contains(lineLower, "organics") {
-		debug.Log("TWXParser: Organics data")
 		p.extractProductInfo(line, ProductOrganics)
 	} else if strings.Contains(lineLower, "equipment") {
-		debug.Log("TWXParser: Equipment data - port complete")
 		p.extractProductInfo(line, ProductEquipment)
 		// Equipment is typically the last product, so port is complete
 		p.currentDisplay = DisplayNone
@@ -232,7 +222,6 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 	// Store if we got useful information
 	if product.Quantity > 0 || product.Percent > 0 {
 		p.currentProducts = append(p.currentProducts, product)
-		debug.Log("TWXParser: Extracted product info: %+v", product)
 	}
 }
 

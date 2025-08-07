@@ -8,7 +8,6 @@ import (
 	"image/draw"
 	"os"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
@@ -71,23 +70,19 @@ func (psmc *ProperSixelSectorMapComponent) UpdateCurrentSectorWithInfo(sectorInf
 // LoadRealMapData loads real sector data from the API
 func (psmc *ProperSixelSectorMapComponent) LoadRealMapData() {
 	if psmc.proxyAPI == nil {
-		debug.Log("ProperSixelSectorMapComponent: No proxyAPI available")
 		return
 	}
 	
 	playerInfo, err := psmc.proxyAPI.GetPlayerInfo()
 	if err != nil {
-		debug.Log("ProperSixelSectorMapComponent: GetPlayerInfo failed: %v", err)
 		return
 	}
 	
 	if playerInfo.CurrentSector <= 0 {
-		debug.Log("ProperSixelSectorMapComponent: Invalid sector number: %d", playerInfo.CurrentSector)
 		return
 	}
 	
 	psmc.currentSector = playerInfo.CurrentSector
-	debug.Log("ProperSixelSectorMapComponent: Loading map data for sector %d", psmc.currentSector)
 	psmc.needsRedraw = true
 }
 
@@ -96,17 +91,14 @@ func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 	psmc.Box.DrawForSubclass(screen, psmc)
 	
 	x, y, width, height := psmc.GetInnerRect()
-	debug.Log("ProperSixelSectorMapComponent: Draw called - coords=(%d,%d) size=%dx%d", x, y, width, height)
 	
 	if width <= 0 || height <= 0 {
-		debug.Log("ProperSixelSectorMapComponent: Invalid dimensions, skipping draw")
 		return
 	}
 	
 	// Debug text removed - sixel graphics are working
 	
 	// Debug output removed to prevent screen interference
-	// debug.Log("ProperSixelSectorMapComponent: Draw called - sector=%d, needsRedraw=%v, hasImage=%v", 
 	//	psmc.currentSector, psmc.needsRedraw, psmc.image != nil)
 	
 	// Always use sector map now that we know colors work
@@ -159,7 +151,6 @@ func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 			}()
 			
 			// Debug output removed to prevent screen interference
-			// debug.Log("ProperSixelSectorMapComponent: Trying multiple output methods for %d bytes", len(sixelData))
 		}
 		
 		// Show sector info as text too
@@ -186,15 +177,10 @@ func (psmc *ProperSixelSectorMapComponent) drawStatusText(screen tcell.Screen, x
 
 // generateSectorMapImage creates an image representation of the sector map
 func (psmc *ProperSixelSectorMapComponent) generateSectorMapImage(imgWidth, imgHeight int) {
-	debug.Log("ProperSixelSectorMapComponent: generateSectorMapImage called - sector=%d, size=%dx%d", 
-		psmc.currentSector, imgWidth, imgHeight)
-		
 	if psmc.currentSector == 0 {
-		debug.Log("ProperSixelSectorMapComponent: No current sector, skipping image generation")
 		return
 	}
 	
-	debug.Log("ProperSixelSectorMapComponent: Generating sector map for sector %d", psmc.currentSector)
 	
 	// Create a new RGBA image
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
@@ -208,20 +194,15 @@ func (psmc *ProperSixelSectorMapComponent) generateSectorMapImage(imgWidth, imgH
 		var err error
 		currentInfo, err = psmc.proxyAPI.GetSectorInfo(psmc.currentSector)
 		if err != nil {
-			debug.Log("ProperSixelSectorMapComponent: Error getting sector info: %v", err)
 			return
 		}
 		psmc.sectorData[psmc.currentSector] = currentInfo
-		debug.Log("ProperSixelSectorMapComponent: Fetched sector info for %d, warps=%v", 
-			psmc.currentSector, currentInfo.Warps)
 	}
 	
 	// Draw sector map using pixel operations
 	psmc.drawSectorMapOnImage(img, currentInfo)
 	
 	psmc.image = img
-	debug.Log("ProperSixelSectorMapComponent: Generated %dx%d sector map image with %d connected sectors", 
-		imgWidth, imgHeight, len(currentInfo.Warps))
 }
 
 // drawSectorMapOnImage draws the sector map directly on the image
@@ -241,11 +222,9 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 	// Get connected sectors from real data
 	connectedSectors := currentInfo.Warps
 	// Debug log removed to prevent screen interference
-	// debug.Log("ProperSixelSectorMapComponent: Current sector %d has %d warps: %v", 
 	//	currentInfo.Number, len(connectedSectors), connectedSectors)
 	
 	if len(connectedSectors) == 0 {
-		// debug.Log("ProperSixelSectorMapComponent: No warps found, showing isolated sector")
 		return
 	}
 	
@@ -267,8 +246,6 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 			break
 		}
 		
-		pos := positions[i]
-		
 		// Choose color based on sector type (using real sector data)
 		sectorColor := color.RGBA{0, 200, 0, 255} // Bright green default
 		if info, hasInfo := psmc.sectorData[sectorNum]; hasInfo {
@@ -279,6 +256,8 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 			}
 		}
 		
+		pos := positions[i]
+		
 		// Draw sector circle with black border
 		psmc.drawFilledCircle(img, pos.x, pos.y, nodeRadius-1, color.RGBA{0, 0, 0, 255}) // Black border
 		psmc.drawFilledCircle(img, pos.x, pos.y, nodeRadius-3, sectorColor) // Colored center
@@ -287,7 +266,6 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 		psmc.drawLine(img, centerX, centerY, pos.x, pos.y, color.RGBA{255, 255, 255, 255})
 	}
 	
-	// debug.Log("ProperSixelSectorMapComponent: Drew sector map with %d connected sectors", len(connectedSectors))
 }
 
 // drawFilledCircle draws a filled circle on the image
@@ -364,7 +342,6 @@ func (psmc *ProperSixelSectorMapComponent) renderSixelImage(screen tcell.Screen,
 	// Encode image as sixel
 	err := encoder.Encode(psmc.image)
 	if err != nil {
-		debug.Log("ProperSixelSectorMapComponent: Error encoding sixel: %v", err)
 		return
 	}
 	
@@ -378,20 +355,14 @@ func (psmc *ProperSixelSectorMapComponent) renderSixelImage(screen tcell.Screen,
 		// Position cursor and output sixel to raw terminal
 		fmt.Fprintf(ttyFile, "\x1b[%d;%dH%s", y+2, x+1, sixelData)
 		
-		debug.Log("ProperSixelSectorMapComponent: Output sixel directly to /dev/tty")
 	} else {
 		// Fallback to stdout
 		fmt.Printf("\x1b[%d;%dH%s", y+2, x+1, sixelData)
-		debug.Log("ProperSixelSectorMapComponent: Output sixel to stdout (fallback)")
 	}
-	
-	debug.Log("ProperSixelSectorMapComponent: Rendered sixel image (%d bytes) at panel position (%d,%d)", 
-		buf.Len(), x, y)
 }
 
 // generateTestImage creates a simple test image to verify sixel rendering
 func (psmc *ProperSixelSectorMapComponent) generateTestImage(imgWidth, imgHeight int) {
-	debug.Log("ProperSixelSectorMapComponent: generateTestImage called - size=%dx%d", imgWidth, imgHeight)
 	
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
 	
@@ -413,7 +384,6 @@ func (psmc *ProperSixelSectorMapComponent) generateTestImage(imgWidth, imgHeight
 	psmc.drawFilledCircle(img, imgWidth-cornerSize, imgHeight-cornerSize, cornerSize/2, color.RGBA{255, 255, 0, 255})
 	
 	psmc.image = img
-	debug.Log("ProperSixelSectorMapComponent: Generated bright test image %dx%d", imgWidth, imgHeight)
 }
 
 // RenderSixelGraphics outputs the sixel graphics after tview screen updates
@@ -429,11 +399,9 @@ func (psmc *ProperSixelSectorMapComponent) RenderSixelGraphics() {
 		// Position cursor and output sixel to raw terminal
 		fmt.Fprintf(ttyFile, "\x1b[%d;%dH%s", psmc.lastY+2, psmc.lastX+1, psmc.lastSixelData)
 		
-		debug.Log("ProperSixelSectorMapComponent: Rendered sixel graphics to /dev/tty")
 	} else {
 		// Fallback to stdout
 		fmt.Printf("\x1b[%d;%dH%s", psmc.lastY+2, psmc.lastX+1, psmc.lastSixelData)
-		debug.Log("ProperSixelSectorMapComponent: Rendered sixel graphics to stdout")
 	}
 }
 

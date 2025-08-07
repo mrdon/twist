@@ -1,9 +1,11 @@
-//go:build integration
+
 
 package scripting
 
 import (
 	"testing"
+	"time"
+	"twist/internal/proxy/database"
 )
 
 // TestGetSectorDotNotation tests dot notation access with getSector
@@ -14,6 +16,22 @@ func TestGetSectorDotNotation_RealIntegration(t *testing.T) {
 	err := tester.setupData.DB.SaveSector(createTestSector(), 100)
 	if err != nil {
 		t.Fatalf("Failed to save test sector: %v", err)
+	}
+
+	// Create test port data
+	testPort := database.TPort{
+		Name:           "Trading Post Alpha",
+		Dead:           false,
+		BuildTime:      0,
+		ClassIndex:     1,
+		BuyProduct:     [3]bool{true, false, true},
+		ProductPercent: [3]int{100, 0, 100},
+		ProductAmount:  [3]int{500, 0, 300},
+		UpDate:         time.Now(),
+	}
+	err = tester.setupData.DB.SavePort(testPort, 100)
+	if err != nil {
+		t.Fatalf("Failed to save test port: %v", err)
 	}
 
 	script := `

@@ -1,5 +1,107 @@
 package api
 
+import "time"
+
+// Enums for type safety
+type ProductType int
+
+const (
+	ProductTypeFuelOre ProductType = iota
+	ProductTypeOrganics
+	ProductTypeEquipment
+)
+
+func (pt ProductType) String() string {
+	switch pt {
+	case ProductTypeFuelOre:
+		return "FuelOre"
+	case ProductTypeOrganics:
+		return "Organics"
+	case ProductTypeEquipment:
+		return "Equipment"
+	default:
+		return "Unknown"
+	}
+}
+
+type ProductStatus int
+
+const (
+	ProductStatusNone ProductStatus = iota
+	ProductStatusBuying
+	ProductStatusSelling
+)
+
+func (ps ProductStatus) String() string {
+	switch ps {
+	case ProductStatusNone:
+		return "None"
+	case ProductStatusBuying:
+		return "Buying"
+	case ProductStatusSelling:
+		return "Selling"
+	default:
+		return "Unknown"
+	}
+}
+
+type PortClass int
+
+const (
+	PortClassBBS PortClass = iota + 1 // Buy Buy Sell
+	PortClassBSB                      // Buy Sell Buy
+	PortClassSBB                      // Sell Buy Buy
+	PortClassSSB                      // Sell Sell Buy
+	PortClassSBS                      // Sell Buy Sell
+	PortClassBSS                      // Buy Sell Sell
+	PortClassSSS                      // Sell Sell Sell
+	PortClassBBB                      // Buy Buy Buy
+	PortClassSTD                      // Stardock
+)
+
+func (pc PortClass) String() string {
+	switch pc {
+	case PortClassBBS:
+		return "BBS"
+	case PortClassBSB:
+		return "BSB"
+	case PortClassSBB:
+		return "SBB"
+	case PortClassSSB:
+		return "SSB"
+	case PortClassSBS:
+		return "SBS"
+	case PortClassBSS:
+		return "BSS"
+	case PortClassSSS:
+		return "SSS"
+	case PortClassBBB:
+		return "BBB"
+	case PortClassSTD:
+		return "STD"
+	default:
+		return ""
+	}
+}
+
+type PortInfo struct {
+	SectorID     int           `json:"sector_id"`
+	Name         string        `json:"name"`
+	Class        int           `json:"class"`
+	ClassType    PortClass     `json:"class_type"`
+	BuildTime    int           `json:"build_time"`
+	Products     []ProductInfo `json:"products"`
+	LastUpdate   time.Time     `json:"last_update"`
+	Dead         bool          `json:"dead"`
+}
+
+type ProductInfo struct {
+	Type       ProductType   `json:"type"`
+	Status     ProductStatus `json:"status"`
+	Quantity   int           `json:"quantity"`
+	Percentage int           `json:"percentage"`
+}
+
 // ProxyAPI defines commands from TUI to Proxy
 type ProxyAPI interface {
 	// Connection Management
@@ -18,6 +120,9 @@ type ProxyAPI interface {
 	GetCurrentSector() (int, error)
 	GetSectorInfo(sectorNum int) (SectorInfo, error)
 	GetPlayerInfo() (PlayerInfo, error)
+	
+	// Port Information (Phase 2)
+	GetPortInfo(sectorNum int) (*PortInfo, error)
 }
 
 // TuiAPI defines notifications from Proxy to TUI
@@ -87,7 +192,7 @@ type SectorInfo struct {
 	Constellation string `json:"constellation"`  // Constellation name
 	Beacon        string `json:"beacon"`         // Beacon text
 	Warps         []int  `json:"warps"`          // Warp connections to other sectors
-	PortType      string `json:"port_type"`      // Port type (BBS, SSS, etc.) if HasTraders > 0
+	HasPort       bool   `json:"has_port,omitempty"`       // True if sector has a port
 }
 
 // DatabaseStateInfo provides information about database loading/unloading

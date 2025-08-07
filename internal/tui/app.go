@@ -216,7 +216,6 @@ func (ta *TwistApp) animatePanels(show bool) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Log("PANIC in animatePanels: %v", r)
 			}
 		}()
 		
@@ -296,7 +295,6 @@ func (ta *TwistApp) animatePanels(show bool) {
 		
 		// Load real data when panels become visible
 		if show && ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			debug.Log("TwistApp: Panels now visible, trying sector-based data load")
 			// Since GetPlayerInfo() returns CurrentSector: 0, we'll rely on sector change events
 			// Try to get the last known sector from sector change events, or use a default
 			// This is a workaround until GetPlayerInfo() is fixed
@@ -304,7 +302,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 				ta.panelComponent.LoadRealData()
 			})
 		} else {
-			debug.Log("TwistApp: Not loading data - show: %v, panelComponent: %v, connected: %v", 
+			debug.Log("Panel visibility: show=%v, panelComponent=%v, connected=%v", 
 				show, ta.panelComponent != nil, ta.proxyClient.IsConnected())
 		}
 	}()
@@ -426,7 +424,6 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 		// Add panic recovery to prevent crashes during callback
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Log("PANIC in HandleConnectionStatusChanged: %v", r)
 			}
 		}()
 		
@@ -472,7 +469,6 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Log("PANIC in HandleConnectionError: %v", r)
 			}
 		}()
 		
@@ -498,7 +494,6 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 		// Add error recovery to catch any panics in terminal processing
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Log("PANIC in HandleTerminalData: %v", r)
 			}
 		}()
 		
@@ -526,13 +521,11 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 
 // HandleDatabaseStateChanged processes database loading/unloading events
 func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
-	debug.Log("TuiApp: Database state changed - Game: %s, Loaded: %v", info.GameName, info.IsLoaded)
 	
 	// Handle database state change asynchronously to ensure non-blocking
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Log("PANIC in HandleDatabaseStateChanged: %v", r)
 			}
 		}()
 		
@@ -560,9 +553,21 @@ func (ta *TwistApp) HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 	})
 }
 
+// HandlePortUpdated processes port information update events
+func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
+	
+	ta.app.QueueUpdateDraw(func() {
+		// Update panel display with new port information
+		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			// If this is the current sector, refresh panels immediately  
+			// Note: GetCurrentSector method not yet implemented in Phase 2
+			ta.refreshPanelData(portInfo.SectorID)
+		}
+	})
+}
+
 // refreshPanelDataWithInfo refreshes panel data using provided sector info
 func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
-	debug.Log("TwistApp: refreshPanelDataWithInfo called for sector %d, panels visible: %v", sectorInfo.Number, ta.panelsVisible)
 	
 	// Only refresh if panels are visible
 	if !ta.panelsVisible {
@@ -570,7 +575,6 @@ func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
 	}
 	
 	// Update panels directly with the provided sector info
-	debug.Log("TwistApp: Using provided sector info for sector %d, updating panels", sectorInfo.Number)
 	ta.panelComponent.UpdateSectorInfo(sectorInfo)
 	
 	// Create player info with the current sector
@@ -578,13 +582,11 @@ func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
 		Name:          "Player", // We don't have the real name from GetPlayerInfo
 		CurrentSector: sectorInfo.Number,
 	}
-	debug.Log("TwistApp: Using sector-based player info for sector %d", sectorInfo.Number)
 	ta.panelComponent.UpdateTraderInfo(playerInfo)
 }
 
 // refreshPanelData refreshes panel data using API calls
 func (ta *TwistApp) refreshPanelData(sectorNumber int) {
-	debug.Log("TwistApp: refreshPanelData called for sector %d, panels visible: %v", sectorNumber, ta.panelsVisible)
 	
 	// Only refresh if panels are visible
 	if !ta.panelsVisible {
@@ -596,10 +598,8 @@ func (ta *TwistApp) refreshPanelData(sectorNumber int) {
 		// Get sector info and update panel
 		sectorInfo, err := proxyAPI.GetSectorInfo(sectorNumber)
 		if err == nil {
-			debug.Log("TwistApp: Got sector info for sector %d, updating panels", sectorNumber)
 			ta.panelComponent.UpdateSectorInfo(sectorInfo)
 		} else {
-			debug.Log("TwistApp: Failed to get sector info for sector %d: %v", sectorNumber, err)
 		}
 		
 		// Create fake player info with the current sector since GetPlayerInfo() is broken
@@ -607,7 +607,6 @@ func (ta *TwistApp) refreshPanelData(sectorNumber int) {
 			Name:          "Player", // We don't have the real name from GetPlayerInfo
 			CurrentSector: sectorNumber,
 		}
-		debug.Log("TwistApp: Using sector-based player info for sector %d", sectorNumber)
 		ta.panelComponent.UpdateTraderInfo(playerInfo)
 		
 		// Also update sector map

@@ -1,4 +1,4 @@
-//go:build integration
+
 
 package scripting
 
@@ -338,10 +338,10 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 			script: `
 				setVar $test_val 0
 				setVar $result 1
-				branch $test_val branch_target
+				branch $test_val mylabel
 				setVar $result 999
 				goto end
-				:branch_target
+				:mylabel
 				setVar $result 2
 				:end
 				echo "Result: " $result
@@ -349,34 +349,49 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 			expect: "Result: 2", // Should branch because test_val is 0
 		},
 		{
-			name: "No branch on non-zero",
+			name: "Branch on non-one value",
 			script: `
 				setVar $test_val 5
 				setVar $result 1
-				branch $test_val branch_target
+				branch $test_val mylabel
 				setVar $result 3
 				goto end
-				:branch_target
+				:mylabel
 				setVar $result 999
 				:end
 				echo "Result: " $result
 			`,
-			expect: "Result: 3", // Should NOT branch because test_val is non-zero
+			expect: "Result: 999", // Should branch because test_val (5) is not equal to 1
 		},
 		{
 			name: "Branch on empty string",
 			script: `
 				setVar $test_val ""
 				setVar $result 1
-				branch $test_val branch_target
+				branch $test_val mylabel
 				setVar $result 999
 				goto end
-				:branch_target
+				:mylabel
 				setVar $result 4
 				:end
 				echo "Result: " $result
 			`,
-			expect: "Result: 4", // Should branch because test_val is empty
+			expect: "Result: 4", // Should branch because test_val is empty (converts to 0, not equal to 1)
+		},
+		{
+			name: "No branch on one",
+			script: `
+				setVar $test_val 1
+				setVar $result 1
+				branch $test_val mylabel
+				setVar $result 5
+				goto end
+				:mylabel
+				setVar $result 999
+				:end
+				echo "Result: " $result
+			`,
+			expect: "Result: 5", // Should NOT branch because test_val equals 1
 		},
 	}
 
@@ -400,9 +415,9 @@ func TestBranchCommand_RealIntegration(t *testing.T) {
 
 func TestControlFlowPersistence_CrossInstance_RealIntegration(t *testing.T) {
 	// Test that variables set by control flow persist across VM instances
-	tester1 := NewIntegrationScriptTester(t)
+	tester := NewIntegrationScriptTester(t)
 
-	script1 := `
+	script := `
 		setVar $counter 0
 		gosub increment_counter
 		gosub increment_counter  
@@ -418,17 +433,17 @@ func TestControlFlowPersistence_CrossInstance_RealIntegration(t *testing.T) {
 		echo "Final counter: " $counter
 	`
 
-	result1 := tester1.ExecuteScript(script1)
-	if result1.Error != nil {
-		t.Fatalf("Script execution failed: %v", result1.Error)
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("Script execution failed: %v", result.Error)
 	}
 
-	if len(result1.Output) != 1 || result1.Output[0] != "Final counter: 3" {
-		t.Errorf("Expected 'Final counter: 3', got %v", result1.Output)
+	if len(result.Output) != 1 || result.Output[0] != "Final counter: 3" {
+		t.Errorf("Expected 'Final counter: 3', got %v", result.Output)
 	}
 
 	// Create new VM instance sharing same database
-	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
+	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester.setupData)
 
 	script2 := `
 		loadVar $counter
@@ -494,7 +509,9 @@ func TestComplexControlFlow_RealIntegration(t *testing.T) {
 		:calculate_factorial
 		setVar $counter $factorial_input
 		:factorial_loop
-		branch ($counter <> 0) factorial_done
+		if ($counter <= 0)
+			goto factorial_done
+		end
 		multiply $factorial_result $counter
 		subtract $counter 1
 		goto factorial_loop

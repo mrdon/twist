@@ -1,7 +1,6 @@
 package streaming
 
 import (
-	"twist/internal/debug"
 )
 
 // ScriptEngine interface for script integration (mirrors Pascal TWXInterpreter)
@@ -50,12 +49,10 @@ func (sep *ScriptEventProcessor) FireTextEvent(text string, blockExtended bool) 
 		return nil
 	}
 	
-	debug.Log("ScriptEventProcessor: Firing TextEvent: %q", text)
 	
 	// In Pascal TWX, blockExtended parameter controls whether extended characters are processed
 	// For now, we'll process all text events
 	if err := sep.scriptEngine.ProcessText(text); err != nil {
-		debug.Log("ScriptEventProcessor: TextEvent error: %v", err)
 		return err
 	}
 	
@@ -68,10 +65,8 @@ func (sep *ScriptEventProcessor) FireTextLineEvent(line string, blockExtended bo
 		return nil
 	}
 	
-	debug.Log("ScriptEventProcessor: Firing TextLineEvent: %q", line)
 	
 	if err := sep.scriptEngine.ProcessTextLine(line); err != nil {
-		debug.Log("ScriptEventProcessor: TextLineEvent error: %v", err)
 		return err
 	}
 	
@@ -84,10 +79,8 @@ func (sep *ScriptEventProcessor) FireActivateTriggers() error {
 		return nil
 	}
 	
-	debug.Log("ScriptEventProcessor: Activating triggers")
 	
 	if err := sep.scriptEngine.ActivateTriggers(); err != nil {
-		debug.Log("ScriptEventProcessor: ActivateTriggers error: %v", err)
 		return err
 	}
 	
@@ -100,10 +93,8 @@ func (sep *ScriptEventProcessor) FireAutoTextEvent(text string, blockExtended bo
 		return nil
 	}
 	
-	debug.Log("ScriptEventProcessor: Firing AutoTextEvent: %q", text)
 	
 	if err := sep.scriptEngine.ProcessAutoText(text); err != nil {
-		debug.Log("ScriptEventProcessor: AutoTextEvent error: %v", err)
 		return err
 	}
 	

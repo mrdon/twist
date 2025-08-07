@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 	"twist/internal/ansi"
-	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 )
@@ -193,7 +192,6 @@ func (l *GameDetector) ProcessUserInput(input string) {
 		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') {
 			letterStr := strings.ToUpper(string(char))
 			if _, exists := l.gameOptions[letterStr]; exists {
-				debug.Log("GameDetector: User input letter detected: %s", letterStr)
 				l.emitIsolatedLetterToken(letterStr)
 				l.processTokens()
 			}
@@ -467,7 +465,6 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 	// Skip isolated letter detection if we're currently parsing a game option pattern
 	// This prevents letters inside <A> patterns from being treated as user input
 	if gOptionState.state != 0 {
-		debug.Log("GameDetector: Skipping isolated letter detection for %c - inside game option pattern (state: %d)", char, gOptionState.state)
 		return
 	}
 	
@@ -480,10 +477,8 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 			// Only accept isolated letters with appropriate context
 			// This helps avoid false positives from letters embedded in text
 			if l.isValidIsolatedLetterContext(currentPrevChar) {
-				debug.Log("GameDetector: Isolated letter detected from server output: %s (prev char: %v %c)", letterStr, currentPrevChar, currentPrevChar)
 				l.emitIsolatedLetterToken(letterStr)
 			} else {
-				debug.Log("GameDetector: Isolated letter %s ignored due to context (prev char: %v %c)", letterStr, currentPrevChar, currentPrevChar)
 			}
 		}
 	}
@@ -551,7 +546,6 @@ func (l *GameDetector) emitGameOptionToken(letter, gameName string) {
 	
 	// Auto-transition to game menu state if we detect game options while idle
 	if l.currentState == StateIdle {
-		debug.Log("GameDetector: Auto-transitioning to StateGameMenuVisible due to game option detection")
 		l.currentState = StateGameMenuVisible
 		// Only initialize gameOptions if it's nil/empty to preserve existing options
 		if l.gameOptions == nil {
@@ -596,7 +590,6 @@ func (l *GameDetector) handleToken(token Token) {
 	switch token.Type {
 	case TokenGameMenu:
 		// Detect game menu regardless of current state (could be returning from a game)
-		debug.Log("Game menu detected via lexer (was in state: %v)", l.currentState)
 		l.currentState = StateGameMenuVisible
 		// Only reset gameOptions if we don't already have options (preserve auto-detected ones)
 		if len(l.gameOptions) == 0 {
@@ -606,13 +599,11 @@ func (l *GameDetector) handleToken(token Token) {
 	case TokenGameOption:
 		if l.currentState == StateGameMenuVisible {
 			l.gameOptions[token.Letter] = token.GameName
-			debug.Log("Found game option via lexer: %s -> %s", token.Letter, token.GameName)
 		}
 		
 	case TokenIsolatedLetter:
 		if l.currentState == StateGameMenuVisible {
 			if gameName, exists := l.gameOptions[token.Value]; exists {
-				debug.Log("Game selected via lexer: %s (%s)", token.Value, gameName)
 				l.selectedGame = gameName
 				l.currentState = StateGameSelected
 			}
@@ -620,16 +611,13 @@ func (l *GameDetector) handleToken(token Token) {
 		
 	case TokenGameStart:
 		if l.currentState == StateGameSelected {
-			debug.Log("Game starting detected via lexer for: %s", l.selectedGame)
 			l.currentState = StateGameActive
 			if err := l.loadGameDatabase(); err != nil {
-				debug.Log("Error loading database: %v", err)
 			}
 		}
 		
 	case TokenGameExit:
 		if l.currentState == StateGameActive || l.currentState == StateGameSelected {
-			debug.Log("Game exit detected via lexer for: %s", l.selectedGame)
 			l.resetGameState()
 		}
 		
@@ -640,23 +628,19 @@ func (l *GameDetector) handleToken(token Token) {
 			// Heuristic: if we see "TWGS v" or "TradeWars Game Server" in game content,
 			// it's likely just informational text, not a menu transition
 			if !l.isLikelyGameContent(token.Value) {
-				debug.Log("Main menu detected via lexer, resetting game state")
 				l.resetGameState()
 			} else {
-				debug.Log("Ignoring main menu pattern '%s' - appears to be game content", token.Value)
 			}
 		}
 		
 	case TokenUserPrompt:
 		// A user prompt was detected - we're now expecting user input
-		debug.Log("User prompt detected: %s", token.Value)
 		l.expectingUserInput = true
 	}
 }
 
 // resetGameState clears current game state
 func (l *GameDetector) resetGameState() {
-	debug.Log("Resetting game state via lexer")
 	
 	// Notify about database being unloaded if one is currently loaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
@@ -719,7 +703,6 @@ func (l *GameDetector) isLikelyGameContent(pattern string) bool {
 	// Check if any recent content suggests we're viewing game information
 	for _, indicator := range gameContentIndicators {
 		if strings.Contains(recentContext, indicator) {
-			debug.Log("GameDetector: Found game content indicator '%s' in recent context, treating '%s' as content", indicator, pattern)
 			return true
 		}
 	}
@@ -730,12 +713,10 @@ func (l *GameDetector) isLikelyGameContent(pattern string) bool {
 		// If it's "TWGS v" followed by a number > 2, or contains "running under", it's version info
 		if strings.Contains(recentContext, "running under") || 
 		   strings.Contains(recentContext, "Ver#") {
-			debug.Log("GameDetector: Pattern '%s' looks like version info in context, treating as content", pattern)
 			return true
 		}
 	}
 	
-	debug.Log("GameDetector: Pattern '%s' does not appear to be game content", pattern)
 	return false
 }
 
@@ -750,7 +731,6 @@ func (l *GameDetector) isAlphaNum(char byte) bool {
 // checkTimeout resets state if no activity for too long
 func (l *GameDetector) checkTimeout() {
 	if time.Since(l.lastActivity) > l.detectionTimeout {
-		debug.Log("Game detection timeout via lexer, resetting state")
 		l.resetGameState()
 	}
 }
@@ -789,7 +769,6 @@ func (l *GameDetector) loadGameDatabase() error {
 	}
 	
 	dbName := l.createDatabaseName(l.selectedGame)
-	debug.Log("Loading database via lexer: %s", dbName)
 	
 	db := database.NewDatabase()
 	
@@ -810,13 +789,11 @@ func (l *GameDetector) loadGameDatabase() error {
 			l.onDatabaseStateChanged(l.selectedGame, l.serverHost, l.serverPort, dbName, true)
 		}()
 	} else {
-		debug.Log("GameDetector: onDatabaseStateChanged callback is nil - cannot notify TUI")
 	}
 	
 	if l.onDatabaseLoaded != nil {
 		go func() {
 			if err := l.onDatabaseLoaded(db, scriptManager); err != nil {
-				debug.Log("Error in database loaded callback: %v", err)
 			}
 		}()
 	}

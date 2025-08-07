@@ -1,4 +1,4 @@
-//go:build integration
+
 
 package scripting
 
@@ -78,7 +78,7 @@ func TestWaitForCommand_RealIntegration(t *testing.T) {
 	}
 	
 	// Give script time to start and reach WAITFOR
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Verify the script is waiting
 	if !tester.IsWaiting() {
@@ -133,7 +133,7 @@ func TestWaitForCommand_NoMatch_RealIntegration(t *testing.T) {
 	}
 	
 	// Give script time to start and reach WAITFOR
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Verify the script is waiting
 	if !tester.IsWaiting() {
@@ -432,7 +432,7 @@ func TestWaitForCommand_WithTriggerInteraction_RealIntegration(t *testing.T) {
 	}
 	
 	// Give script time to set up trigger and reach WAITFOR
-	time.Sleep(200 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Verify the script is waiting
 	if !tester.IsWaiting() {
@@ -446,7 +446,7 @@ func TestWaitForCommand_WithTriggerInteraction_RealIntegration(t *testing.T) {
 	}
 	
 	// Give trigger time to fire
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Script should still be waiting since "test trigger" doesn't contain "continue"
 	if !tester.IsWaiting() {
@@ -484,6 +484,22 @@ func TestGetSectorCommand_RealIntegration(t *testing.T) {
 	err := tester.setupData.DB.SaveSector(createTestSector(), 123)
 	if err != nil {
 		t.Fatalf("Failed to save test sector: %v", err)
+	}
+
+	// Create test port data in database
+	testPort := database.TPort{
+		Name:           "Trading Post Alpha",
+		Dead:           false,
+		BuildTime:      0,
+		ClassIndex:     1, // Port class 1
+		BuyProduct:     [3]bool{true, false, true},
+		ProductPercent: [3]int{100, 0, 100},
+		ProductAmount:  [3]int{500, 0, 300},
+		UpDate:         time.Now(),
+	}
+	err = tester.setupData.DB.SavePort(testPort, 123)
+	if err != nil {
+		t.Fatalf("Failed to save test port: %v", err)
 	}
 
 	script := `
@@ -685,6 +701,22 @@ func TestGetSectorCommand_CrossInstancePersistence_RealIntegration(t *testing.T)
 		t.Fatalf("Failed to save test sector: %v", err)
 	}
 
+	// Create test port data
+	testPort := database.TPort{
+		Name:           "Trading Post Alpha",
+		Dead:           false,
+		BuildTime:      0,
+		ClassIndex:     1,
+		BuyProduct:     [3]bool{true, false, true},
+		ProductPercent: [3]int{100, 0, 100},
+		ProductAmount:  [3]int{500, 0, 300},
+		UpDate:         time.Now(),
+	}
+	err = tester1.setupData.DB.SavePort(testPort, 456)
+	if err != nil {
+		t.Fatalf("Failed to save test port: %v", err)
+	}
+
 	script1 := `
 		getSector 456 $s
 		echo "First instance density: " $s.density
@@ -756,10 +788,6 @@ func createTestSector() database.TSector {
 		Constellation: "Test Constellation",
 		Explored:      database.EtDensity, // 2 = DENSITY
 		Warps:         3,
-		SPort: database.TPort{
-			Name:       "Trading Post Alpha",
-			ClassIndex: 1,
-		},
 	}
 }
 
@@ -773,15 +801,9 @@ func createTestSectorWithData(density int, hasPort bool, portClass int) database
 		Constellation: "Test Constellation", 
 		Explored:      database.EtDensity,
 		Warps:         3,
-		SPort:         database.NULLPort(),
 	}
 
-	if hasPort {
-		sector.SPort = database.TPort{
-			Name:       "Test Trading Port",
-			ClassIndex: portClass,
-		}
-	}
+	// If hasPort is true, the port will be saved separately using SavePort()
 
 	return sector
 }

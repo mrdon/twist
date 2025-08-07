@@ -36,7 +36,7 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 	// Get theme colors
 	currentTheme := theme.Current()
 	colors := currentTheme.TerminalColors()
-	ansiPalette := currentTheme.ANSIColorPalette()
+	palette := currentTheme.ANSIColorPalette()
 
 	// Handle reset/clear FIRST before setting any state
 	if params == "" || params == "0" {
@@ -50,14 +50,16 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 		// Return theme defaults with all attributes reset
 		fgR, fgG, fgB := colors.Foreground.RGB()
 		bgR, bgG, bgB := colors.Background.RGB()
-		fgHex := fmt.Sprintf("#%02x%02x%02x", fgR, fgG, fgB)
-		bgHex := fmt.Sprintf("#%02x%02x%02x", bgR, bgG, bgB)
+		fgHex = fmt.Sprintf("#%02x%02x%02x", fgR, fgG, fgB)
+		bgHex = fmt.Sprintf("#%02x%02x%02x", bgR, bgG, bgB)
 		return fgHex, bgHex, false, false, false, false
 	}
 
 	// Start with current state
-	fg := c.currentForeground
-	bg := c.currentBackground
+	workingFg := c.currentForeground
+	workingBg := c.currentBackground
+	fg := workingFg
+	bg := workingBg
 	bold = c.bold
 	underline = c.underline
 	reverse = c.reverse
@@ -96,22 +98,22 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 			colorIndex := code - 30
 			if bold {
 				// Bold makes colors bright
-				fg = ansiPalette[colorIndex+8]
+				fg = palette[colorIndex+8]
 			} else {
-				fg = ansiPalette[colorIndex]
+				fg = palette[colorIndex]
 			}
 			
 		case code >= 40 && code <= 47: // Standard background colors
 			colorIndex := code - 40
-			bg = ansiPalette[colorIndex]
+			bg = palette[colorIndex]
 			
 		case code >= 90 && code <= 97: // Bright foreground colors
 			colorIndex := code - 90
-			fg = ansiPalette[colorIndex+8]
+			fg = palette[colorIndex+8]
 			
 		case code >= 100 && code <= 107: // Bright background colors
 			colorIndex := code - 100
-			bg = ansiPalette[colorIndex+8]
+			bg = palette[colorIndex+8]
 			
 		case code == 39: // Default foreground
 			fg = colors.Foreground
@@ -124,10 +126,10 @@ func (c *ColorConverter) ConvertColorParams(params string) (fgHex, bgHex string,
 	// If bold was set, re-evaluate existing colors
 	if bold {
 		// Check if the current foreground color is a standard color that should become bright
-		for i, standardColor := range ansiPalette[:8] {
+		for i, standardColor := range palette[:8] {
 			if fg == standardColor {
 				// Convert standard color to bright color
-				fg = ansiPalette[i+8]
+				fg = palette[i+8]
 				break
 			}
 		}

@@ -192,7 +192,7 @@ func TestEnhancedProductParsing(t *testing.T) {
 	
 	t.Run("ProductTypeDetection", func(t *testing.T) {
 		// Test product type detection
-		tests := []struct {
+		testCases := []struct {
 			line     string
 			expected ProductType
 		}{
@@ -201,7 +201,7 @@ func TestEnhancedProductParsing(t *testing.T) {
 			{"Equipment    Selling       1,500 units at 85%", ProductEquipment},
 		}
 		
-		for _, test := range tests {
+		for _, test := range testCases {
 			productType := parser.getProductTypeFromLine(test.line)
 			if ProductType(productType) != test.expected {
 				t.Errorf("Line '%s': expected %v, got %v", test.line, test.expected, ProductType(productType))
@@ -308,7 +308,7 @@ func TestHelperFunctions(t *testing.T) {
 	
 	t.Run("NumberParsing", func(t *testing.T) {
 		// Test various number parsing scenarios
-		tests := []struct {
+		testCases := []struct {
 			input    string
 			expected int
 		}{
@@ -320,7 +320,7 @@ func TestHelperFunctions(t *testing.T) {
 			{"10,000", 10000},
 		}
 		
-		for _, test := range tests {
+		for _, test := range testCases {
 			result := parser.parseIntSafe(test.input)
 			if result != test.expected {
 				t.Errorf("parseIntSafe('%s') = %d, expected %d", test.input, result, test.expected)
@@ -330,7 +330,7 @@ func TestHelperFunctions(t *testing.T) {
 	
 	t.Run("BooleanParsing", func(t *testing.T) {
 		// Test boolean parsing
-		tests := []struct {
+		testCases := []struct {
 			input    string
 			expected bool
 		}{
@@ -343,7 +343,7 @@ func TestHelperFunctions(t *testing.T) {
 			{"", false},
 		}
 		
-		for _, test := range tests {
+		for _, test := range testCases {
 			result := parser.parseBoolFromString(test.input)
 			if result != test.expected {
 				t.Errorf("parseBoolFromString('%s') = %t, expected %t", test.input, result, test.expected)
@@ -353,19 +353,23 @@ func TestHelperFunctions(t *testing.T) {
 	
 	t.Run("PortClassParsing", func(t *testing.T) {
 		// Test port class parsing from trade patterns
-		tests := []struct {
+		testCases := []struct {
 			pattern  string
 			expected int
 		}{
 			{"BBS", 1},
 			{"BSB", 2},
 			{"SBB", 3},
-			{"SSS", 5},
+			{"SSB", 4},
+			{"SBS", 5},
+			{"BSS", 6},
+			{"SSS", 7},
+			{"BBB", 8},
 			{"???", 9},
 			{"unknown", 0},
 		}
 		
-		for _, test := range tests {
+		for _, test := range testCases {
 			result := parser.classFromTradePattern(test.pattern)
 			if result != test.expected {
 				t.Errorf("classFromTradePattern('%s') = %d, expected %d", test.pattern, result, test.expected)
@@ -430,7 +434,7 @@ func TestStringUtilities(t *testing.T) {
 	
 	t.Run("StringContainsWord", func(t *testing.T) {
 		// Test whole word matching
-		tests := []struct {
+		testCases := []struct {
 			text     string
 			word     string
 			expected bool
@@ -441,7 +445,7 @@ func TestStringUtilities(t *testing.T) {
 			{"Equipment selling", "equipment", true},
 		}
 		
-		for _, test := range tests {
+		for _, test := range testCases {
 			result := parser.stringContainsWord(test.text, test.word)
 			if result != test.expected {
 				t.Errorf("stringContainsWord('%s', '%s') = %t, expected %t", 

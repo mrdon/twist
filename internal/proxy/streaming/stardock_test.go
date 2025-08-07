@@ -42,17 +42,24 @@ func TestStardockDetection(t *testing.T) {
 		if sector.Beacon != "FedSpace, FedLaw Enforced" {
 			t.Errorf("Expected beacon 'FedSpace, FedLaw Enforced', got '%s'", sector.Beacon)
 		}
-		if sector.SPort.Name != "Stargate Alpha I" {
-			t.Errorf("Expected port name 'Stargate Alpha I', got '%s'", sector.SPort.Name)
+		
+		// Load port data separately
+		port, err := db.LoadPort(stardockSector)
+		if err != nil {
+			t.Fatalf("Failed to load port for Stardock sector: %v", err)
 		}
-		if sector.SPort.ClassIndex != 9 {
-			t.Errorf("Expected port class 9, got %d", sector.SPort.ClassIndex)
+		
+		if port.Name != "Stargate Alpha I" {
+			t.Errorf("Expected port name 'Stargate Alpha I', got '%s'", port.Name)
 		}
-		if sector.SPort.Dead != false {
-			t.Errorf("Expected port not dead, got %t", sector.SPort.Dead)
+		if port.ClassIndex != 9 {
+			t.Errorf("Expected port class 9, got %d", port.ClassIndex)
 		}
-		if sector.SPort.BuildTime != 0 {
-			t.Errorf("Expected build time 0, got %d", sector.SPort.BuildTime)
+		if port.Dead != false {
+			t.Errorf("Expected port not dead, got %t", port.Dead)
+		}
+		if port.BuildTime != 0 {
+			t.Errorf("Expected build time 0, got %d", port.BuildTime)
 		}
 		if sector.Explored != database.EtCalc {
 			t.Errorf("Expected explored status EtCalc, got %d", sector.Explored)
@@ -84,9 +91,12 @@ func TestStardockDetection(t *testing.T) {
 		}
 		
 		// Verify second sector was NOT set up
-		sector, err := db.LoadSector(5678)
-		if err == nil && sector.SPort.ClassIndex == 9 {
-			t.Errorf("Second Stardock should not have been set up")
+		_, err := db.LoadSector(5678)
+		if err == nil {
+			port, portErr := db.LoadPort(5678)
+			if portErr == nil && port.ClassIndex == 9 {
+				t.Errorf("Second Stardock should not have been set up")
+			}
 		}
 		
 		t.Log("✓ Multiple Stardock detection correctly prevented")

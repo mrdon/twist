@@ -18,7 +18,7 @@ func TestErrorRecovery(t *testing.T) {
 
 	t.Run("MalformedLineHandling", func(t *testing.T) {
 		// Test various malformed inputs that should be handled gracefully
-		malformedInputs := []string{
+		lines := []string{
 			"",                                   // Empty line
 			string([]byte{0, 0, 0}),            // Null characters
 			strings.Repeat("A", 5000),          // Extremely long line
@@ -30,7 +30,7 @@ func TestErrorRecovery(t *testing.T) {
 			"Traders : Test, w/ -5000 ftrs",   // Negative fighters
 		}
 
-		for _, input := range malformedInputs {
+		for _, input := range lines {
 			// Should not panic or crash
 			parser.ProcessString(input + "\r")
 		}

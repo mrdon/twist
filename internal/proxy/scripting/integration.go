@@ -2,7 +2,6 @@ package scripting
 
 import (
 	"fmt"
-	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/constants"
 	"twist/internal/proxy/scripting/types"
@@ -67,12 +66,20 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		Density:       sector.Density,
 		Anomaly:       sector.Anomaly,
 		Explored:      int(sector.Explored),
-		HasPort:       sector.SPort.ClassIndex > 0,
-		PortName:      sector.SPort.Name,
-		PortClass:     sector.SPort.ClassIndex,
+		HasPort:       false,
+		PortName:      "",
+		PortClass:     0,
 		Ships:         make([]types.ShipData, 0),
 		Traders:       make([]types.TraderData, 0),
 		Planets:       make([]types.PlanetData, 0),
+	}
+	
+	// Load port data from separate ports table
+	port, err := g.db.LoadPort(index)
+	if err == nil {
+		scriptSector.HasPort = true
+		scriptSector.PortName = port.Name
+		scriptSector.PortClass = port.ClassIndex
 	}
 	
 	// Copy warps (TWX uses 1-6 indexing, we convert to 0-based slice)
@@ -333,7 +340,6 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 	
 	// Set up engine handlers for script output
 	sm.engine.SetSendHandler(func(text string) error {
-		debug.Log("ScriptManager sendHandler called with: %q", text)
 		return sm.gameAdapter.SendCommand(text)
 	})
 	
@@ -358,21 +364,16 @@ func (sm *ScriptManager) GetEngine() interface{} {
 
 // LoadAndRunScript loads and runs a script file
 func (sm *ScriptManager) LoadAndRunScript(filename string) error {
-	debug.Log("ScriptManager.LoadAndRunScript called with filename: %s", filename)
 	script, err := sm.engine.LoadScript(filename)
 	if err != nil {
-		debug.Log("Failed to load script %s: %v", filename, err)
 		return err
 	}
 	
-	debug.Log("Script %s loaded successfully with ID: %s", filename, script.ID)
 	err = sm.engine.RunScript(script.ID)
 	if err != nil {
-		debug.Log("Failed to run script %s (ID: %s): %v", filename, script.ID, err)
 		return err
 	}
 	
-	debug.Log("Script %s (ID: %s) started successfully", filename, script.ID)
 	return nil
 }
 

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/rivo/tview"
@@ -123,10 +122,8 @@ func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 
 // LoadRealData loads real player and sector data from the database (like TWX)
 func (pc *PanelComponent) LoadRealData() {
-	debug.Log("PanelComponent: LoadRealData called")
 	
 	if pc.proxyAPI == nil {
-		debug.Log("PanelComponent: No proxyAPI available")
 		pc.setWaitingMessage()
 		return
 	}
@@ -134,16 +131,13 @@ func (pc *PanelComponent) LoadRealData() {
 	// Get player info from database
 	playerInfo, err := pc.proxyAPI.GetPlayerInfo()
 	if err != nil {
-		debug.Log("PanelComponent: GetPlayerInfo failed: %v", err)
 		pc.setWaitingMessage()
 		return
 	}
 	
-	debug.Log("PanelComponent: Got player info - Name: %s, CurrentSector: %d", playerInfo.Name, playerInfo.CurrentSector)
 	
 	// Check if we have valid sector data
 	if playerInfo.CurrentSector <= 0 {
-		debug.Log("PanelComponent: Invalid sector number: %d", playerInfo.CurrentSector)
 		pc.setWaitingMessage()
 		return
 	}
@@ -151,13 +145,11 @@ func (pc *PanelComponent) LoadRealData() {
 	// Get current sector info
 	sectorInfo, err := pc.proxyAPI.GetSectorInfo(playerInfo.CurrentSector)
 	if err != nil {
-		debug.Log("PanelComponent: GetSectorInfo failed for sector %d: %v", playerInfo.CurrentSector, err)
 		// Show player info even if sector info fails
 		pc.UpdateTraderInfo(playerInfo)
 		return
 	}
 	
-	debug.Log("PanelComponent: Got sector info for sector %d", sectorInfo.Number)
 	
 	// Update displays with real data
 	pc.UpdateTraderInfo(playerInfo)
@@ -165,13 +157,10 @@ func (pc *PanelComponent) LoadRealData() {
 	
 	// Also trigger sector map data loading
 	if pc.useGraphviz && pc.graphvizMap != nil {
-		debug.Log("PanelComponent: Triggering graphviz sector map data load")
 		pc.graphvizMap.LoadRealMapData()
 	} else if pc.sixelMap != nil {
-		debug.Log("PanelComponent: Triggering sixel sector map data load")
 		pc.sixelMap.LoadRealMapData()
 	} else if pc.sectorMap != nil {
-		debug.Log("PanelComponent: Triggering sector map data load")
 		pc.sectorMap.LoadRealMapData()
 	}
 }
@@ -288,7 +277,6 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 
 // UpdateSectorInfo updates the sector map with current sector info
 func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
-	debug.Log("PanelComponent: UpdateSectorInfo called for sector %d, useGraphviz=%v", sector.Number, pc.useGraphviz)
 	if pc.useGraphviz && pc.graphvizMap != nil {
 		pc.graphvizMap.UpdateCurrentSectorWithInfo(sector)
 	} else if pc.sixelMap != nil {
@@ -327,20 +315,15 @@ func (pc *PanelComponent) ToggleMapType() {
 	pc.rightWrapper.Clear()
 	
 	var activeMapView tview.Primitive
-	var mapTypeName string
 	
 	if pc.useGraphviz && pc.graphvizMap != nil {
 		activeMapView = pc.graphvizMap
-		mapTypeName = "graphviz map"
 	} else if pc.sixelMap != nil {
 		activeMapView = pc.sixelMap
-		mapTypeName = "sixel map"
 	} else {
 		activeMapView = pc.sectorMap.GetView()
-		mapTypeName = "traditional map"
 	}
 	
-	debug.Log("PanelComponent: Switched to %s", mapTypeName)
 	pc.rightWrapper.AddItem(activeMapView, 0, 1, false)
 	
 	// Ensure right wrapper has correct background color
@@ -391,7 +374,6 @@ func (pc *PanelComponent) CalculateContentHeight() int {
 	}
 	
 	pc.lastContentHeight = totalHeight
-	debug.Log("PanelComponent: Calculated content height: %d lines, total height: %d", contentHeight, totalHeight)
 	return totalHeight
 }
 
@@ -411,5 +393,4 @@ func (pc *PanelComponent) UpdateLeftPanelSize() {
 	pc.leftWrapper.Clear()
 	pc.leftWrapper.AddItem(pc.leftView, requiredHeight, 0, false) // Fixed height, no flex
 	
-	debug.Log("PanelComponent: Updated left panel size to height %d", requiredHeight)
 }

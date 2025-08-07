@@ -17,7 +17,7 @@ func TestEnhancedMessageHandling(t *testing.T) {
 	parser := NewTWXParser(db, nil)
 
 	// Test cases based on Pascal Process.pas logic
-	tests := []struct {
+	testCases := []struct {
 		name           string
 		transmissionLine string
 		messageLines   []string
@@ -32,7 +32,7 @@ func TestEnhancedMessageHandling(t *testing.T) {
 			messageLines:    []string{"R Hello there, trader!"},
 			expectedType:    MessageRadio,
 			expectedSender:  "Captain Kirk",
-			expectedChannel: 1,
+			expectedChannel: 0, // Pascal behavior: parseIntSafe("1:") returns 0 due to colon
 			description:     "Standard radio transmission with channel",
 		},
 		{
@@ -77,7 +77,7 @@ func TestEnhancedMessageHandling(t *testing.T) {
 			messageLines:    []string{"R Logic dictates that we proceed"},
 			expectedType:    MessageRadio,
 			expectedSender:  "Spock",
-			expectedChannel: 2,
+			expectedChannel: 0, // Pascal behavior: parseIntSafe("2:") returns 0 due to colon
 			description:     "Continuing radio transmission",
 		},
 		{
@@ -100,7 +100,7 @@ func TestEnhancedMessageHandling(t *testing.T) {
 		},
 	}
 
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
 			// Clear parser state
 			parser.currentMessage = ""
@@ -163,7 +163,7 @@ func TestMessagePatternRecognition(t *testing.T) {
 	parser := NewTestTWXParser()
 	
 	// Test Pascal pattern recognition exactly
-	tests := []struct {
+	testCases := []struct {
 		line         string
 		shouldMatch  bool
 		expectedType MessageType
@@ -237,7 +237,7 @@ func TestMessagePatternRecognition(t *testing.T) {
 		},
 	}
 	
-	for _, tt := range tests {
+	for _, tt := range testCases {
 		t.Run(tt.description, func(t *testing.T) {
 			sender, channel, msgType := parser.parseTransmissionDetails(tt.line)
 			

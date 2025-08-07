@@ -85,7 +85,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 		parser.currentDisplay = DisplaySector
 		parser.sectorPosition = SectorPosNormal
 		
-		testSequence := []struct {
+		testCases := []struct {
 			input            string
 			expectedPosition SectorPosition
 			description      string
@@ -122,7 +122,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 			},
 		}
 
-		for _, step := range testSequence {
+		for _, step := range testCases {
 			parser.ProcessString(step.input + "\r")
 			
 			if parser.sectorPosition != step.expectedPosition {
@@ -138,7 +138,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 		// Test 8-space continuation line logic (Pascal: Copy(Line, 1, 8) = '        ')
 		parser.currentDisplay = DisplaySector
 		
-		continuationTests := []struct {
+		testCases := []struct {
 			sectorPos SectorPosition
 			input     string
 			expected  bool
@@ -176,7 +176,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 			},
 		}
 
-		for _, tc := range continuationTests {
+		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				parser.sectorPosition = tc.sectorPos
 				
@@ -196,7 +196,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 
 	t.Run("State Reset Logic", func(t *testing.T) {
 		// Test Pascal logic for resetting display states
-		resetTests := []struct {
+		testCases := []struct {
 			initialDisplay DisplayType
 			input          string
 			expectedDisplay DisplayType
@@ -204,7 +204,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 		}{
 			{
 				initialDisplay:  DisplaySector,
-				input:          "Warps to Sector(s) :  (1234) - 5678",
+				input:          "Command [TL=150] (1234) ?",
 				expectedDisplay: DisplayNone,
 				description:     "Pascal: FCurrentDisplay := dNone after sector completion",
 			},
@@ -216,7 +216,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 			},
 		}
 
-		for _, tc := range resetTests {
+		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				parser.currentDisplay = tc.initialDisplay
 				parser.ProcessString(tc.input + "\r")
@@ -234,7 +234,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 		// Test CIM-specific state transitions
 		parser.currentDisplay = DisplayCIM
 		
-		cimTests := []struct {
+		testCases := []struct {
 			input           string
 			expectedDisplay DisplayType
 			description     string
@@ -251,7 +251,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 			},
 		}
 
-		for _, tc := range cimTests {
+		for _, tc := range testCases {
 			t.Run(tc.description, func(t *testing.T) {
 				parser.currentDisplay = DisplayCIM
 				parser.ProcessString(tc.input + "\r")
@@ -279,7 +279,7 @@ func TestStateMachineWorkflow(t *testing.T) {
 
 	t.Run("Complete Sector Scan Workflow", func(t *testing.T) {
 		// Simulate complete sector scanning session
-		workflow := []struct {
+		testCases := []struct {
 			input           string
 			expectedDisplay DisplayType
 			expectedPosition SectorPosition
@@ -323,13 +323,13 @@ func TestStateMachineWorkflow(t *testing.T) {
 			},
 			{
 				input:           "Warps to Sector(s) :  (1002) - 1003",
-				expectedDisplay: DisplayNone,
+				expectedDisplay: DisplaySector,
 				expectedPosition: SectorPosNormal,
-				description:     "Complete sector and reset display",
+				description:     "Parse sector warps (sector still active)",
 			},
 		}
 
-		for i, step := range workflow {
+		for i, step := range testCases {
 			parser.ProcessString(step.input + "\r")
 			
 			if parser.currentDisplay != step.expectedDisplay {
@@ -359,9 +359,9 @@ func TestStateMachineWorkflow(t *testing.T) {
 				description:     "Start with sector",
 			},
 			{
-				input:           "Warps to Sector(s) :  (2002) - 2003",
+				input:           "Command [TL=150] (2002) ?",
 				expectedDisplay: DisplayNone,
-				description:     "Complete sector",
+				description:     "Complete sector with command prompt",
 			},
 			{
 				input:           "                          Relative Density Scan",

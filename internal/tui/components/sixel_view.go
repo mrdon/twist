@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"twist/internal/debug"
 	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -99,9 +98,6 @@ func (sv *SixelView) outputSixelDirectly(x, y int) {
 	
 	// Force flush
 	os.Stdout.Sync()
-	
-	debug.Log("SixelView: Attempted to output %d bytes of sixel data at position (%d,%d)", 
-		len(sv.sixelData), x, y)
 }
 
 // GetTitle returns the title
@@ -137,5 +133,4 @@ func (sv *SixelView) outputSixelAtPosition(x, y int) {
 	// Force immediate output
 	os.Stdout.Sync()
 	
-	debug.Log("SixelView: Output sixel data at tview coordinates (%d,%d)", x, y)
 }

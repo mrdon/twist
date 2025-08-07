@@ -93,7 +93,7 @@ func TestPortBuildTimeParsing(t *testing.T) {
 		parser.currentSector = CurrentSector{}
 		
 		// Simulate complete port scanning sequence
-		testSequence := []string{
+		lines := []string{
 			"Sector  : 5678 in Test Sector",
 			"Ports   : Industrial Hub, Class 3 Port BSB",
 			"        Build Time: 48 hours remaining",
@@ -101,27 +101,36 @@ func TestPortBuildTimeParsing(t *testing.T) {
 			"Warps to Sector(s) :  (5679) - 5680",
 		}
 		
-		for i, line := range testSequence {
+		for i, line := range lines {
 			parser.ProcessString(line + "\r")
 			t.Logf("Step %d: %s", i+1, line)
 		}
 		
+		// Force sector completion to ensure database save (following pattern from other tests)
+		parser.sectorCompleted()
+		
 		// Verify sector was saved with correct build time
-		sector, err := db.LoadSector(5678)
+		_, err := db.LoadSector(5678)
 		if err != nil {
 			t.Fatalf("Failed to load sector 5678: %v", err)
 		}
 		
-		if sector.SPort.BuildTime != 48 {
-			t.Errorf("Expected build time 48, got %d", sector.SPort.BuildTime)
+		// Load port data separately
+		port, err := db.LoadPort(5678)
+		if err != nil {
+			t.Fatalf("Failed to load port for sector 5678: %v", err)
 		}
 		
-		if sector.SPort.Name != "Industrial Hub" {
-			t.Errorf("Expected port name 'Industrial Hub', got '%s'", sector.SPort.Name)
+		if port.BuildTime != 48 {
+			t.Errorf("Expected build time 48, got %d", port.BuildTime)
 		}
 		
-		if sector.SPort.ClassIndex != 3 {
-			t.Errorf("Expected port class 3, got %d", sector.SPort.ClassIndex)
+		if port.Name != "Industrial Hub" {
+			t.Errorf("Expected port name 'Industrial Hub', got '%s'", port.Name)
+		}
+		
+		if port.ClassIndex != 3 {
+			t.Errorf("Expected port class 3, got %d", port.ClassIndex)
 		}
 
 		t.Log("✓ Complete port workflow with build time stored correctly")
@@ -219,7 +228,7 @@ func TestPortBuildTimeIntegration(t *testing.T) {
 
 	t.Run("Multiple Ports with Build Times", func(t *testing.T) {
 		// Test multiple sectors with different port build times
-		testSectors := []struct {
+		testCases := []struct {
 			sectorNum int
 			portName  string
 			buildTime int
@@ -229,7 +238,7 @@ func TestPortBuildTimeIntegration(t *testing.T) {
 			{1003, "Gamma Complex", 0},
 		}
 
-		for _, sector := range testSectors {
+		for _, sector := range testCases {
 			// Process each sector
 			parser.ProcessString("Sector  : " + parser.intToString(sector.sectorNum) + " in Test Space\r")
 			parser.ProcessString("Ports   : " + sector.portName + ", Class 1 Port BSS\r")
@@ -237,26 +246,36 @@ func TestPortBuildTimeIntegration(t *testing.T) {
 			parser.ProcessString("Warps to Sector(s) :  (9999)\r")
 		}
 
+		// Force completion of the last sector
+		parser.sectorCompleted()
+
 		// Verify all sectors stored correctly
-		for _, expected := range testSectors {
-			sector, err := db.LoadSector(expected.sectorNum)
+		for _, expected := range testCases {
+			_, err := db.LoadSector(expected.sectorNum)
 			if err != nil {
 				t.Errorf("Failed to load sector %d: %v", expected.sectorNum, err)
 				continue
 			}
 
-			if sector.SPort.BuildTime != expected.buildTime {
-				t.Errorf("Sector %d: Expected build time %d, got %d", 
-					expected.sectorNum, expected.buildTime, sector.SPort.BuildTime)
+			// Load port data separately
+			port, err := db.LoadPort(expected.sectorNum)
+			if err != nil {
+				t.Errorf("Failed to load port for sector %d: %v", expected.sectorNum, err)
+				continue
 			}
 
-			if sector.SPort.Name != expected.portName {
+			if port.BuildTime != expected.buildTime {
+				t.Errorf("Sector %d: Expected build time %d, got %d", 
+					expected.sectorNum, expected.buildTime, port.BuildTime)
+			}
+
+			if port.Name != expected.portName {
 				t.Errorf("Sector %d: Expected port name '%s', got '%s'", 
-					expected.sectorNum, expected.portName, sector.SPort.Name)
+					expected.sectorNum, expected.portName, port.Name)
 			}
 
 			t.Logf("✓ Sector %d: Port '%s' with build time %d hours", 
-				expected.sectorNum, sector.SPort.Name, sector.SPort.BuildTime)
+				expected.sectorNum, port.Name, port.BuildTime)
 		}
 	})
 }

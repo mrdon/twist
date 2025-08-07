@@ -163,7 +163,7 @@ func setupStardockSector(db database.Database, sectorNum int) error {
 	}
 	
 	// Add Stardock planet
-	stardockPlanet := database.TPlanet{
+	_ = database.TPlanet{
 		Name:     "Stardock",
 		Owner:    "Federation",
 		Fighters: 0,
@@ -171,7 +171,14 @@ func setupStardockSector(db database.Database, sectorNum int) error {
 		Stardock: true,
 	}
 	
+	stardockPlanet := database.TPlanet{
+		Owner:    "",
+		Name:     "Stardock",
+		Citadel:  false,
+		Stardock: true,
+	}
+	
 	sector.Planets = append(sector.Planets, stardockPlanet)
 	
-	return db.SaveSector(sector, sectorNum)
+	return db.SaveSectorWithCollections(sector, sectorNum, sector.Ships, sector.Traders, sector.Planets)
 }

@@ -2,7 +2,6 @@ package database
 
 import (
 	"fmt"
-	"twist/internal/debug"
 )
 
 // createSchema creates the TWX-compatible SQLite schema
@@ -231,8 +230,36 @@ func (d *SQLiteDatabase) createSchema() error {
 		planet_scanner BOOLEAN DEFAULT FALSE,
 		scan_type INTEGER DEFAULT 0,
 		ship_class TEXT DEFAULT '',
+		current_sector INTEGER DEFAULT 0,
+		player_name TEXT DEFAULT '',
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		CONSTRAINT single_row CHECK (id = 1)
+	);`
+
+	// New dedicated ports table (Phase 2: Database Schema Optimization)
+	portsTable := `
+	CREATE TABLE IF NOT EXISTS ports (
+		sector_index INTEGER PRIMARY KEY,  -- 1:1 relationship with sectors
+		name TEXT NOT NULL DEFAULT '',
+		class_index INTEGER NOT NULL DEFAULT 0,
+		dead BOOLEAN DEFAULT FALSE,
+		build_time INTEGER DEFAULT 0,
+		
+		-- Product information (normalized)
+		buy_fuel_ore BOOLEAN DEFAULT FALSE,
+		buy_organics BOOLEAN DEFAULT FALSE, 
+		buy_equipment BOOLEAN DEFAULT FALSE,
+		percent_fuel_ore INTEGER DEFAULT 0,
+		percent_organics INTEGER DEFAULT 0,
+		percent_equipment INTEGER DEFAULT 0,
+		amount_fuel_ore INTEGER DEFAULT 0,
+		amount_organics INTEGER DEFAULT 0,
+		amount_equipment INTEGER DEFAULT 0,
+		
+		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+		
+		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
 	
 	// Create indexes for performance
@@ -261,10 +288,19 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_message_history_timestamp ON message_history(timestamp);`,
 		`CREATE INDEX IF NOT EXISTS idx_message_history_type ON message_history(message_type);`,
 		`CREATE INDEX IF NOT EXISTS idx_message_history_sender ON message_history(sender) WHERE sender != '';`,
+		
+		// Optimized ports table indexes
+		`CREATE INDEX IF NOT EXISTS idx_ports_name ON ports(name) WHERE name != '';`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_class ON ports(class_index);`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_building ON ports(build_time) WHERE build_time > 0;`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_buying_ore ON ports(buy_fuel_ore) WHERE buy_fuel_ore = TRUE;`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_buying_org ON ports(buy_organics) WHERE buy_organics = TRUE;`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_buying_equ ON ports(buy_equipment) WHERE buy_equipment = TRUE;`,
+		`CREATE INDEX IF NOT EXISTS idx_ports_updated ON ports(updated_at);`,
 	}
 	
 	// Execute all DDL statements
-	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable, messageHistoryTable, playerStatsTable}
+	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable, messageHistoryTable, playerStatsTable, portsTable}
 	statements = append(statements, indexes...)
 	
 	for _, stmt := range statements {
@@ -312,15 +348,11 @@ func (d *SQLiteDatabase) getSectorCount() (int, error) {
 
 // prepareStatements creates prepared statements for performance
 func (d *SQLiteDatabase) prepareStatements() error {
-	// Load sector statement
+	// Load sector statement (Phase 2: port data removed from sectors)
 	loadQuery := `
 	SELECT 
 		warp1, warp2, warp3, warp4, warp5, warp6,
 		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
-		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
-		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
-		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
-		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
 		figs_quantity, figs_owner, figs_type,
 		mines_armid_quantity, mines_armid_owner,
 		mines_limpet_quantity, mines_limpet_owner
@@ -332,22 +364,17 @@ func (d *SQLiteDatabase) prepareStatements() error {
 		return fmt.Errorf("failed to prepare load sector statement: %w", err)
 	}
 	
-	// Save sector statement (UPSERT)
+	// Save sector statement (UPSERT) - Phase 2: port data removed from sectors
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
 		sector_index,
 		warp1, warp2, warp3, warp4, warp5, warp6,
 		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
-		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
-		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
-		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
-		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
 		figs_quantity, figs_owner, figs_type,
 		mines_armid_quantity, mines_armid_owner,
 		mines_limpet_quantity, mines_limpet_owner
 	) VALUES (
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
 	
 	d.saveSectorStmt, err = d.db.Prepare(saveQuery)
@@ -500,7 +527,6 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 				return fmt.Errorf("failed to save ship: %w", err)
 			}
 		}
-		debug.Log("Database: Saved %d ships for sector %d using parameter collections", len(ships), sectorIndex)
 	}
 	
 	// Save traders from parameter
@@ -511,7 +537,6 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 				return fmt.Errorf("failed to save trader: %w", err)
 			}
 		}
-		debug.Log("Database: Saved %d traders for sector %d using parameter collections", len(traders), sectorIndex)
 	}
 	
 	// Save planets from parameter
@@ -522,11 +547,9 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 				return fmt.Errorf("failed to save planet: %w", err)
 			}
 		}
-		debug.Log("Database: Saved %d planets for sector %d using parameter collections", len(planets), sectorIndex)
 	}
 	
-	debug.Log("Database: Completed saving collections for sector %d with parameters (ships=%d, traders=%d, planets=%d)", 
-		sectorIndex, len(ships), len(traders), len(planets))
+	//	sectorIndex, len(ships), len(traders), len(planets))
 	
 	return nil
 }

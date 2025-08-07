@@ -1,7 +1,6 @@
 package api
 
 import (
-	"twist/internal/debug"
 	coreapi "twist/internal/api"
 )
 
@@ -14,6 +13,7 @@ type TwistApp interface {
 	HandleScriptError(scriptName string, err error)
 	HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo)
 	HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo)
+	HandlePortUpdated(portInfo coreapi.PortInfo)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -40,18 +40,15 @@ func NewTuiAPI(app TwistApp) coreapi.TuiAPI {
 // Thin orchestration methods - all one-liners calling app directly
 // All methods MUST return immediately using goroutines for async work
 func (tui *TuiApiImpl) OnConnectionStatusChanged(status coreapi.ConnectionStatus, address string) {
-	debug.Log("TuiApiImpl: OnConnectionStatusChanged called - status: %v, address: %s", status, address)
 	go tui.app.HandleConnectionStatusChanged(status, address)
 }
 
 func (tui *TuiApiImpl) OnConnectionError(err error) {
-	debug.Log("TuiApiImpl: OnConnectionError called - error: %v", err)
 	go tui.app.HandleConnectionError(err)
 }
 
 func (tui *TuiApiImpl) OnData(data []byte) {
 	// Log raw data chunks for debugging
-	debug.LogDataChunk("OnData", data)
 	
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))
@@ -67,25 +64,26 @@ func (tui *TuiApiImpl) OnData(data []byte) {
 
 // Script event methods - all one-liners calling app directly
 func (tui *TuiApiImpl) OnScriptStatusChanged(status coreapi.ScriptStatusInfo) {
-	debug.Log("TuiApiImpl: OnScriptStatusChanged called - status: %+v", status)
 	go tui.app.HandleScriptStatusChanged(status)
 }
 
 func (tui *TuiApiImpl) OnScriptError(scriptName string, err error) {
-	debug.Log("TuiApiImpl: OnScriptError called - scriptName: %s, error: %v", scriptName, err)
 	go tui.app.HandleScriptError(scriptName, err)
 }
 
 // Database event methods - database loading/unloading handler
 func (tui *TuiApiImpl) OnDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
-	debug.Log("TuiApiImpl: OnDatabaseStateChanged called - info: %+v", info)
 	go tui.app.HandleDatabaseStateChanged(info)
 }
 
 // Game state event methods - simple sector change handler
 func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
-	debug.Log("TuiApiImpl: OnCurrentSectorChanged called - sectorInfo: %+v", sectorInfo)
 	go tui.app.HandleCurrentSectorChanged(sectorInfo)
+}
+
+// Port update event handler - detailed port information updates
+func (tui *TuiApiImpl) OnPortUpdated(portInfo coreapi.PortInfo) {
+	go tui.app.HandlePortUpdated(portInfo)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

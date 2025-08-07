@@ -10,7 +10,6 @@ import (
 	"twist/internal/telnet"
 	"twist/internal/proxy/database"
 	"twist/internal/api"
-	// "twist/internal/debug" // Keep for future debugging
 )
 
 // External script engine interface from scripting package

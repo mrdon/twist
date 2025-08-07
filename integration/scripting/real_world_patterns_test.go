@@ -1,9 +1,11 @@
-//go:build integration
+
 
 package scripting
 
 import (
 	"testing"
+	"time"
+	"twist/internal/proxy/database"
 )
 
 // TestComplexSSTPattern tests a pattern like 1_SST.ts would use
@@ -14,6 +16,22 @@ func TestComplexSSTPattern_RealIntegration(t *testing.T) {
 	err := tester.setupData.DB.SaveSector(createTestSectorWithData(50, true, 2), 10)
 	if err != nil {
 		t.Fatalf("Failed to save test sector: %v", err)
+	}
+
+	// Create test port data in database
+	testPort := database.TPort{
+		Name:           "Trading Post Alpha",
+		Dead:           false,
+		BuildTime:      0,
+		ClassIndex:     2, // Port class 2 as specified
+		BuyProduct:     [3]bool{true, false, true},
+		ProductPercent: [3]int{100, 0, 100},
+		ProductAmount:  [3]int{500, 0, 300},
+		UpDate:         time.Now(),
+	}
+	err = tester.setupData.DB.SavePort(testPort, 10)
+	if err != nil {
+		t.Fatalf("Failed to save test port: %v", err)
 	}
 
 	script := `

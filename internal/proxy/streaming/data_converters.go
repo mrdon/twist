@@ -2,7 +2,6 @@ package streaming
 
 import (
 	"time"
-	"twist/internal/debug"
 	"twist/internal/proxy/database"
 )
 
@@ -21,7 +20,6 @@ func NewSectorConverter() *SectorConverter {
 func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 	dbSector := database.NULLSector()
 	
-	debug.Log("Converter: ToDatabase for sector %d - input warps: %v", parserSector.Index, parserSector.Warps)
 	
 	// Basic sector info
 	dbSector.Warp = parserSector.Warps
@@ -35,8 +33,6 @@ func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 	}
 	dbSector.Warps = validWarps
 	
-	debug.Log("Converter: ToDatabase - output dbSector.Warp: %v, dbSector.Warps: %d", 
-		dbSector.Warp, dbSector.Warps)
 	dbSector.Constellation = parserSector.Constellation
 	dbSector.Beacon = parserSector.Beacon
 	dbSector.Density = parserSector.Density
@@ -50,8 +46,8 @@ func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 		dbSector.Explored = database.EtNo
 	}
 	
-	// Port data conversion
-	dbSector.SPort = c.convertPortData(parserSector.Port)
+	// Phase 2: Port data conversion - now handled separately
+	// Port data will be saved using separate SavePort method
 	
 	// Convert related data
 	dbSector.Ships = c.convertShips(parserSector.Ships)
@@ -75,7 +71,8 @@ func (c *SectorConverter) FromDatabase(dbSector database.TSector) SectorData {
 		NavHaz:        dbSector.NavHaz,
 		Anomaly:       dbSector.Anomaly,
 		Explored:      dbSector.Explored > database.EtNo,
-		Port:          c.convertPortFromDB(dbSector.SPort),
+		// Phase 2: Port data will be loaded separately - set empty for now
+		Port:          PortData{},
 		Ships:         c.convertShipsFromDB(dbSector.Ships),
 		Traders:       c.convertTradersFromDB(dbSector.Traders),
 		Planets:       c.convertPlanetsFromDB(dbSector.Planets),

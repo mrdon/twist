@@ -3,7 +3,6 @@ package game
 import (
 	"sync"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/proxy/database"
 )
 
@@ -56,7 +55,6 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 	
 	// Only notify if sector actually changed
 	if oldSector != sectorNum {
-		debug.Log("StateManager: Sector changed from %d to %d", oldSector, sectorNum)
 		
 		// Load complete sector information from database
 		var sectorInfo api.SectorInfo
@@ -64,7 +62,6 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 			if sector, err := sm.db.LoadSector(sectorNum); err == nil {
 				sectorInfo = sm.convertSectorToSectorInfo(sector, sectorNum)
 			} else {
-				debug.Log("StateManager: Failed to load sector %d from database: %v", sectorNum, err)
 				// Fallback to basic sector info with just the number
 				sectorInfo = api.SectorInfo{Number: sectorNum}
 			}
@@ -82,7 +79,6 @@ func (sm *StateManager) SetPlayerName(name string) {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	sm.playerName = name
-	debug.Log("StateManager: Player name set to %s", name)
 }
 
 // GetCurrentSector returns the current sector (thread-safe)

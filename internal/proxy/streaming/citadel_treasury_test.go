@@ -195,6 +195,7 @@ func TestCitadelTreasuryEdgeCases(t *testing.T) {
 		// Test multiple citadel treasury lines in sequence
 		parser.currentDisplay = DisplaySector
 		parser.sectorSaved = false
+		parser.currentSectorIndex = 1234 // Set valid sector number for test
 		
 		treasuryLines := []string{
 			"Citadel treasury contains 1,000,000 credits",

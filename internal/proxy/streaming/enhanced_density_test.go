@@ -131,7 +131,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 		testLine := "Sector 1234 The Sphere Density: 1500 NavHaz: 5% Warps: 6 Anomaly: Yes"
 		
 		// Test parameter extraction (Pascal 1-indexed)
-		tests := []struct {
+		testCases := []struct {
 			param    int
 			expected string
 			desc     string
@@ -150,7 +150,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 			{12, "Yes", "Parameter 12 should be anomaly status"},
 		}
 		
-		for _, tt := range tests {
+		for _, tt := range testCases {
 			result := parser.getParameter(testLine, tt.param)
 			if result != tt.expected {
 				t.Errorf("%s: expected '%s', got '%s'", tt.desc, tt.expected, result)
@@ -214,7 +214,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 		parser.currentDisplay = DisplayDensity
 		
 		// Test invalid lines that should be ignored
-		invalidLines := []string{
+		lines := []string{
 			"",                           // Empty line
 			"Not a sector line",         // Doesn't start with "Sector"
 			"Sector",                    // Too short
@@ -222,7 +222,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 			"Sector 0 (Test) Density: 1000 NavHaz: 0% Warps: 3 Anomaly: No", // Zero sector
 		}
 		
-		for _, line := range invalidLines {
+		for _, line := range lines {
 			// Should not crash or cause errors
 			parser.processDensityLine(line)
 		}
@@ -315,19 +315,19 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 
 	t.Run("Complete Density Scan Workflow", func(t *testing.T) {
 		// Simulate complete density scanning session
-		testSequence := []string{
+		lines := []string{
 			"                          Relative Density Scan",                     // Start density scan
 			"Sector 1001 (Unknown) Density: 1,200 NavHaz: 5% Warps: 4 Anomaly: No",  // First sector
 			"Sector 1002 (Unknown) Density: 3,500 NavHaz: 15% Warps: 2 Anomaly: Yes", // Second sector with anomaly  
 			"Sector 1003 (Unknown) Density: 800 NavHaz: 0% Warps: 6 Anomaly: No",    // Third sector
 		}
 		
-		for _, line := range testSequence {
+		for _, line := range lines {
 			parser.ProcessString(line + "\r")
 		}
 		
 		// Verify all sectors were processed and stored
-		expectedSectors := []struct {
+		testCases := []struct {
 			id      int
 			density int
 			warps   int
@@ -338,7 +338,7 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 			{1003, 800, 6, false},
 		}
 		
-		for _, expected := range expectedSectors {
+		for _, expected := range testCases {
 			sector, err := db.LoadSector(expected.id)
 			if err != nil {
 				t.Fatalf("Failed to load sector %d: %v", expected.id, err)

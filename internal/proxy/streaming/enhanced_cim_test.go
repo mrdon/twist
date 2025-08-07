@@ -26,7 +26,46 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 		t.Log("✓ CIM prompt correctly sets DisplayCIM state")
 	})
 
+	t.Run("Database Basic Test", func(t *testing.T) {
+		// First save a sector (required for foreign key)
+		testSector := database.NULLSector()
+		err := db.SaveSector(testSector, 999)
+		if err != nil {
+			t.Fatalf("Failed to save test sector: %v", err)
+		}
+		
+		// Now test port operations
+		testPort := database.TPort{
+			Name:           "Test Port",
+			ClassIndex:     5,
+			BuyProduct:     [3]bool{true, false, true},
+			ProductAmount:  [3]int{1000, 2000, 3000},
+		}
+		
+		err = db.SavePort(testPort, 999)
+		if err != nil {
+			t.Fatalf("Failed to save test port: %v", err)
+		}
+		
+		loadedPort, err := db.LoadPort(999)
+		if err != nil {
+			t.Fatalf("Failed to load test port: %v", err)
+		}
+		
+		if loadedPort.ClassIndex != 5 {
+			t.Errorf("Expected ClassIndex 5, got %d", loadedPort.ClassIndex)
+		}
+		
+		t.Log("✓ Basic database operations work")
+	})
+
 	t.Run("Port CIM Line Processing", func(t *testing.T) {
+		// Debug: Verify parser uses same database
+		if parser.database != db {
+			t.Fatalf("Parser database (%p) != test database (%p)", parser.database, db)
+		}
+		t.Logf("✓ Parser and test use same database instance: %p", db)
+		
 		// Set up CIM state
 		parser.currentDisplay = DisplayCIM
 		
@@ -97,25 +136,32 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 				}
 				
 				// Load sector to verify data was stored
-				sector, err := db.LoadSector(tc.expectedSector)
+				_, err := db.LoadSector(tc.expectedSector)
 				if err != nil {
 					t.Fatalf("Failed to load sector %d: %v", tc.expectedSector, err)
 				}
 				
+				// Load port data separately
+				port, err := db.LoadPort(tc.expectedSector)
+				if err != nil {
+					t.Fatalf("Failed to load port for sector %d: %v", tc.expectedSector, err)
+				}
+				
+				
 				// Verify port class was determined correctly
-				if sector.SPort.ClassIndex != tc.expectedClass {
-					t.Errorf("Expected port class %d, got %d", tc.expectedClass, sector.SPort.ClassIndex)
+				if port.ClassIndex != tc.expectedClass {
+					t.Errorf("Expected port class %d, got %d", tc.expectedClass, port.ClassIndex)
 				}
 				
 				// Verify buy/sell status
-				if sector.SPort.BuyProduct[0] != tc.expectedBuyOre {
-					t.Errorf("Expected buy ore %t, got %t", tc.expectedBuyOre, sector.SPort.BuyProduct[0])
+				if port.BuyProduct[0] != tc.expectedBuyOre {
+					t.Errorf("Expected buy ore %t, got %t", tc.expectedBuyOre, port.BuyProduct[0])
 				}
-				if sector.SPort.BuyProduct[1] != tc.expectedBuyOrg {
-					t.Errorf("Expected buy org %t, got %t", tc.expectedBuyOrg, sector.SPort.BuyProduct[1])
+				if port.BuyProduct[1] != tc.expectedBuyOrg {
+					t.Errorf("Expected buy org %t, got %t", tc.expectedBuyOrg, port.BuyProduct[1])
 				}
-				if sector.SPort.BuyProduct[2] != tc.expectedBuyEquip {
-					t.Errorf("Expected buy equip %t, got %t", tc.expectedBuyEquip, sector.SPort.BuyProduct[2])
+				if port.BuyProduct[2] != tc.expectedBuyEquip {
+					t.Errorf("Expected buy equip %t, got %t", tc.expectedBuyEquip, port.BuyProduct[2])
 				}
 				
 				t.Logf("✓ %s: %s", tc.name, tc.description)
@@ -156,7 +202,7 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 		parser.currentDisplay = DisplayCIM
 		
 		// Test invalid CIM lines
-		invalidLines := []string{
+		lines := []string{
 			"", // Empty line
 			"12", // Too short
 			"1234", // Port CIM without enough parameters
@@ -165,7 +211,7 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 			"1234 5000 150% 3000 80% 2000 90%", // Invalid percentage
 		}
 		
-		for _, invalidLine := range invalidLines {
+		for _, invalidLine := range lines {
 			parser.currentDisplay = DisplayCIM // Reset state
 			parser.processCIMLine(invalidLine)
 			
@@ -315,32 +361,38 @@ func TestCIMIntegrationWithRealData(t *testing.T) {
 	
 	t.Run("Complete CIM workflow", func(t *testing.T) {
 		// Simulate complete CIM download workflow
-		testSequence := []string{
+		lines := []string{
 			": ",                                          // CIM prompt
 			"1234 5000 60% 3000 80% 2000 90%",           // Port CIM data
 			"5678 1111 2222 3333 4444 5555 6666",        // Warp CIM data
 			"9999 -1000 50% -2000 70% 3000 90%",         // Another port CIM with buying
 		}
 		
-		for _, line := range testSequence {
+		for _, line := range lines {
 			parser.ProcessString(line + "\r")
 		}
 		
 		// Verify port CIM data was stored
-		sector1, err := db.LoadSector(1234)
+		_, err := db.LoadSector(1234)
 		if err != nil {
 			t.Fatalf("Failed to load sector 1234: %v", err)
 		}
 		
+		// Load port data separately
+		port1, err := db.LoadPort(1234)
+		if err != nil {
+			t.Fatalf("Failed to load port for sector 1234: %v", err)
+		}
+		
 		// Check port data
-		if sector1.SPort.ProductAmount[0] != 5000 { // Ore
-			t.Errorf("Expected ore amount 5000, got %d", sector1.SPort.ProductAmount[0])
+		if port1.ProductAmount[0] != 5000 { // Ore
+			t.Errorf("Expected ore amount 5000, got %d", port1.ProductAmount[0])
 		}
-		if sector1.SPort.ProductPercent[1] != 80 { // Organics %
-			t.Errorf("Expected organics percent 80, got %d", sector1.SPort.ProductPercent[1])
+		if port1.ProductPercent[1] != 80 { // Organics %
+			t.Errorf("Expected organics percent 80, got %d", port1.ProductPercent[1])
 		}
-		if sector1.SPort.BuyProduct[0] != false { // Not buying ore
-			t.Errorf("Expected not buying ore, got %t", sector1.SPort.BuyProduct[0])
+		if port1.BuyProduct[0] != false { // Not buying ore
+			t.Errorf("Expected not buying ore, got %t", port1.BuyProduct[0])
 		}
 		
 		// Verify warp CIM data was stored
@@ -357,24 +409,30 @@ func TestCIMIntegrationWithRealData(t *testing.T) {
 		}
 		
 		// Verify buying port CIM data
-		sector3, err := db.LoadSector(9999)
+		_, err = db.LoadSector(9999)
 		if err != nil {
 			t.Fatalf("Failed to load sector 9999: %v", err)
 		}
 		
-		if !sector3.SPort.BuyProduct[0] { // Should be buying ore
-			t.Errorf("Expected buying ore, got %t", sector3.SPort.BuyProduct[0])
+		// Load port data separately
+		port3, err := db.LoadPort(9999)
+		if err != nil {
+			t.Fatalf("Failed to load port for sector 9999: %v", err)
 		}
-		if !sector3.SPort.BuyProduct[1] { // Should be buying organics
-			t.Errorf("Expected buying organics, got %t", sector3.SPort.BuyProduct[1])
+		
+		if !port3.BuyProduct[0] { // Should be buying ore
+			t.Errorf("Expected buying ore, got %t", port3.BuyProduct[0])
 		}
-		if sector3.SPort.BuyProduct[2] { // Should not be buying equipment
-			t.Errorf("Expected not buying equipment, got %t", sector3.SPort.BuyProduct[2])
+		if !port3.BuyProduct[1] { // Should be buying organics
+			t.Errorf("Expected buying organics, got %t", port3.BuyProduct[1])
+		}
+		if port3.BuyProduct[2] { // Should not be buying equipment
+			t.Errorf("Expected not buying equipment, got %t", port3.BuyProduct[2])
 		}
 		
 		// Check port class determination (BBS = 1)
-		if sector3.SPort.ClassIndex != 1 {
-			t.Errorf("Expected port class 1 (BBS), got %d", sector3.SPort.ClassIndex)
+		if port3.ClassIndex != 1 {
+			t.Errorf("Expected port class 1 (BBS), got %d", port3.ClassIndex)
 		}
 		
 		t.Log("✓ Complete CIM workflow processed and stored correctly")

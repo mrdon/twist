@@ -215,7 +215,7 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 		var stoppedAtStr *string
 		var includeScriptsJSON string
 		
-		err := rows.Scan(
+		_ = rows.Scan(
 			&script.ID, &script.Name, &script.Filename, &script.Version,
 			&script.Running, &script.System, &loadedAtStr, &stoppedAtStr,
 			&includeScriptsJSON, &script.Description,

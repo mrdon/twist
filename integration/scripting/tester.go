@@ -1,4 +1,4 @@
-//go:build integration
+
 
 package scripting
 
@@ -310,7 +310,7 @@ func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan
 		for tester.setupData.VM.IsWaiting() {
 			// Keep the goroutine alive while waiting
 			// ProcessIncomingText will resume execution and eventually complete
-			time.Sleep(10 * time.Millisecond)
+			time.Sleep(1 * time.Millisecond)
 		}
 	}()
 	

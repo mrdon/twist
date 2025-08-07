@@ -48,11 +48,10 @@ vet:
 # Run tests (including integration tests)
 test:
 	@echo "Running unit tests..."
-	@go test -v ./... || echo "Unit tests had issues but continuing..."
+	@go test -v ./... && echo "Unit tests passed"
 	@echo "Running integration tests..."
-	@go test -tags=integration ./integration/... -p=1
-	@echo "Note: Integration tests may show FAIL at end due to Go test framework cleanup issues"
-	@echo "Individual tests passing indicates successful TWX compatibility"
+	@go test -tags=integration ./integration/... -p=1 && echo "Integration tests passed"
+	@echo "All tests completed successfully"
 
 # Run integration tests only
 test-integration:

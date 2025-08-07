@@ -5,7 +5,6 @@ import (
 	"strings"
 	"sync"
 	"twist/internal/ansi"
-	_ "twist/internal/debug"
 	"twist/internal/theme"
 	"unicode/utf8"
 
@@ -74,7 +73,7 @@ func NewTerminalView() *TerminalView {
 	tv.SetBorderPadding(1, 1, 1, 1)  // Default padding: 1 row top/bottom, 1 column left/right
 	
 	// Create wrapper with theme colors  
-	tv.wrapper = theme.NewFlex().SetDirection(tview.FlexRow).
+	tv.wrapper = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tv, 0, 1, true)
 	
 	// Set up change callback for UI updates
@@ -152,8 +151,8 @@ func (tv *TerminalView) Write(p []byte) (n int, err error) {
 		// Original logic: cursor near bottom
 		// Additional fix: also autoscroll if we're already viewing near the bottom,
 		// regardless of cursor position (fixes issue with ANSI cursor positioning)
-		isViewingNearBottom := tv.scrollOffsetRow >= len(tv.lines) - height - 3
-		cursorNearBottom := tv.cursorY >= len(tv.lines)-height
+		cursorNearBottom := tv.scrollOffsetRow >= len(tv.lines) - height - 3
+		isViewingNearBottom := tv.cursorY >= len(tv.lines)-height
 		maxScrollOffset := len(tv.lines) - height
 		
 		// New fix: After clear screen, if we're at scroll position 0 and there's content

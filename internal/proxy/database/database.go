@@ -23,6 +23,13 @@ type Database interface {
 	// Enhanced SaveSector with collections (Pascal-compliant signature)
 	SaveSectorWithCollections(sector TSector, index int, ships []TShip, traders []TTrader, planets []TPlanet) error
 	
+	// Port operations (Phase 2: Database Schema Optimization)
+	SavePort(port TPort, sectorIndex int) error
+	LoadPort(sectorIndex int) (TPort, error)
+	DeletePort(sectorIndex int) error
+	FindPortsByClass(classIndex int) ([]TPort, error)
+	FindPortsBuying(product TProductType) ([]TPort, error)
+	
 	// TWX compatibility methods
 	GetDatabaseOpen() bool
 	GetSectors() int
@@ -84,13 +91,13 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
 	
-	// Run migrations (this will also validate schema)
-	if err = d.runMigrations(); err != nil {
-		return fmt.Errorf("failed to run migrations: %w", err)
+	// Create schema (handles IF NOT EXISTS)
+	if err = d.createSchema(); err != nil {
+		return fmt.Errorf("failed to create schema: %w", err)
 	}
 	
 	// Check if database has proper schema
-	if err = d.validateSchemaEnhanced(); err != nil {
+	if err = d.validateSchema(); err != nil {
 		return fmt.Errorf("invalid database schema: %w", err)  
 	}
 	
@@ -190,10 +197,10 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	
 	sector := NULLSector()
 	
-	// Load main sector data
+	// Load main sector data (Phase 2: port data removed from sectors table)
 	row := d.loadSectorStmt.QueryRow(index)
 	
-	var upDate, sportUpDate sql.NullTime
+	var upDate sql.NullTime
 	
 	err := row.Scan(
 		&sector.Warp[0], &sector.Warp[1], &sector.Warp[2], 
@@ -201,11 +208,6 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 		&sector.Constellation, &sector.Beacon, &sector.NavHaz,
 		&sector.Density, &sector.Anomaly, &sector.Warps, &sector.Explored,
 		&upDate, 
-		&sector.SPort.Name, &sector.SPort.Dead, &sector.SPort.ClassIndex,
-		&sector.SPort.BuildTime, &sportUpDate,
-		&sector.SPort.BuyProduct[0], &sector.SPort.BuyProduct[1], &sector.SPort.BuyProduct[2],
-		&sector.SPort.ProductPercent[0], &sector.SPort.ProductPercent[1], &sector.SPort.ProductPercent[2],
-		&sector.SPort.ProductAmount[0], &sector.SPort.ProductAmount[1], &sector.SPort.ProductAmount[2],
 		&sector.Figs.Quantity, &sector.Figs.Owner, &sector.Figs.FigType,
 		&sector.MinesArmid.Quantity, &sector.MinesArmid.Owner,
 		&sector.MinesLimpet.Quantity, &sector.MinesLimpet.Owner,
@@ -221,9 +223,6 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	// Handle nullable timestamps
 	if upDate.Valid {
 		sector.UpDate = upDate.Time
-	}
-	if sportUpDate.Valid {
-		sector.SPort.UpDate = sportUpDate.Time
 	}
 	
 	// Load related data (ships, traders, planets)
@@ -272,22 +271,17 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 	// Update timestamp
 	sector.UpDate = time.Now()
 	
-	// Save main sector data using direct SQL for debugging
+	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
 		sector_index,
 		warp1, warp2, warp3, warp4, warp5, warp6,
 		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
-		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
-		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
-		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
-		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
 		figs_quantity, figs_owner, figs_type,
 		mines_armid_quantity, mines_armid_owner,
 		mines_limpet_quantity, mines_limpet_owner
 	) VALUES (
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
 	
 	_, err := d.tx.Exec(saveQuery,
@@ -297,11 +291,6 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		sector.Constellation, sector.Beacon, sector.NavHaz,
 		sector.Density, sector.Anomaly, sector.Warps, int(sector.Explored),
 		sector.UpDate,
-		sector.SPort.Name, sector.SPort.Dead, sector.SPort.ClassIndex,
-		sector.SPort.BuildTime, sector.SPort.UpDate,
-		sector.SPort.BuyProduct[0], sector.SPort.BuyProduct[1], sector.SPort.BuyProduct[2],
-		sector.SPort.ProductPercent[0], sector.SPort.ProductPercent[1], sector.SPort.ProductPercent[2],
-		sector.SPort.ProductAmount[0], sector.SPort.ProductAmount[1], sector.SPort.ProductAmount[2],
 		sector.Figs.Quantity, sector.Figs.Owner, int(sector.Figs.FigType),
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
@@ -353,22 +342,17 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 	// Update timestamp
 	sector.UpDate = time.Now()
 	
-	// Save main sector data (without embedded collections)
+	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
 		sector_index,
 		warp1, warp2, warp3, warp4, warp5, warp6,
 		constellation, beacon, nav_haz, density, anomaly, warps, explored, update_time,
-		sport_name, sport_dead, sport_class_index, sport_build_time, sport_update,
-		sport_buy_fuel_ore, sport_buy_organics, sport_buy_equipment,
-		sport_percent_fuel_ore, sport_percent_organics, sport_percent_equipment,
-		sport_amount_fuel_ore, sport_amount_organics, sport_amount_equipment,
 		figs_quantity, figs_owner, figs_type,
 		mines_armid_quantity, mines_armid_owner,
 		mines_limpet_quantity, mines_limpet_owner
 	) VALUES (
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 
-		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
+		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
 	
 	_, err := d.tx.Exec(saveQuery,
@@ -378,11 +362,6 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		sector.Constellation, sector.Beacon, sector.NavHaz,
 		sector.Density, sector.Anomaly, sector.Warps, int(sector.Explored),
 		sector.UpDate,
-		sector.SPort.Name, sector.SPort.Dead, sector.SPort.ClassIndex,
-		sector.SPort.BuildTime, sector.SPort.UpDate,
-		sector.SPort.BuyProduct[0], sector.SPort.BuyProduct[1], sector.SPort.BuyProduct[2],
-		sector.SPort.ProductPercent[0], sector.SPort.ProductPercent[1], sector.SPort.ProductPercent[2],
-		sector.SPort.ProductAmount[0], sector.SPort.ProductAmount[1], sector.SPort.ProductAmount[2],
 		sector.Figs.Quantity, sector.Figs.Owner, int(sector.Figs.FigType),
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
@@ -685,4 +664,215 @@ func (d *SQLiteDatabase) ResetPersonalCorpFighters() error {
 	}
 
 	return nil
+}
+
+// Port operations (Phase 2: Database Schema Optimization)
+
+// SavePort saves port information to the dedicated ports table
+func (d *SQLiteDatabase) SavePort(port TPort, sectorIndex int) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+	
+	if sectorIndex <= 0 {
+		return fmt.Errorf("invalid sector index")
+	}
+
+	query := `
+	INSERT OR REPLACE INTO ports (
+		sector_index, name, class_index, dead, build_time,
+		buy_fuel_ore, buy_organics, buy_equipment,
+		percent_fuel_ore, percent_organics, percent_equipment,
+		amount_fuel_ore, amount_organics, amount_equipment,
+		updated_at
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP);`
+
+	// Use transaction if active, otherwise use direct connection
+	var err error
+	if d.tx != nil {
+		_, err = d.tx.Exec(query,
+			sectorIndex, port.Name, port.ClassIndex, port.Dead, port.BuildTime,
+			port.BuyProduct[PtFuelOre], port.BuyProduct[PtOrganics], port.BuyProduct[PtEquipment],
+			port.ProductPercent[PtFuelOre], port.ProductPercent[PtOrganics], port.ProductPercent[PtEquipment],
+			port.ProductAmount[PtFuelOre], port.ProductAmount[PtOrganics], port.ProductAmount[PtEquipment])
+	} else {
+		_, err = d.db.Exec(query,
+			sectorIndex, port.Name, port.ClassIndex, port.Dead, port.BuildTime,
+			port.BuyProduct[PtFuelOre], port.BuyProduct[PtOrganics], port.BuyProduct[PtEquipment],
+			port.ProductPercent[PtFuelOre], port.ProductPercent[PtOrganics], port.ProductPercent[PtEquipment],
+			port.ProductAmount[PtFuelOre], port.ProductAmount[PtOrganics], port.ProductAmount[PtEquipment])
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to save port for sector %d: %w", sectorIndex, err)
+	}
+
+	return nil
+}
+
+// LoadPort loads port information from the dedicated ports table
+func (d *SQLiteDatabase) LoadPort(sectorIndex int) (TPort, error) {
+	var port TPort
+	
+	if !d.dbOpen {
+		return port, fmt.Errorf("database not open")
+	}
+	
+	if sectorIndex <= 0 {
+		return port, fmt.Errorf("invalid sector index")
+	}
+
+	query := `
+	SELECT name, class_index, dead, build_time,
+		   buy_fuel_ore, buy_organics, buy_equipment,
+		   percent_fuel_ore, percent_organics, percent_equipment,
+		   amount_fuel_ore, amount_organics, amount_equipment,
+		   updated_at
+	FROM ports WHERE sector_index = ?;`
+
+	var updateTime time.Time
+	var err error
+	
+	// Use transaction if active, otherwise use direct connection
+	if d.tx != nil {
+		err = d.tx.QueryRow(query, sectorIndex).Scan(
+			&port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
+			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
+			&port.ProductPercent[PtFuelOre], &port.ProductPercent[PtOrganics], &port.ProductPercent[PtEquipment],
+			&port.ProductAmount[PtFuelOre], &port.ProductAmount[PtOrganics], &port.ProductAmount[PtEquipment],
+			&updateTime)
+	} else {
+		err = d.db.QueryRow(query, sectorIndex).Scan(
+			&port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
+			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
+			&port.ProductPercent[PtFuelOre], &port.ProductPercent[PtOrganics], &port.ProductPercent[PtEquipment],
+			&port.ProductAmount[PtFuelOre], &port.ProductAmount[PtOrganics], &port.ProductAmount[PtEquipment],
+			&updateTime)
+	}
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No port in this sector - return empty port struct
+			return TPort{}, nil
+		}
+		return port, fmt.Errorf("failed to load port for sector %d: %w", sectorIndex, err)
+	}
+	
+	port.UpDate = updateTime
+	return port, nil
+}
+
+// DeletePort removes port information from the dedicated ports table
+func (d *SQLiteDatabase) DeletePort(sectorIndex int) error {
+	if !d.dbOpen {
+		return fmt.Errorf("database not open")
+	}
+	
+	if sectorIndex <= 0 {
+		return fmt.Errorf("invalid sector index")
+	}
+
+	query := `DELETE FROM ports WHERE sector_index = ?;`
+	_, err := d.db.Exec(query, sectorIndex)
+	if err != nil {
+		return fmt.Errorf("failed to delete port for sector %d: %w", sectorIndex, err)
+	}
+
+	return nil
+}
+
+// FindPortsByClass finds all ports with a specific class
+func (d *SQLiteDatabase) FindPortsByClass(classIndex int) ([]TPort, error) {
+	if !d.dbOpen {
+		return nil, fmt.Errorf("database not open")
+	}
+
+	query := `
+	SELECT sector_index, name, class_index, dead, build_time,
+		   buy_fuel_ore, buy_organics, buy_equipment,
+		   percent_fuel_ore, percent_organics, percent_equipment,
+		   amount_fuel_ore, amount_organics, amount_equipment,
+		   updated_at
+	FROM ports WHERE class_index = ? ORDER BY name;`
+
+	rows, err := d.db.Query(query, classIndex)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find ports by class %d: %w", classIndex, err)
+	}
+	defer rows.Close()
+
+	var ports []TPort
+	for rows.Next() {
+		var port TPort
+		var sectorIndex int
+		var updateTime time.Time
+		
+		if err := rows.Scan(
+			&sectorIndex, &port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
+			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
+			&port.ProductPercent[PtFuelOre], &port.ProductPercent[PtOrganics], &port.ProductPercent[PtEquipment],
+			&port.ProductAmount[PtFuelOre], &port.ProductAmount[PtOrganics], &port.ProductAmount[PtEquipment],
+			&updateTime); err != nil {
+			return nil, fmt.Errorf("failed to scan port: %w", err)
+		}
+		
+		port.UpDate = updateTime
+		ports = append(ports, port)
+	}
+
+	return ports, nil
+}
+
+// FindPortsBuying finds all ports buying a specific product
+func (d *SQLiteDatabase) FindPortsBuying(product TProductType) ([]TPort, error) {
+	if !d.dbOpen {
+		return nil, fmt.Errorf("database not open")
+	}
+
+	var column string
+	switch product {
+	case PtFuelOre:
+		column = "buy_fuel_ore"
+	case PtOrganics:
+		column = "buy_organics"
+	case PtEquipment:
+		column = "buy_equipment"
+	default:
+		return nil, fmt.Errorf("invalid product type: %d", product)
+	}
+
+	query := fmt.Sprintf(`
+	SELECT sector_index, name, class_index, dead, build_time,
+		   buy_fuel_ore, buy_organics, buy_equipment,
+		   percent_fuel_ore, percent_organics, percent_equipment,
+		   amount_fuel_ore, amount_organics, amount_equipment,
+		   updated_at
+	FROM ports WHERE %s = TRUE ORDER BY name;`, column)
+
+	rows, err := d.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to find ports buying %v: %w", product, err)
+	}
+	defer rows.Close()
+
+	var ports []TPort
+	for rows.Next() {
+		var port TPort
+		var sectorIndex int
+		var updateTime time.Time
+		
+		if err := rows.Scan(
+			&sectorIndex, &port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
+			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
+			&port.ProductPercent[PtFuelOre], &port.ProductPercent[PtOrganics], &port.ProductPercent[PtEquipment],
+			&port.ProductAmount[PtFuelOre], &port.ProductAmount[PtOrganics], &port.ProductAmount[PtEquipment],
+			&updateTime); err != nil {
+			return nil, fmt.Errorf("failed to scan port: %w", err)
+		}
+		
+		port.UpDate = updateTime
+		ports = append(ports, port)
+	}
+
+	return ports, nil
 }

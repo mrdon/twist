@@ -11,7 +11,6 @@ import (
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 	"twist/internal/api"
-	"twist/internal/debug"
 )
 
 type Proxy struct {
@@ -171,18 +170,12 @@ func (p *Proxy) Connect(address string) error {
 	}
 
 	// Load and run login script automatically on connection
-	debug.Log("Checking script manager availability...")
 	if p.scriptManager != nil {
-		debug.Log("Script manager is available, attempting to load login script")
 		loginScriptPath := "login.ts"
-		debug.Log("Loading login script from path: %s", loginScriptPath)
 		if err := p.scriptManager.LoadAndRunScript(loginScriptPath); err != nil {
-			debug.Log("Warning: Failed to load login script %s: %v", loginScriptPath, err)
 		} else {
-			debug.Log("Login script %s loaded and started successfully", loginScriptPath)
 		}
 	} else {
-		debug.Log("Script manager is nil - scripts not available")
 	}
 
 	// Start goroutines for handling I/O
@@ -367,7 +360,6 @@ func (p *Proxy) GetCurrentSector() int {
 	
 	playerStats, err := p.db.LoadPlayerStats()
 	if err != nil {
-		debug.Log("Proxy: Failed to load player stats for current sector: %v", err)
 		return 0
 	}
 	
@@ -399,7 +391,6 @@ func (p *Proxy) GetPlayerName() string {
 	
 	playerStats, err := p.db.LoadPlayerStats()
 	if err != nil {
-		debug.Log("Proxy: Failed to load player stats for player name: %v", err)
 		return ""
 	}
 	
@@ -449,7 +440,6 @@ func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.
 
 // onDatabaseStateChanged is called when the game detector loads/unloads a database
 func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName string, isLoaded bool) {
-	debug.Log("Proxy: Database state change - Game: %s, Loaded: %v", gameName, isLoaded)
 	
 	// Create database state info for TUI notification
 	info := api.DatabaseStateInfo{
@@ -464,7 +454,6 @@ func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName 
 	if p.tuiAPI != nil {
 		p.tuiAPI.OnDatabaseStateChanged(info)
 	} else {
-		debug.Log("Proxy: tuiAPI is nil - cannot notify TUI about database state change")
 	}
 }
 

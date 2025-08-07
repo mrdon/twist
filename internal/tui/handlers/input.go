@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	_ "twist/internal/debug"
 	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"

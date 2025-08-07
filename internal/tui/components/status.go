@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/theme"
 
 	"github.com/rivo/tview"
@@ -71,7 +70,6 @@ func (sc *StatusComponent) SetConnectionStatus(connected bool, serverAddress str
 
 // SetGameInfo sets the active game information
 func (sc *StatusComponent) SetGameInfo(gameName, serverHost, serverPort string, isLoaded bool) {
-	debug.Log("StatusComponent: SetGameInfo called - Game: %s, Host: %s, Port: %s, Loaded: %v", gameName, serverHost, serverPort, isLoaded)
 	
 	if isLoaded {
 		sc.gameInfo = &GameInfo{
@@ -80,12 +78,9 @@ func (sc *StatusComponent) SetGameInfo(gameName, serverHost, serverPort string, 
 			ServerPort: serverPort,
 			IsLoaded:   isLoaded,
 		}
-		debug.Log("StatusComponent: GameInfo set to: %+v", sc.gameInfo)
 	} else {
-		debug.Log("StatusComponent: Clearing GameInfo (game unloaded)")
 		sc.gameInfo = nil
 	}
-	debug.Log("StatusComponent: Calling UpdateStatus")
 	sc.UpdateStatus()
 }
 
@@ -119,12 +114,10 @@ func (sc *StatusComponent) UpdateStatus() {
 	
 	// Add active game information if available
 	if sc.gameInfo != nil && sc.gameInfo.IsLoaded {
-		debug.Log("StatusComponent: Adding game info to status - Game: %s", sc.gameInfo.GameName)
 		statusText.WriteString(" | Game: ")
 		statusText.WriteString(fmt.Sprintf("[%s]%s[-]", 
 			statusColors.ConnectedFg.String(), sc.gameInfo.GameName))
 	} else {
-		debug.Log("StatusComponent: No game info to display - gameInfo: %+v", sc.gameInfo)
 	}
 	
 	// Script status - use ProxyAPI instead of direct script manager access

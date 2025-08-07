@@ -76,8 +76,7 @@ INSERT OR IGNORE INTO player_stats (id) VALUES (1);`,
 		Description: "Add current game state fields to player_stats (like TWX Database.pas)",
 		SQL: `
 -- Add current_sector and player_name to track current game state
-ALTER TABLE player_stats ADD COLUMN current_sector INTEGER DEFAULT 0;
-ALTER TABLE player_stats ADD COLUMN player_name TEXT DEFAULT '';`,
+-- These will be handled by a special migration function like figs_type`,
 	},
 	// Future migrations can be added here
 }
@@ -144,6 +143,9 @@ func (d *SQLiteDatabase) applyMigration(migration Migration) error {
 	}
 	if migration.ID == 5 {
 		return d.applyPlanetsEnhancementMigration(migration)
+	}
+	if migration.ID == 6 {
+		return d.applyPlayerStatsEnhancementMigration(migration)
 	}
 	
 	// Start transaction
@@ -253,6 +255,57 @@ func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) e
 		// Add column if it doesn't exist
 		if count == 0 {
 			alterQuery := fmt.Sprintf(`ALTER TABLE planets ADD COLUMN %s %s;`, col.name, col.definition)
+			if _, err := tx.Exec(alterQuery); err != nil {
+				return fmt.Errorf("failed to add %s column: %w", col.name, err)
+			}
+		}
+	}
+	
+	// Record migration as applied
+	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
+	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
+		return fmt.Errorf("failed to record migration: %w", err)
+	}
+	
+	// Commit transaction
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration: %w", err)
+	}
+	
+	return nil
+}
+
+// applyPlayerStatsEnhancementMigration safely adds new columns to player_stats table
+func (d *SQLiteDatabase) applyPlayerStatsEnhancementMigration(migration Migration) error {
+	// List of columns to add to player_stats table
+	newColumns := []struct {
+		name        string
+		definition  string
+	}{
+		{"current_sector", "INTEGER DEFAULT 0"},
+		{"player_name", "TEXT DEFAULT ''"},
+	}
+	
+	// Start transaction
+	tx, err := d.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %w", err)
+	}
+	defer tx.Rollback()
+	
+	// Add each column if it doesn't exist
+	for _, col := range newColumns {
+		// Check if column exists
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM pragma_table_info('player_stats') WHERE name = '%s';`, col.name)
+		var count int
+		err := tx.QueryRow(query).Scan(&count)
+		if err != nil {
+			return fmt.Errorf("failed to check for %s column: %w", col.name, err)
+		}
+		
+		// Add column if it doesn't exist
+		if count == 0 {
+			alterQuery := fmt.Sprintf(`ALTER TABLE player_stats ADD COLUMN %s %s;`, col.name, col.definition)
 			if _, err := tx.Exec(alterQuery); err != nil {
 				return fmt.Errorf("failed to add %s column: %w", col.name, err)
 			}

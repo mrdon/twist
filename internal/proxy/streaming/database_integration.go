@@ -3,7 +3,6 @@ package streaming
 import (
 	"fmt"
 	"twist/internal/api"
-	"twist/internal/debug"
 )
 
 // database_integration.go - Clean database integration points
@@ -11,14 +10,13 @@ import (
 
 // saveSectorToDatabase saves the current sector data to database
 func (p *TWXParser) saveSectorToDatabase() error {
+	
 	if p.currentSectorIndex <= 0 {
-		debug.Log("TWXParser: Invalid current sector index %d, skipping save", p.currentSectorIndex)
 		return nil
 	}
 	
 	// Debug: Check if parser's database instance is valid
 	if p.database == nil {
-		debug.Log("TWXParser: Database instance is nil")
 		return fmt.Errorf("parser database instance is nil")
 	}
 	
@@ -26,22 +24,16 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	if db := p.database.GetDB(); db != nil {
 		var tableCount int
 		if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sectors'").Scan(&tableCount); err != nil {
-			debug.Log("TWXParser: Failed to check parser's database tables: %v", err)
 			return fmt.Errorf("parser's database connection is broken: %w", err)
 		}
 		if tableCount == 0 {
-			debug.Log("TWXParser: Parser's database has no sectors table")
 			return fmt.Errorf("parser's database has no sectors table")
 		}
-		debug.Log("TWXParser: Parser's database has %d sectors table(s)", tableCount)
 	} else {
-		debug.Log("TWXParser: Parser's database GetDB() returned nil")
 		return fmt.Errorf("parser's database GetDB() returned nil")
 	}
 	
 	// Debug: Check what warps we have before conversion
-	debug.Log("TWXParser: Building sector data for sector %d - currentSectorWarps: %v", 
-		p.currentSectorIndex, p.currentSectorWarps)
 	
 	// Build complete sector data from current parsing context
 	sectorData := SectorData{
@@ -59,7 +51,6 @@ func (p *TWXParser) saveSectorToDatabase() error {
 		Explored:      true,
 	}
 	
-	debug.Log("TWXParser: SectorData.Warps before conversion: %v", sectorData.Warps)
 	
 	// Convert to database format using converter
 	converter := NewSectorConverter()
@@ -73,25 +64,29 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	// Save sector to database using Pascal-compliant signature
 	// This mirrors Pascal TWX: SaveSector(FCurrentSector, FCurrentSectorIndex, FShipList, FTraderList, FPlanetList)
 	if err := p.database.SaveSectorWithCollections(dbSector, p.currentSectorIndex, dbShips, dbTraders, dbPlanets); err != nil {
-		debug.Log("TWXParser: Failed to save sector %d to database with collections: %v", p.currentSectorIndex, err)
 		return err
 	}
 	
-	debug.Log("TWXParser: Saved sector %d to database", p.currentSectorIndex)
+	// Save port data separately using common function (Phase 2: ports are in separate table)
+	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
+		// Convert port data to database format
+		dbPort := converter.convertPortData(p.currentSector.Port)
+		if err := p.ensureSectorExistsAndSavePort(dbPort, p.currentSectorIndex); err != nil {
+			return fmt.Errorf("failed to save port data: %w", err)
+		}
+	}
+	
 	
 	// Update current sector in player stats (like TWX Database.pas)
 	p.playerStats.CurrentSector = p.currentSectorIndex
 	if err := p.savePlayerStatsToDatabase(); err != nil {
-		debug.Log("TWXParser: Failed to save current sector to player stats: %v", err)
 	} else {
-		debug.Log("TWXParser: Updated current sector in database to %d", p.currentSectorIndex)
 	}
 	
 	// Notify TUI API if available
 	if p.tuiAPI != nil {
 		sectorInfo := p.buildSectorInfo(sectorData)
 		p.tuiAPI.OnCurrentSectorChanged(sectorInfo)
-		debug.Log("TWXParser: Notified TUI API of sector %d change", p.currentSectorIndex)
 	}
 	
 	return nil
@@ -105,12 +100,9 @@ func (p *TWXParser) savePlayerStatsToDatabase() error {
 	
 	// Save to database
 	if err := p.database.SavePlayerStats(dbStats); err != nil {
-		debug.Log("TWXParser: Failed to save player stats to database: %v", err)
 		return err
 	}
 	
-	debug.Log("TWXParser: Saved player stats to database - Turns: %d, Credits: %d", 
-		p.playerStats.Turns, p.playerStats.Credits)
 	return nil
 }
 
@@ -124,12 +116,22 @@ func (p *TWXParser) buildSectorInfo(sectorData SectorData) api.SectorInfo {
 		}
 	}
 	
-	return api.SectorInfo{
+	sectorInfo := api.SectorInfo{
 		Number:        sectorData.Index,
 		NavHaz:        sectorData.NavHaz,
 		HasTraders:    len(sectorData.Traders),
 		Constellation: sectorData.Constellation,
 		Beacon:        sectorData.Beacon,
 		Warps:         warps,
+		HasPort:       false, // Default to false
 	}
+	
+	// Phase 2: Set HasPort flag by checking if port exists in ports table
+	if p.database != nil {
+		if portData, err := p.database.LoadPort(sectorData.Index); err == nil && portData.ClassIndex > 0 {
+			sectorInfo.HasPort = true
+		}
+	}
+	
+	return sectorInfo
 }

@@ -144,15 +144,15 @@ func (p *TWXParser) classFromTradePattern(pattern string) int {
 		return 2
 	case "SBB":
 		return 3
-	case "BBB":
-		return 4
-	case "SSS":
-		return 5
-	case "SBS":
-		return 6
-	case "BSS":
-		return 7
 	case "SSB":
+		return 4
+	case "SBS":
+		return 5
+	case "BSS":
+		return 6
+	case "SSS":
+		return 7
+	case "BBB":
 		return 8
 	case "???":
 		return 9

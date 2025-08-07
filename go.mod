@@ -8,8 +8,10 @@ require (
 	github.com/gdamore/tcell/v2 v2.7.1
 	github.com/goccy/go-graphviz v0.2.9
 	github.com/mattn/go-isatty v0.0.20
+	github.com/mattn/go-sixel v0.0.5
 	github.com/mattn/go-sqlite3 v1.14.22
 	github.com/rivo/tview v0.0.0-20241227133733-17b7edb88c57
+	golang.org/x/image v0.21.0
 	golang.org/x/text v0.27.0
 )
 
@@ -21,11 +23,9 @@ require (
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.2.0 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
-	github.com/mattn/go-sixel v0.0.5 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/soniakeys/quant v1.0.0 // indirect
 	github.com/tetratelabs/wazero v1.8.1 // indirect
-	golang.org/x/image v0.21.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect
 	golang.org/x/term v0.18.0 // indirect
 )

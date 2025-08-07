@@ -54,11 +54,11 @@ type TPort struct {
 	UpDate         time.Time            `json:"update"`
 }
 
-// TSector matches TWX TSector record exactly
+// TSector matches TWX TSector record with Phase 2 optimization (port data separated)
 type TSector struct {
 	// Warp is array[1..6] in TWX, we'll use [6] and handle 1-indexing in code
 	Warp          [6]int               `json:"warp"`           
-	SPort         TPort                `json:"sport"`
+	// SPort removed - now in separate ports table
 	NavHaz        int                  `json:"nav_haz"`        // Byte in TWX
 	Figs          TSpaceObject         `json:"figs"`
 	MinesArmid    TSpaceObject         `json:"mines_armid"`
@@ -172,7 +172,7 @@ type TPlayerStats struct {
 func NULLSector() TSector {
 	return TSector{
 		Warp:          [6]int{0, 0, 0, 0, 0, 0},
-		SPort:         NULLPort(),
+		// SPort removed - now in separate ports table
 		NavHaz:        0,
 		Figs:          TSpaceObject{},
 		MinesArmid:    TSpaceObject{},

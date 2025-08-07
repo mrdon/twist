@@ -3,7 +3,6 @@ package streaming
 import (
 	"strings"
 	"time"
-	"twist/internal/debug"
 )
 
 // message_handling.go - Clean message parsing and handling logic
@@ -141,7 +140,7 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 			channel := 0
 			if len(channelParts) > 0 {
 				// Mirror TWX Pascal behavior: parseIntSafe fails on "1:" because of colon
-				// Don't strip colon to match TWX Pascal parseIntSafe behavior
+				// This is the correct Pascal behavior - don't strip colon
 				channel = p.parseIntSafe(channelParts[0])
 			}
 			
@@ -181,14 +180,12 @@ func (p *TWXParser) extractSectorFromFighterReport(line string) string {
 
 // handleEnhancedMessageLine processes message content with database integration
 func (p *TWXParser) handleEnhancedMessageLine(line string) {
-	debug.Log("TWXParser: Processing enhanced message line: %q", line)
 	
 	// Determine message type and extract sender/channel info
 	msgType, sender, channel := p.parseMessageContent(line)
 	
 	// Add to history with database integration
 	if err := p.addToHistory(msgType, line, sender, channel); err != nil {
-		debug.Log("TWXParser: Error adding message to history: %v", err)
 	}
 }
 
@@ -354,10 +351,8 @@ func (p *TWXParser) addToHistory(msgType MessageType, content, sender string, ch
 	converter := NewMessageHistoryConverter()
 	dbMessage := converter.ToDatabase(message)
 	if err := p.database.AddMessageToHistory(dbMessage); err != nil {
-		debug.Log("TWXParser: Failed to add message to database history: %v", err)
 		return err
 	}
 	
-	debug.Log("TWXParser: Added message to history - Type: %d, Sender: %s", msgType, sender)
 	return nil
 }

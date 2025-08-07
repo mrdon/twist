@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
@@ -64,7 +63,6 @@ func (smc *SectorMapComponent) LoadRealMapData() {
 // loadRealMapData loads real sector data from the API
 func (smc *SectorMapComponent) loadRealMapData() {
 	if smc.proxyAPI == nil {
-		debug.Log("SectorMapComponent: No proxyAPI available")
 		smc.setWaitingMessage()
 		return
 	}
@@ -72,23 +70,19 @@ func (smc *SectorMapComponent) loadRealMapData() {
 	// Get player info to find current sector
 	playerInfo, err := smc.proxyAPI.GetPlayerInfo()
 	if err != nil {
-		debug.Log("SectorMapComponent: GetPlayerInfo failed: %v", err)
 		smc.setWaitingMessage()
 		return
 	}
 	
-	debug.Log("SectorMapComponent: Got player info - CurrentSector: %d", playerInfo.CurrentSector)
 	
 	// Check if we have valid sector data
 	if playerInfo.CurrentSector <= 0 {
-		debug.Log("SectorMapComponent: Invalid sector number: %d", playerInfo.CurrentSector)
 		smc.setWaitingMessage()
 		return
 	}
 	
 	// Set current sector and load its data
 	smc.currentSector = playerInfo.CurrentSector
-	debug.Log("SectorMapComponent: Loading map data for sector %d", smc.currentSector)
 	smc.refreshMap()
 }
 
@@ -113,7 +107,7 @@ func (smc *SectorMapComponent) showTestMap() {
 		NavHaz:     1,
 		HasTraders: 2,
 		Warps:      []int{122, 124, 223, 23},
-		PortType:   "BBS",
+		HasPort:    true,
 	}
 	smc.sectorData[122] = api.SectorInfo{
 		Number:     122, 
@@ -124,7 +118,7 @@ func (smc *SectorMapComponent) showTestMap() {
 		Number:     124, 
 		HasTraders: 1, 
 		Warps:      []int{123}, // Bidirectional connection
-		PortType:   "SSS",
+		HasPort:    true,
 	}
 	smc.sectorData[223] = api.SectorInfo{
 		Number:     223, 
@@ -135,7 +129,7 @@ func (smc *SectorMapComponent) showTestMap() {
 		Number:     23, 
 		HasTraders: 3, 
 		Warps:      []int{123}, // Bidirectional connection
-		PortType:   "SBB",
+		HasPort:    true,
 	}
 	
 	// Render the test map
@@ -189,7 +183,7 @@ func (smc *SectorMapComponent) refreshMap() {
 	connectedSectors := smc.getConnectedSectors(smc.currentSector)
 	// Debug: Check what warp data we have for current sector
 	if currentData, exists := smc.sectorData[smc.currentSector]; exists {
-		debug.Log("SectorMap: Current sector %d has %d warps: %v", smc.currentSector, len(currentData.Warps), currentData.Warps)
+		_ = currentData // Keep for debugging if needed
 	}
 	for _, sectorNum := range connectedSectors {
 		if sectorNum > 0 { // Valid sector number
@@ -209,10 +203,8 @@ func (smc *SectorMapComponent) refreshMap() {
 func (smc *SectorMapComponent) getConnectedSectors(sectorNum int) []int {
 	// Get the warps from the stored sector data
 	if info, exists := smc.sectorData[sectorNum]; exists {
-		debug.Log("SectorMap: getConnectedSectors for sector %d found %d warps: %v", sectorNum, len(info.Warps), info.Warps)
 		return info.Warps
 	}
-	debug.Log("SectorMap: getConnectedSectors for sector %d - no data found", sectorNum)
 	return []int{}
 }
 
@@ -252,14 +244,11 @@ func (smc *SectorMapComponent) renderResponsiveMap(currentInfo api.SectorInfo, c
 	
 	// Create 3x3 grid layout
 	grid := make(map[string]int)
-	positions := []string{"NW", "N", "NE", "W", "C", "E", "SW", "S", "SE"}
 	
 	// Place current sector in center
 	grid["C"] = smc.currentSector
-	debug.Log("SectorMap: Placed current sector %d at center", smc.currentSector)
 	
 	// Intelligently place connected sectors to maximize visible connections
-	debug.Log("SectorMap: Connected sectors: %v", connectedSectors)
 	smc.placeConnectedSectors(grid, connectedSectors)
 	
 	// Calculate sector box size based on available space
@@ -283,7 +272,7 @@ func (smc *SectorMapComponent) renderResponsiveMap(currentInfo api.SectorInfo, c
 		}
 		
 		// Render full 3x3 grid with connections
-		smc.render3x3Grid(&builder, grid, positions, sectorWidth, mapColors)
+		smc.render3x3Grid(&builder, grid, sectorWidth, mapColors)
 	} else {
 		// Fallback to compact single-sector view
 		smc.renderCompactView(&builder, smc.currentSector, connectedSectors, mapColors)
@@ -293,7 +282,7 @@ func (smc *SectorMapComponent) renderResponsiveMap(currentInfo api.SectorInfo, c
 }
 
 // render3x3Grid renders a traditional 3x3 sector grid with connections
-func (smc *SectorMapComponent) render3x3Grid(builder *strings.Builder, grid map[string]int, positions []string, sectorWidth int, mapColors theme.SectorMapColors) {
+func (smc *SectorMapComponent) render3x3Grid(builder *strings.Builder, grid map[string]int, sectorWidth int, mapColors theme.SectorMapColors) {
 	// Grid layout:
 	// NW | N  | NE
 	// W  | C  | E
@@ -370,8 +359,13 @@ func (smc *SectorMapComponent) renderSectorRow(builder *strings.Builder, grid ma
 				if hasInfo && info.HasTraders > 0 {
 					bgColor = smc.colorToString(mapColors.PortSectorBg)
 					fgColor = smc.colorToString(mapColors.PortSectorFg)
-					if info.PortType != "" {
-						portInfo = fmt.Sprintf("  (%3s)  ", info.PortType) // Show port type as "(BBS)"
+					if info.HasPort {
+						// Get actual port type from API
+						if portData, err := smc.proxyAPI.GetPortInfo(sector); err == nil && portData != nil {
+							portInfo = fmt.Sprintf("  (%s)  ", portData.ClassType.String()[:3]) // Show port type as "(BBS)"
+						} else {
+							portInfo = fmt.Sprintf("   (P)   ") // Port exists but couldn't get details
+						}
 					} else {
 						portInfo = fmt.Sprintf("   (%d)   ", info.HasTraders) // Fallback to trader count as "(2)"
 					}
@@ -402,7 +396,6 @@ func (smc *SectorMapComponent) renderSectorRow(builder *strings.Builder, grid ma
 
 // placeConnectedSectors intelligently places connected sectors in the 3x3 grid
 func (smc *SectorMapComponent) placeConnectedSectors(grid map[string]int, connectedSectors []int) {
-	debug.Log("SectorMap: placeConnectedSectors called with %d sectors: %v", len(connectedSectors), connectedSectors)
 	
 	// Adjacent positions to center (only orthogonal neighbors for cleaner connections)
 	adjacentPositions := []string{"N", "E", "S", "W"}
@@ -412,12 +405,10 @@ func (smc *SectorMapComponent) placeConnectedSectors(grid map[string]int, connec
 	for _, sector := range connectedSectors {
 		if placed < len(adjacentPositions) {
 			grid[adjacentPositions[placed]] = sector
-			debug.Log("SectorMap: Placed sector %d at position %s (placed=%d)", sector, adjacentPositions[placed], placed)
 			placed++
 		}
 	}
 	
-	debug.Log("SectorMap: Finished adjacent placement, placed=%d, total sectors=%d", placed, len(connectedSectors))
 	
 	// If we have more sectors, place them in diagonal positions
 	diagonalPositions := []string{"NE", "SE", "SW", "NW"}
@@ -425,10 +416,8 @@ func (smc *SectorMapComponent) placeConnectedSectors(grid map[string]int, connec
 		sector := connectedSectors[i]
 		pos := diagonalPositions[i-placed]
 		grid[pos] = sector
-		debug.Log("SectorMap: Placed sector %d at diagonal position %s (i=%d, placed=%d)", sector, pos, i, placed)
 	}
 	
-	debug.Log("SectorMap: Final grid contents: %+v", grid)
 }
 
 // renderAllConnections3x3 renders all connection lines between two rows (vertical and diagonal)
@@ -511,9 +500,6 @@ func (smc *SectorMapComponent) renderHorizontalConnection3x3(builder *strings.Bu
 	leftSector, leftExists := grid[leftPos]
 	rightSector, rightExists := grid[rightPos]
 	
-	debug.Log("SectorMap: renderHorizontalConnection3x3 - leftPos=%s leftSector=%d leftExists=%v, rightPos=%s rightSector=%d rightExists=%v", 
-		leftPos, leftSector, leftExists, rightPos, rightSector, rightExists)
-	
 	if leftExists && rightExists {
 		// Check connections in both directions
 		leftToRight := smc.hasDirectConnection(leftSector, rightSector)
@@ -524,15 +510,12 @@ func (smc *SectorMapComponent) renderHorizontalConnection3x3(builder *strings.Bu
 		if leftToRight && rightToLeft {
 			// Bidirectional connection
 			builder.WriteString(fmt.Sprintf("[%s]↔[-]", connColor))
-			debug.Log("SectorMap: Drew bidirectional horizontal connection between %d and %d", leftSector, rightSector)
 		} else if leftToRight {
 			// Left to right only
 			builder.WriteString(fmt.Sprintf("[%s]→[-]", connColor))
-			debug.Log("SectorMap: Drew left-to-right horizontal connection %d → %d", leftSector, rightSector)
 		} else if rightToLeft {
 			// Right to left only
 			builder.WriteString(fmt.Sprintf("[%s]←[-]", connColor))
-			debug.Log("SectorMap: Drew right-to-left horizontal connection %d ← %d", rightSector, leftSector)
 		} else {
 			builder.WriteString(" ")
 		}
@@ -604,15 +587,16 @@ func (smc *SectorMapComponent) renderCompactView(builder *strings.Builder, curre
 			
 			// Check if it's a port
 			info, hasInfo := smc.sectorData[sector]
+			var sectorBgColor, sectorFgColor string
 			if hasInfo && info.HasTraders > 0 {
-				bgColor = smc.colorToString(mapColors.PortSectorBg)
-				fgColor = smc.colorToString(mapColors.PortSectorFg)
+				sectorBgColor = smc.colorToString(mapColors.PortSectorBg)
+				sectorFgColor = smc.colorToString(mapColors.PortSectorFg)
 			} else {
-				bgColor = smc.colorToString(mapColors.EmptySectorBg)
-				fgColor = smc.colorToString(mapColors.EmptySectorFg)
+				sectorBgColor = smc.colorToString(mapColors.EmptySectorBg)
+				sectorFgColor = smc.colorToString(mapColors.EmptySectorFg)
 			}
 			
-			builder.WriteString(fmt.Sprintf("[%s:%s]%d[:-]", fgColor, bgColor, sector))
+			builder.WriteString(fmt.Sprintf("[%s:%s]%d[:-]", sectorFgColor, sectorBgColor, sector))
 		}
 		builder.WriteString("\n")
 	}

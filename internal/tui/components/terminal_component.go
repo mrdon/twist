@@ -1,9 +1,6 @@
 package components
 
 import (
-	_ "twist/internal/debug"
-	"twist/internal/theme"
-	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -26,7 +23,7 @@ func NewTerminalComponent(app *tview.Application) *TerminalComponent {
 	starfield := NewStarfieldComponent(150, app)
 	
 	// Create wrapper layout - show terminal directly (temporary fix)
-	wrapper := theme.NewFlex().SetDirection(tview.FlexRow)
+	wrapper := tview.NewFlex().SetDirection(tview.FlexRow)
 	wrapper.AddItem(terminalView, 0, 1, true)
 	
 	tc := &TerminalComponent{

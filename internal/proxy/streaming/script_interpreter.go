@@ -2,7 +2,6 @@ package streaming
 
 import (
 	"fmt"
-	"twist/internal/debug"
 )
 
 // ScriptInterpreter implements the IScriptInterpreter interface
@@ -24,7 +23,6 @@ func NewScriptInterpreter(eventBus IEventBus) *ScriptInterpreter {
 
 // TextEvent fires a text event to the script system (Pascal: TWXInterpreter.TextEvent)
 func (si *ScriptInterpreter) TextEvent(line string, outbound bool) {
-	debug.Log("ScriptInterpreter: TextEvent - Line: %q, Outbound: %t", line, outbound)
 	
 	if si.eventBus != nil {
 		event := Event{
@@ -42,7 +40,6 @@ func (si *ScriptInterpreter) TextEvent(line string, outbound bool) {
 
 // TextLineEvent fires a text line event to the script system (Pascal: TWXInterpreter.TextLineEvent)
 func (si *ScriptInterpreter) TextLineEvent(line string, outbound bool) {
-	debug.Log("ScriptInterpreter: TextLineEvent - Line: %q, Outbound: %t", line, outbound)
 	
 	if si.eventBus != nil {
 		event := Event{
@@ -61,11 +58,9 @@ func (si *ScriptInterpreter) TextLineEvent(line string, outbound bool) {
 // ActivateTriggers activates script triggers (Pascal: TWXInterpreter.ActivateTriggers)
 func (si *ScriptInterpreter) ActivateTriggers() {
 	if !si.triggersEnabled {
-		debug.Log("ScriptInterpreter: Triggers are disabled, skipping activation")
 		return
 	}
 	
-	debug.Log("ScriptInterpreter: ActivateTriggers called")
 	
 	if si.eventBus != nil {
 		event := Event{
@@ -82,7 +77,6 @@ func (si *ScriptInterpreter) ActivateTriggers() {
 
 // AutoTextEvent fires an auto text event to the script system (Pascal: TWXInterpreter.AutoTextEvent)
 func (si *ScriptInterpreter) AutoTextEvent(line string, outbound bool) {
-	debug.Log("ScriptInterpreter: AutoTextEvent - Line: %q, Outbound: %t", line, outbound)
 	
 	if si.eventBus != nil {
 		event := Event{
@@ -100,7 +94,6 @@ func (si *ScriptInterpreter) AutoTextEvent(line string, outbound bool) {
 
 // LoadScript loads a script file (stub implementation)
 func (si *ScriptInterpreter) LoadScript(filename string) error {
-	debug.Log("ScriptInterpreter: LoadScript - Filename: %s", filename)
 	
 	// In a full implementation, this would load and compile the script
 	si.scripts[filename] = nil // Placeholder
@@ -109,7 +102,6 @@ func (si *ScriptInterpreter) LoadScript(filename string) error {
 
 // UnloadScript unloads a script (stub implementation)
 func (si *ScriptInterpreter) UnloadScript(name string) error {
-	debug.Log("ScriptInterpreter: UnloadScript - Name: %s", name)
 	
 	if _, exists := si.scripts[name]; !exists {
 		return fmt.Errorf("script '%s' not found", name)
@@ -121,7 +113,6 @@ func (si *ScriptInterpreter) UnloadScript(name string) error {
 
 // ExecuteScript executes a loaded script (stub implementation)
 func (si *ScriptInterpreter) ExecuteScript(name string, params map[string]interface{}) error {
-	debug.Log("ScriptInterpreter: ExecuteScript - Name: %s, Params: %v", name, params)
 	
 	if _, exists := si.scripts[name]; !exists {
 		return fmt.Errorf("script '%s' not found", name)
@@ -134,7 +125,6 @@ func (si *ScriptInterpreter) ExecuteScript(name string, params map[string]interf
 // SetTriggersEnabled enables or disables script triggers
 func (si *ScriptInterpreter) SetTriggersEnabled(enabled bool) {
 	si.triggersEnabled = enabled
-	debug.Log("ScriptInterpreter: Triggers enabled: %t", enabled)
 }
 
 // IsTriggersEnabled returns whether triggers are enabled

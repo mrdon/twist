@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 	"twist/internal/api"
-	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
@@ -63,7 +62,6 @@ func (smc *SixelSectorMapComponent) LoadRealMapData() {
 // loadRealMapData loads real sector data from the API
 func (smc *SixelSectorMapComponent) loadRealMapData() {
 	if smc.proxyAPI == nil {
-		debug.Log("SixelSectorMapComponent: No proxyAPI available")
 		smc.setWaitingMessage()
 		return
 	}
@@ -71,23 +69,19 @@ func (smc *SixelSectorMapComponent) loadRealMapData() {
 	// Get player info to find current sector
 	playerInfo, err := smc.proxyAPI.GetPlayerInfo()
 	if err != nil {
-		debug.Log("SixelSectorMapComponent: GetPlayerInfo failed: %v", err)
 		smc.setWaitingMessage()
 		return
 	}
 	
-	debug.Log("SixelSectorMapComponent: Got player info - CurrentSector: %d", playerInfo.CurrentSector)
 	
 	// Check if we have valid sector data
 	if playerInfo.CurrentSector <= 0 {
-		debug.Log("SixelSectorMapComponent: Invalid sector number: %d", playerInfo.CurrentSector)
 		smc.setWaitingMessage()
 		return
 	}
 	
 	// Set current sector and load its data
 	smc.currentSector = playerInfo.CurrentSector
-	debug.Log("SixelSectorMapComponent: Loading map data for sector %d", smc.currentSector)
 	smc.refreshMap()
 }
 
@@ -157,22 +151,18 @@ func (smc *SixelSectorMapComponent) refreshMap() {
 	smc.view.SetSixelData(sixelOutput, "")
 	
 	// Also log for debugging
-	debug.Log("SixelSectorMapComponent: Generated %d bytes of sixel data", len(sixelOutput))
 	
 	// Write debug file
 	err := os.WriteFile("sector_map_sixel_debug.txt", []byte(sixelOutput), 0644)
 	if err != nil {
-		debug.Log("SixelSectorMapComponent: Error writing debug file: %v", err)
 	}
 }
 
 // getConnectedSectors gets the sector numbers connected to the given sector
 func (smc *SixelSectorMapComponent) getConnectedSectors(sectorNum int) []int {
 	if info, exists := smc.sectorData[sectorNum]; exists {
-		debug.Log("SixelSectorMapComponent: getConnectedSectors for sector %d found %d warps: %v", sectorNum, len(info.Warps), info.Warps)
 		return info.Warps
 	}
-	debug.Log("SixelSectorMapComponent: getConnectedSectors for sector %d - no data found", sectorNum)
 	return []int{}
 }
 
@@ -310,7 +300,7 @@ func (smc *SixelSectorMapComponent) drawWarpConnectionsOnCanvas(canvas *SixelCan
 		targetPos, hasTargetPos := sectorPositions[targetSector]
 		if hasTargetPos {
 			// Calculate connection points on the edge of circles (not center to center)
-			connectionColor := 4 // White for connection lines
+			lineColor := 4 // White for connection lines
 			nodeRadius := 12
 			
 			// Calculate direction vector
@@ -326,7 +316,7 @@ func (smc *SixelSectorMapComponent) drawWarpConnectionsOnCanvas(canvas *SixelCan
 				edgeY2 := targetPos[1] - int(float64(dy)/distance*float64(nodeRadius))
 				
 				// Draw directed arrow from current to target
-				canvas.DrawArrow(edgeX1, edgeY1, edgeX2, edgeY2, connectionColor)
+				canvas.DrawArrow(edgeX1, edgeY1, edgeX2, edgeY2, lineColor)
 				
 				// Check for bidirectional connection
 				if smc.hasDirectConnection(targetSector, smc.currentSector) {
@@ -335,7 +325,7 @@ func (smc *SixelSectorMapComponent) drawWarpConnectionsOnCanvas(canvas *SixelCan
 					offsetY := int(float64(dx)/distance * 3)
 					
 					canvas.DrawArrow(edgeX2+offsetX, edgeY2+offsetY, 
-									edgeX1+offsetX, edgeY1+offsetY, connectionColor)
+									edgeX1+offsetX, edgeY1+offsetY, lineColor)
 				}
 			}
 		}
@@ -541,7 +531,6 @@ func (smc *SixelSectorMapComponent) outputSixelToTerminal(sixelData string) {
 	// Force immediate output
 	os.Stdout.Sync()
 	
-	debug.Log("SixelSectorMapComponent: Output %d bytes of sixel data directly to terminal at position (50,1)", len(sixelData))
 }
 
 // storeSixelForOutput stores sixel data and triggers output after a delay

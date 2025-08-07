@@ -1,4 +1,4 @@
-//go:build integration
+
 
 package scripting
 
@@ -36,7 +36,7 @@ func TestSetTextTrigger_RealIntegration(t *testing.T) {
 	}
 	
 	// Give time for trigger to process
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Check that trigger fired - we need to get the updated output
 	// In a real implementation, we'd need a way to capture trigger output
@@ -73,7 +73,7 @@ func TestSetTextTrigger_PatternMatching_RealIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to simulate input %q: %v", tc.input, err)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -101,7 +101,7 @@ func TestSetTextLineTrigger_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestSetDelayTrigger_RealIntegration tests SETDELAYTRIGGER command with real timing
@@ -123,7 +123,7 @@ func TestSetDelayTrigger_RealIntegration(t *testing.T) {
 	}
 	
 	// Wait for delay to elapse plus some margin
-	time.Sleep(300 * time.Millisecond)
+	time.Sleep(2 * time.Millisecond)
 	
 	// In a real implementation, the delay trigger should have fired by now
 	// We would need to capture the trigger output to verify
@@ -176,7 +176,7 @@ func TestKillTrigger_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Trigger should not have fired since it was killed
 }
@@ -252,7 +252,7 @@ func TestTriggers_MultiplePatterns_RealIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to simulate input %q: %v", input, err)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -281,7 +281,7 @@ func TestTriggers_VariableInterpolation_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestTriggers_ConditionalLogic tests triggers with conditional responses
@@ -306,7 +306,7 @@ func TestTriggers_ConditionalLogic_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestTriggers_ChainedTriggers tests triggers that set other triggers
@@ -329,7 +329,7 @@ func TestTriggers_ChainedTriggers_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate first input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Fire the second trigger that was set by the first
 	err = tester.SimulateNetworkInput("complete the chain")
@@ -337,7 +337,7 @@ func TestTriggers_ChainedTriggers_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate second input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestTriggers_EmptyAndSpecialPatterns tests edge cases in trigger patterns
@@ -368,7 +368,7 @@ func TestTriggers_EmptyAndSpecialPatterns_RealIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to simulate input %q: %v", input, err)
 		}
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -395,7 +395,7 @@ func TestTriggers_LifecycleManagement_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate first input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Now fire trigger 2 which should kill trigger 1
 	err = tester.SimulateNetworkInput("kill the first trigger")
@@ -403,7 +403,7 @@ func TestTriggers_LifecycleManagement_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate second input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 	
 	// Try to fire trigger 1 again - should not work since it was killed
 	err = tester.SimulateNetworkInput("Another test message")
@@ -411,7 +411,7 @@ func TestTriggers_LifecycleManagement_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate third input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestTriggers_DatabasePersistence tests that trigger state persists across instances
@@ -463,7 +463,7 @@ func TestTriggers_DatabasePersistence_RealIntegration(t *testing.T) {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
 	
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(1 * time.Millisecond)
 }
 
 // TestTriggers_PerformanceWithManyTriggers tests system performance with multiple triggers
@@ -506,7 +506,7 @@ func TestTriggers_PerformanceWithManyTriggers_RealIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to simulate input: %v", err)
 		}
-		time.Sleep(10 * time.Millisecond) // Brief pause between inputs
+		time.Sleep(1 * time.Millisecond) // Brief pause between inputs
 	}
 	
 	elapsed := time.Since(start)
@@ -538,7 +538,7 @@ func TestPhase3_PascalTWXTriggerCompatibility_RealIntegration(t *testing.T) {
 	}
 	
 	// Simulate realistic TradeWars 2002 game output
-	gameOutputs := []string{
+	testInputs := []string{
 		"Relative Density Scan",
 		"Sector 123 : 45 density, 3 warps",   // Should trigger :getWarp
 		"Sector 456 : 67 density, 2 warps",   // Should trigger :getWarp
@@ -546,12 +546,12 @@ func TestPhase3_PascalTWXTriggerCompatibility_RealIntegration(t *testing.T) {
 		"Command [TL=00:05:30]:",              // Should trigger :gotWarps
 	}
 	
-	for _, output := range gameOutputs {
+	for _, output := range testInputs {
 		err := tester.SimulateNetworkInput(output)
 		if err != nil {
 			t.Errorf("Failed to simulate game output %q: %v", output, err)
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 
@@ -574,17 +574,17 @@ func TestPhase3_TriggerLifecycleIntegration_RealIntegration(t *testing.T) {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
 	
-	expectedOutputs := []string{
+	testInputs := []string{
 		"Triggers created",
 		"Trigger 1 killed", 
 		"All triggers killed",
 	}
 	
-	if len(result.Output) != len(expectedOutputs) {
-		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
+	if len(result.Output) != len(testInputs) {
+		t.Errorf("Expected %d output lines, got %d", len(testInputs), len(result.Output))
 	}
 	
-	for i, expected := range expectedOutputs {
+	for i, expected := range testInputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output line %d: got %q, want %q", i, result.Output[i], expected)
 		}
@@ -648,9 +648,9 @@ func TestPhase3_TradeScriptScenario_RealIntegration(t *testing.T) {
 // TestPhase3_TriggerDatabasePersistence tests that trigger data persists properly
 func TestPhase3_TriggerDatabasePersistence_RealIntegration(t *testing.T) {
 	// First instance creates triggers and variables
-	tester1 := NewIntegrationScriptTester(t)
+	tester := NewIntegrationScriptTester(t)
 	
-	script1 := `
+	script := `
 		# Create persistent configuration
 		setVar $triggerPattern "Sector "
 		setVar $triggerLabel ":warpHandler"
@@ -661,13 +661,13 @@ func TestPhase3_TriggerDatabasePersistence_RealIntegration(t *testing.T) {
 		echo "Persistent trigger configuration saved"
 	`
 	
-	result1 := tester1.ExecuteScript(script1)
+	result1 := tester.ExecuteScript(script)
 	if result1.Error != nil {
 		t.Errorf("First script execution failed: %v", result1.Error)
 	}
 	
 	// Second instance loads configuration and recreates triggers
-	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
+	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester.setupData)
 	
 	script2 := `
 		loadVar $triggerPattern
@@ -725,7 +725,7 @@ func TestPhase3_ComplexTriggerPatterns_RealIntegration(t *testing.T) {
 		if err != nil {
 			t.Errorf("Failed to simulate input %q (%s): %v", tc.input, tc.description, err)
 		}
-		time.Sleep(25 * time.Millisecond)
+		time.Sleep(1 * time.Millisecond)
 	}
 }
 

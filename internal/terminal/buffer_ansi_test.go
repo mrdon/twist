@@ -12,6 +12,8 @@ type testTerminal struct {
 	*Terminal
 	sequences []string
 	runes     []rune
+	// Buffer to handle partial sequences across chunks
+	partialBuffer []byte
 }
 
 func newTestTerminal() *testTerminal {
@@ -19,116 +21,82 @@ func newTestTerminal() *testTerminal {
 	term := NewTerminalWithConverter(80, 24, converter)
 	
 	return &testTerminal{
-		Terminal:  term,
-		sequences: make([]string, 0),
-		runes:     make([]rune, 0),
+		Terminal:      term,
+		sequences:     make([]string, 0),
+		runes:         make([]rune, 0),
+		partialBuffer: make([]byte, 0),
 	}
 }
 
 // We need to override processDataWithANSI to use our capturing methods
 func (tt *testTerminal) processDataWithANSI(data []byte) {
-	// Add new data to buffer (handle case where data is larger than remaining buffer space)
-	for len(data) > 0 {
-		// How much space is left in buffer?
-		spaceLeft := len(tt.buffer) - tt.bufferLen
-		
-		// How much can we add this iteration?
-		toAdd := len(data)
-		if toAdd > spaceLeft {
-			toAdd = spaceLeft
-		}
-		
-		// Add data to buffer
-		copy(tt.buffer[tt.bufferLen:], data[:toAdd])
-		tt.bufferLen += toAdd
-		data = data[toAdd:]
-		
-		// Process everything we can from the buffer
-		consumed := 0
-		for consumed < tt.bufferLen {
-			// Try to consume starting from current position
-			bytesConsumed := tt.tryConsumeSequenceCapture(tt.buffer[consumed:tt.bufferLen])
-			
-			if bytesConsumed > 0 {
-				// Successfully consumed some bytes
-				consumed += bytesConsumed
+	// Combine any buffered data with the new data
+	combinedData := append(tt.partialBuffer, data...)
+	tt.partialBuffer = tt.partialBuffer[:0] // Clear buffer
+	
+	i := 0
+	for i < len(combinedData) {
+		if combinedData[i] == '\x1b' {
+			// Try to find complete escape sequence
+			if i+1 < len(combinedData) && combinedData[i+1] == '[' {
+				// ANSI escape sequence - find terminator
+				end := i + 2
+				foundTerminator := false
+				for end < len(combinedData) {
+					c := combinedData[end]
+					if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+						// Found terminator - we have complete sequence
+						end++ // include terminator
+						foundTerminator = true
+						break
+					}
+					end++
+				}
+				
+				if foundTerminator {
+					// Complete sequence found
+					sequence := string(combinedData[i:end])
+					// Capture the sequence
+					tt.sequences = append(tt.sequences, sequence)
+					// Process it through the terminal (avoid recursive call)
+					tt.Terminal.processANSISequence(combinedData[i:end])
+					i = end
+				} else {
+					// Incomplete sequence - buffer it for next chunk
+					tt.partialBuffer = append(tt.partialBuffer, combinedData[i:]...)
+					break
+				}
+			} else if i+1 < len(combinedData) {
+				// \x1b followed by non-[ - treat as regular character
+				char, size := utf8.DecodeRune(combinedData[i:])
+				if char == utf8.RuneError && size == 1 {
+					// Skip invalid UTF-8 byte
+					i++
+				} else {
+					tt.runes = append(tt.runes, char)
+					tt.Terminal.processRune(char)
+					i += size
+				}
 			} else {
-				// Couldn't consume anything - incomplete sequence
-				// Leave unconsumed data in buffer
+				// Incomplete escape at end of data - buffer it
+				tt.partialBuffer = append(tt.partialBuffer, combinedData[i:]...)
 				break
 			}
-		}
-		
-		// Remove consumed data from buffer, keep unconsumed data
-		if consumed > 0 {
-			copy(tt.buffer[:], tt.buffer[consumed:tt.bufferLen])
-			tt.bufferLen -= consumed
-		}
-		
-		// Safety check: if buffer is full and we couldn't consume anything, force consume one character
-		if tt.bufferLen == len(tt.buffer) && consumed == 0 {
-			char, size := utf8.DecodeRune(tt.buffer[:])
-			tt.runes = append(tt.runes, char)
-			tt.Terminal.processRune(char)
-			copy(tt.buffer[:], tt.buffer[size:tt.bufferLen])
-			tt.bufferLen -= size
+		} else {
+			// Regular character - handle UTF-8 properly
+			char, size := utf8.DecodeRune(combinedData[i:])
+			if char == utf8.RuneError && size == 1 {
+				// Skip invalid UTF-8 byte
+				i++
+			} else {
+				tt.runes = append(tt.runes, char)
+				tt.Terminal.processRune(char)
+				i += size
+			}
 		}
 	}
 }
 
-// Copy of tryConsumeSequence but with capturing
-func (tt *testTerminal) tryConsumeSequenceCapture(data []byte) int {
-	if len(data) == 0 {
-		return 0
-	}
-	
-	if data[0] == '\x1b' {
-		// Try to consume escape sequence
-		if len(data) < 2 {
-			return 0 // Need more data
-		}
-		
-		if data[1] == '[' {
-			// ANSI escape sequence - find terminator
-			i := 2
-			for i < len(data) {
-				c := data[i]
-				if (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
-					// Found terminator - consume complete sequence
-					i++ // include terminator
-					sequence := data[0:i]
-					// Capture the sequence
-					tt.sequences = append(tt.sequences, string(sequence))
-					// Process it normally
-					tt.Terminal.processANSISequence(sequence)
-					return i
-				}
-				i++
-			}
-			// No terminator found - incomplete sequence
-			return 0
-		} else {
-			// \x1b followed by non-[ - treat as regular character
-			char, size := utf8.DecodeRune(data)
-			// Capture the rune
-			tt.runes = append(tt.runes, char)
-			// Process it normally
-			tt.Terminal.processRune(char)
-			return size
-		}
-	} else {
-		// Regular character
-		char, size := utf8.DecodeRune(data)
-		if char == utf8.RuneError && size == 1 {
-			return 1 // skip invalid byte
-		}
-		// Capture the rune
-		tt.runes = append(tt.runes, char)
-		// Process it normally
-		tt.Terminal.processRune(char)
-		return size
-	}
-}
 
 func TestANSIChunkSplitting(t *testing.T) {
 	// Test every possible split point for various ANSI sequences

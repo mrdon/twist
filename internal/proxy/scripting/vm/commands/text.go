@@ -72,8 +72,8 @@ func cmdClearText(vm types.VMInterface, params []*types.CommandParam) error {
 }
 
 func cmdDisplayText(vm types.VMInterface, params []*types.CommandParam) error {
-	message := GetParamString(vm, params[0])
-	return vm.Echo(message)
+	text := GetParamString(vm, params[0])
+	return vm.Echo(text)
 }
 
 func cmdLen(vm types.VMInterface, params []*types.CommandParam) error {

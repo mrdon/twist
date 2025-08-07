@@ -3,8 +3,8 @@ package proxy
 import (
 	"errors"
 	"time"
-	// "twist/internal/debug" // Keep for future debugging
 	"twist/internal/api"
+	"twist/internal/proxy/converter"
 )
 
 func init() {
@@ -213,8 +213,8 @@ func (p *ProxyApiImpl) convertScriptStatus() api.ScriptStatusInfo {
 	statusMap := p.proxy.GetScriptStatus()
 	
 	// Extract counts from existing GetStatus() return value
-	totalCount := 0
 	activeCount := 0
+	totalCount := 0
 	
 	if total, ok := statusMap["total_scripts"].(int); ok {
 		totalCount = total
@@ -269,7 +269,14 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 	}
 	
 	// Simple conversion using converter function
-	return convertDatabaseSectorToAPI(sectorNum, dbSector), nil
+	sectorInfo := convertDatabaseSectorToAPI(sectorNum, dbSector)
+	
+	// Phase 2: Set HasPort flag by checking if port exists in ports table
+	if portData, err := p.proxy.db.LoadPort(sectorNum); err == nil && portData.ClassIndex > 0 {
+		sectorInfo.HasPort = true
+	}
+	
+	return sectorInfo, nil
 }
 
 func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
@@ -279,5 +286,36 @@ func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
 	currentSector := p.proxy.GetCurrentSector()
 	playerName := p.proxy.GetPlayerName()
 	return convertDatabasePlayerToAPI(currentSector, playerName), nil
+}
+
+func (p *ProxyApiImpl) GetPortInfo(sectorNum int) (*api.PortInfo, error) {
+	if p.proxy == nil {
+		return nil, errors.New("not connected")
+	}
+	
+	// Validate sector number range
+	if sectorNum < 1 || sectorNum > 99999 {
+		return nil, errors.New("invalid sector number")
+	}
+	
+	// Phase 2: Load port data from separate ports table
+	portData, err := p.proxy.db.LoadPort(sectorNum)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Check if sector has a port
+	if portData.ClassIndex == 0 {
+		return nil, nil // No port in this sector
+	}
+	
+	// Convert port data to API format
+	portInfo, err := converter.ConvertTPortToPortInfo(sectorNum, portData)
+	if err != nil {
+		return nil, err
+	}
+	
+	// Return nil if no port exists in this sector (not an error)
+	return portInfo, nil
 }
 

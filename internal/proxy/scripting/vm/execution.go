@@ -669,8 +669,6 @@ func (ee *ExecutionEngine) evaluateArrayAccess(node *parser.ASTNode) (*types.Val
 	// Get the indexed variable
 	indexedVar := varParam.GetIndexVar(indexes)
 	
-	// Return the indexed variable value
-	
 	// Return the value
 	return &types.Value{
 		Type:   types.StringType,

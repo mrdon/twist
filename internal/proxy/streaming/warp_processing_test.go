@@ -133,8 +133,8 @@ func TestWarpValidation(t *testing.T) {
 		{-1, false, "Negative sector should be invalid"},
 		{1, true, "Valid positive sector"},
 		{5000, true, "Valid mid-range sector"},
-		{100000, true, "Valid high-range sector"},
-		{100001, false, "Sector above reasonable limit should be invalid"},
+		{20000, true, "Valid high-range sector"},
+		{20001, false, "Sector above reasonable limit should be invalid"},
 		{999999, false, "Very high sector should be invalid"},
 	}
 
@@ -256,15 +256,18 @@ func TestWarpProcessingIntegration(t *testing.T) {
 		parser.currentSectorIndex = 1000
 
 		// Process a sector with warps
-		testData := []string{
+		lines := []string{
 			"Sector  : 1000 in Test Space",
 			"Beacon  : Test Beacon",
 			"Warps to Sector(s) : 1001 - 1002 - 1003",
 		}
 
-		for _, line := range testData {
+		for _, line := range lines {
 			parser.ProcessInBound(line + "\r")
 		}
+
+		// Force sector completion to ensure database save
+		parser.sectorCompleted()
 
 		// Verify the warps were processed correctly
 		expectedWarps := []int{1001, 1002, 1003}

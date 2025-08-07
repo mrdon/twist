@@ -3,7 +3,6 @@ package parser
 import (
 	"fmt"
 	"strings"
-	"twist/internal/debug"
 )
 
 // NodeType represents the type of an AST node
@@ -300,14 +299,12 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	// Look ahead to see if this is an assignment
 	nextToken := p.peek()
-	debug.Log("Parser: parseAssignmentOrCommand current=%s(Type=%d) next=%s(Type=%d)", p.current.Value, int(p.current.Type), nextToken.Value, int(nextToken.Type))
 	
 	if nextToken.Type == TokenLeftBracket ||
 		nextToken.Type == TokenEqual ||  // Support TWX-style = assignments
 		nextToken.Type == TokenPlusAssign || nextToken.Type == TokenMinusAssign ||
 		nextToken.Type == TokenMultiplyAssign || nextToken.Type == TokenDivideAssign ||
 		nextToken.Type == TokenConcatAssign {
-		debug.Log("Parser: detected assignment, calling parseAssignment()")
 		return p.parseAssignment()
 	}
 	
@@ -318,12 +315,10 @@ func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	
 	// Check for increment/decrement operators
 	if nextToken.Type == TokenIncrement || nextToken.Type == TokenDecrement {
-		debug.Log("Parser: detected increment/decrement, calling parseIncrementDecrement()")
 		return p.parseIncrementDecrement()
 	}
 	
 	// Otherwise, it's a command
-	debug.Log("Parser: defaulting to parseCommand()")
 	return p.parseCommand()
 }
 
@@ -448,7 +443,7 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 		return nil, fmt.Errorf("expected variable at line %d, got %v", p.current.Line, p.current.Type)
 	}
 	
-	variable := &ASTNode{
+	node := &ASTNode{
 		Type:   NodeVariable,
 		Value:  p.current.Value,
 		Line:   p.current.Line,
@@ -458,6 +453,7 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 	
 	// Check for array access (supports multi-dimensional arrays)
 	if p.current.Type == TokenLeftBracket {
+		variable := node
 		arrayAccess := &ASTNode{
 			Type:     NodeArrayAccess,
 			Children: []*ASTNode{variable},
@@ -481,7 +477,7 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 		return arrayAccess, nil
 	}
 	
-	return variable, nil
+	return node, nil
 }
 
 // parseCommand parses a command statement

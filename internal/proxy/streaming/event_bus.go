@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"twist/internal/debug"
 )
 
 // EventBus implements the IEventBus interface for module communication
@@ -39,7 +38,6 @@ func (eb *EventBus) Subscribe(eventType EventType, handler EventHandler) string 
 	// Add handler
 	eb.subscribers[eventType][subscriptionID] = handler
 	
-	debug.Log("EventBus: Subscribed %s to event type %d", subscriptionID, int(eventType))
 	return subscriptionID
 }
 
@@ -50,7 +48,6 @@ func (eb *EventBus) Unsubscribe(eventType EventType, subscriptionID string) {
 	
 	if handlers, exists := eb.subscribers[eventType]; exists {
 		delete(handlers, subscriptionID)
-		debug.Log("EventBus: Unsubscribed %s from event type %d", subscriptionID, int(eventType))
 		
 		// Clean up empty event type map
 		if len(handlers) == 0 {
@@ -74,14 +71,12 @@ func (eb *EventBus) Fire(event Event) {
 		event.Timestamp = time.Now().UnixNano()
 	}
 	
-	debug.Log("EventBus: Firing event type %d to %d subscribers", int(event.Type), len(handlers))
 	
 	// Call all handlers synchronously
-	for subscriptionID, handler := range handlers {
+	for _, handler := range handlers {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					debug.Log("EventBus: PANIC in event handler %s: %v", subscriptionID, r)
 				}
 			}()
 			handler(event)
@@ -104,14 +99,12 @@ func (eb *EventBus) FireAsync(event Event) {
 		event.Timestamp = time.Now().UnixNano()
 	}
 	
-	debug.Log("EventBus: Firing async event type %d to %d subscribers", int(event.Type), len(handlers))
 	
 	// Call all handlers asynchronously
 	for subscriptionID, handler := range handlers {
 		go func(id string, h EventHandler) {
 			defer func() {
 				if r := recover(); r != nil {
-					debug.Log("EventBus: PANIC in async event handler %s: %v", id, r)
 				}
 			}()
 			h(event)
@@ -148,5 +141,4 @@ func (eb *EventBus) Clear() {
 	defer eb.mutex.Unlock()
 	
 	eb.subscribers = make(map[EventType]map[string]EventHandler)
-	debug.Log("EventBus: Cleared all subscribers")
 }
