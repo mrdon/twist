@@ -16,6 +16,8 @@ type StatusComponent struct {
 	connected     bool
 	serverAddress string
 	gameInfo      *GameInfo // Current active game information
+	lastWidth     int       // Track the last known width for padding
+	menuComponent *MenuComponent // Reference to menu component for width coordination
 }
 
 // GameInfo holds information about the currently active game
@@ -91,9 +93,10 @@ func (sc *StatusComponent) UpdateStatus() {
 	// Get theme colors for status bar
 	currentTheme := theme.Current()
 	statusColors := currentTheme.StatusColors()
+	defaultColors := currentTheme.DefaultColors()
 	
-	// Set the overall status bar colors using theme
-	sc.wrapper.SetBackgroundColor(statusColors.Background)
+	// Set the component background to theme background to prevent bleeding
+	sc.wrapper.SetBackgroundColor(defaultColors.Background)
 	sc.wrapper.SetTextColor(statusColors.Foreground)
 	
 	// Build status text with colored connection status
@@ -137,5 +140,70 @@ func (sc *StatusComponent) UpdateStatus() {
 	
 	statusText.WriteString(" | F1=Help")
 	
-	sc.wrapper.SetText(statusText.String())
+	// Calculate content length (without color tags) before adding the final space
+	plainTextBeforeSpace := sc.stripColorTags(statusText.String())
+	contentLength := len(plainTextBeforeSpace)
+	
+	// Always add one space at the end (this is the +1)
+	statusText.WriteString(" ")
+	contentLengthWithSpace := contentLength + 1
+	
+	// Minimum width is first two panels (left panel + terminal = 30 + 80 = 110)
+	minPanelWidth := 110
+	
+	// Final width is the larger of (content + 1) or panel width (110)
+	finalWidth := contentLengthWithSpace
+	if minPanelWidth > contentLengthWithSpace {
+		finalWidth = minPanelWidth
+		// Add padding spaces to reach panel width
+		paddingNeeded := minPanelWidth - contentLengthWithSpace
+		statusText.WriteString(strings.Repeat(" ", paddingNeeded))
+	}
+	
+	// Store the final width for menu bar to match
+	sc.lastWidth = finalWidth
+	
+	// Apply explicit background color to the padded text content
+	finalText := fmt.Sprintf("[:%s]%s[-:-]", statusColors.Background.String(), statusText.String())
+	sc.wrapper.SetText(finalText)
+	
+	// Update menu bar to match this width
+	if sc.menuComponent != nil {
+		sc.menuComponent.SetTargetWidth(sc.lastWidth)
+	}
+}
+
+// stripColorTags removes tview color tags from text to calculate actual display length
+func (sc *StatusComponent) stripColorTags(text string) string {
+	// Simple regex to remove tview color tags like [color], [-], [color:background], etc.
+	result := text
+	
+	// Remove color reset tags [-]
+	result = strings.ReplaceAll(result, "[-]", "")
+	
+	// Remove complex color tags [color:background] and [-:-]
+	result = strings.ReplaceAll(result, "[-:-]", "")
+	
+	// Remove simple color tags by finding patterns like [colorname]
+	for strings.Contains(result, "[") && strings.Contains(result, "]") {
+		start := strings.Index(result, "[")
+		end := strings.Index(result[start:], "]")
+		if end != -1 {
+			result = result[:start] + result[start+end+1:]
+		} else {
+			break
+		}
+	}
+	
+	return result
+}
+
+// GetLastWidth returns the last calculated width for coordination with menu bar
+func (sc *StatusComponent) GetLastWidth() int {
+	return sc.lastWidth
+}
+
+// SetMenuComponent sets the menu component reference for width coordination
+func (sc *StatusComponent) SetMenuComponent(menuComponent *MenuComponent) {
+	sc.menuComponent = menuComponent
 }

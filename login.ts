@@ -58,4 +58,5 @@ setTextTrigger 2 :Pause "[Pause]"
 pause
 
 :End
+send "/"
 # Script ends when we reach the command prompt (Sector line) or disconnect

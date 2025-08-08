@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"twist/internal/theme"
 	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -23,6 +24,14 @@ func NewSixelView() *SixelView {
 		Box:   tview.NewBox(),
 		title: "Sector Map (Sixel)",
 	}
+	
+	// Set proper panel background color to prevent status bar red bleeding through
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	sv.SetBackgroundColor(panelColors.Background)
+	sv.SetBorderColor(panelColors.Border)
+	sv.SetTitleColor(panelColors.Title)
+	
 	sv.SetBorder(true).SetTitle(sv.title)
 	return sv
 }

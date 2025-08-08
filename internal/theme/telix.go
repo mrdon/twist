@@ -92,7 +92,7 @@ func (t *TelixTheme) TerminalColors() TerminalColors {
 // StatusColors returns the status bar color scheme (menu bar)
 func (t *TelixTheme) StatusColors() StatusColors {
 	return StatusColors{
-		Background:     DOSRed,         // Use red #800000 for status bar background
+		Background:     DOSRed,         // Red background for status bar (classic Telix style)
 		Foreground:     DOSYellow,      // Yellow text on red background
 		HighlightBg:    DOSRed,         // Red background for selected menu items (like reference)
 		HighlightFg:    DOSWhite,       // White text on red background

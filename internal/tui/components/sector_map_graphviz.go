@@ -85,23 +85,13 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	debug.Log("GraphvizSectorMap.Draw: Starting draw")
 	
-	// Get the component area and fill with theme background
+	// Get the component area
 	x, y, width, height := gsm.GetRect()
 	debug.Log("GraphvizSectorMap.Draw: Component rect x=%d y=%d w=%d h=%d", x, y, width, height)
 
 	if width <= 0 || height <= 0 {
 		debug.Log("GraphvizSectorMap.Draw: Invalid dimensions, returning")
 		return
-	}
-	
-	// Fill entire component area with theme background (no border, no title)
-	currentTheme := theme.Current()
-	defaultColors := currentTheme.DefaultColors()
-	bgStyle := tcell.StyleDefault.Background(defaultColors.Background)
-	for py := y; py < y+height; py++ {
-		for px := x; px < x+width; px++ {
-			screen.SetContent(px, py, ' ', nil, bgStyle)
-		}
 	}
 
 	// Check if dimensions changed and invalidate cache if needed
@@ -131,10 +121,6 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil {
 			debug.Log("GraphvizSectorMap.Draw: Generating new sector map for sector %d", gsm.currentSector)
 			gsm.isGenerating = true  // Mark that we're generating
-			
-			// CRITICAL: Set terminal background to theme background before generation
-			// This prevents the status bar's red background from bleeding through during screen redraws
-			screen.SetStyle(tcell.StyleDefault.Background(defaultColors.Background))
 			
 			// Clear the region before generating new content to prevent artifacts
 			if gsm.sixelLayer != nil {
@@ -274,14 +260,7 @@ func (gsm *GraphvizSectorMap) drawStatusText(screen tcell.Screen, x, y, width, h
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
 	
-	// Fill background with theme's default background color
-	bgStyle := tcell.StyleDefault.Background(defaultColors.Background)
-	for py := y; py < y+height; py++ {
-		for px := x; px < x+width; px++ {
-			screen.SetContent(px, py, ' ', nil, bgStyle)
-		}
-	}
-	
+	// Let tview handle the background - just draw the text
 	// Draw text using theme's waiting color on theme's background
 	style := tcell.StyleDefault.Foreground(defaultColors.Waiting).Background(defaultColors.Background)
 

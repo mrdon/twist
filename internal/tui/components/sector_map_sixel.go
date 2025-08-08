@@ -28,6 +28,12 @@ func NewSixelSectorMapComponent() *SixelSectorMapComponent {
 	mapView := NewSixelView()
 	mapView.SetTitle("Sector Map (Sixel)")
 	
+	// Ensure proper theming - the NewSixelView() constructor already handles this
+	// but we can explicitly set it again for safety
+	currentTheme := theme.Current()
+	panelColors := currentTheme.PanelColors()
+	mapView.SetBackgroundColor(panelColors.Background)
+	
 	smc := &SixelSectorMapComponent{
 		view:         mapView,
 		sectorData:   make(map[int]api.SectorInfo),

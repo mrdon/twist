@@ -1,6 +1,7 @@
 package components
 
 import (
+	"strings"
 	"twist/internal/theme"
 	twistComponents "twist/internal/components"
 	
@@ -15,6 +16,7 @@ type MenuComponent struct {
 	dropdownPages *tview.Pages
 	activeMenu    string
 	connected     bool
+	targetWidth   int    // Target width to match status bar
 }
 
 // NewMenuComponent creates a new menu component
@@ -26,16 +28,24 @@ func NewMenuComponent() *MenuComponent {
 		SetWrap(false).
 		SetTextAlign(tview.AlignLeft)
 	
-	// Set initial menu text with traditional menu bar style
-	menuBar.SetText(" Session  Edit  View  Terminal  Help")
+	// Set component background to theme background to prevent bleeding
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	menuBar.SetBackgroundColor(defaultColors.Background)
 	
-	return &MenuComponent{
+	mc := &MenuComponent{
 		view:          menuBar,
 		dropdown:      NewDropdownMenu(),
 		dropdownPages: tview.NewPages(),
 		activeMenu:    "",
 		connected:     false,
+		targetWidth:   0,
 	}
+	
+	// Set initial menu text
+	mc.updateMenuWithHighlight()
+	
+	return mc
 }
 
 // GetView returns the menu view
@@ -51,10 +61,12 @@ func (mc *MenuComponent) UpdateMenu(connected bool) {
 
 // updateMenuWithHighlight updates the menu text with active menu highlighting
 func (mc *MenuComponent) updateMenuWithHighlight() {
+	// Get theme colors
+	currentTheme := theme.Current()
+	menuColors := currentTheme.MenuColors()
 	
 	// Create menu items array
-	var menus []string
-	menus = []string{"Session", "Edit", "View", "Terminal", "Help"}
+	menus := []string{"Session", "Edit", "View", "Terminal", "Help"}
 	
 	// Build menu text with highlighting using theme colors
 	menuText := " "
@@ -67,7 +79,30 @@ func (mc *MenuComponent) updateMenuWithHighlight() {
 		}
 	}
 	
-	mc.view.SetText(menuText)
+	// Always add one space at the end
+	menuText += " "
+	
+	// Calculate content length (without color tags)
+	plainText := mc.stripColorTags(menuText)
+	contentLength := len(plainText)
+	
+	// Minimum width is first two panels (30 + 80 = 110) or target width from status bar
+	minPanelWidth := 110
+	targetWidth := mc.targetWidth
+	if targetWidth == 0 {
+		targetWidth = minPanelWidth
+	}
+	
+	// Final width is the larger of content length or target width
+	if targetWidth > contentLength {
+		// Add padding spaces to reach target width
+		paddingNeeded := targetWidth - contentLength
+		menuText += strings.Repeat(" ", paddingNeeded)
+	}
+	
+	// Apply explicit background color to the padded menu content
+	finalText := "[:" + menuColors.Background.String() + "]" + menuText + "[-:-]"
+	mc.view.SetText(finalText)
 }
 
 // SetConnectedMenu sets the menu for connected state
@@ -118,4 +153,32 @@ func (mc *MenuComponent) IsDropdownVisible() bool {
 // GetDropdownList returns the dropdown list for focus management
 func (mc *MenuComponent) GetDropdownList() *twistComponents.TwistMenu {
 	return mc.dropdown.GetList()
+}
+
+// SetTargetWidth sets the target width to match status bar
+func (mc *MenuComponent) SetTargetWidth(width int) {
+	mc.targetWidth = width
+	mc.updateMenuWithHighlight()
+}
+
+// stripColorTags removes tview color tags from text to calculate actual display length
+func (mc *MenuComponent) stripColorTags(text string) string {
+	result := text
+	
+	// Remove color reset tags [-] and [-:-]
+	result = strings.ReplaceAll(result, "[-]", "")
+	result = strings.ReplaceAll(result, "[-:-]", "")
+	
+	// Remove simple color tags by finding patterns like [colorname] and [color:background]
+	for strings.Contains(result, "[") && strings.Contains(result, "]") {
+		start := strings.Index(result, "[")
+		end := strings.Index(result[start:], "]")
+		if end != -1 {
+			result = result[:start] + result[start+end+1:]
+		} else {
+			break
+		}
+	}
+	
+	return result
 }

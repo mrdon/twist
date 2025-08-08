@@ -69,6 +69,9 @@ func NewApplication() *TwistApp {
 	panelComp := components.NewPanelComponent(sixelLayer)
 	statusComp := components.NewStatusComponent()
 
+	// Set up width coordination between menu and status bar
+	statusComp.SetMenuComponent(menuComp)
+
 	// Create input handler
 	inputHandler := handlers.NewInputHandler(app)
 
@@ -261,6 +264,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 					ta.mainGrid.AddItem(ta.panelComponent.GetLeftWrapper(), 1, 0, 1, 1, 0, 0, false)
 					ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 1, 1, 1, 0, 0, true)
 					ta.mainGrid.AddItem(ta.panelComponent.GetRightWrapper(), 1, 2, 1, 1, 0, 0, false)
+					// Add status bar to bottom row, spanning all columns
 					ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 3, 0, 0, false)
 				} else {
 					// Panels are hidden - create 1-column layout
@@ -274,7 +278,8 @@ func (ta *TwistApp) animatePanels(show bool) {
 					// Add components
 					ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 1, 0, 0, false)
 					ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 0, 1, 1, 0, 0, true)
-					ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
+					// Add status bar to bottom row
+		ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
 				}
 				
 				// Update the page

@@ -38,7 +38,7 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 	leftPanel.SetBorder(true).SetTitle("Trader Info")
 	leftPanel.SetText("[yellow]Player Info[-]\n\n[cyan]Connect and load database to see player info[-]")
 	
-	leftWrapper := theme.NewFlex().SetDirection(tview.FlexRow)
+	leftWrapper := tview.NewFlex().SetDirection(tview.FlexRow)
 	
 	// Explicitly set the left wrapper background to panel colors for consistency
 	leftWrapper.SetBackgroundColor(panelColors.Background)
@@ -59,10 +59,17 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 		activeMapView = sectorMap.GetView()
 	}
 	
-	rightWrapper := theme.NewFlex().SetDirection(tview.FlexRow).
-		AddItem(activeMapView, 0, 1, false)
+	// Create a simple black container for the right panel to isolate from background bleeding
+	// This will serve as a solid black background that can't be affected by other components
+	rightContainer := tview.NewFlex().SetDirection(tview.FlexRow)
+	rightContainer.SetBackgroundColor(panelColors.Background) // Explicit black background
+	rightContainer.AddItem(activeMapView, 0, 1, false) // Sector map fills the container
 	
-	// Explicitly set the right wrapper background to panel colors to fix red background bleeding
+	// The wrapper just contains our isolated container
+	rightWrapper := tview.NewFlex().SetDirection(tview.FlexRow).
+		AddItem(rightContainer, 0, 1, false)
+	
+	// Explicitly set the right wrapper background to panel colors 
 	rightWrapper.SetBackgroundColor(panelColors.Background)
 	
 	pc := &PanelComponent{

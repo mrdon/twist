@@ -1,6 +1,8 @@
 package components
 
 import (
+	"twist/internal/theme"
+	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -24,6 +26,12 @@ func NewTerminalComponent(app *tview.Application) *TerminalComponent {
 	
 	// Create wrapper layout - show terminal directly (temporary fix)
 	wrapper := tview.NewFlex().SetDirection(tview.FlexRow)
+	
+	// Set explicit background color for wrapper
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	wrapper.SetBackgroundColor(defaultColors.Background)
+	
 	wrapper.AddItem(terminalView, 0, 1, true)
 	
 	tc := &TerminalComponent{
