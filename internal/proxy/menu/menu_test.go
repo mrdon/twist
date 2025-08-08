@@ -259,7 +259,7 @@ func TestTerminalMenuManagerMenuText(t *testing.T) {
 	
 	found := false
 	for _, output := range capturedOutput {
-		if strings.Contains(output, "Menu Help") {
+		if strings.Contains(output, "Help") {
 			found = true
 			break
 		}

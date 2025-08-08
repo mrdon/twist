@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"twist/internal/debug"
+	"twist/internal/proxy/menu/display"
 )
 
 type TerminalMenuManager struct {
@@ -104,17 +105,12 @@ func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 		}
 	}()
 
-	// For now, create a simple main menu
-	// This will be expanded in Phase 3
-	mainMenu := NewTerminalMenuItem("TWX_MAIN", "Main Menu", 0)
+	// Create the proper TWX_MAIN menu structure
+	mainMenu := tmm.createTWXMainMenu()
 	
-	// Add placeholder items
-	mainMenu.AddChild(NewTerminalMenuItem("Load Script", "Load a script file", 'L'))
-	mainMenu.AddChild(NewTerminalMenuItem("Script Menu", "Script management", 'S'))
-	mainMenu.AddChild(NewTerminalMenuItem("View Data Menu", "View game data", 'V'))
-	mainMenu.AddChild(NewTerminalMenuItem("Port Menu", "Port operations", 'P'))
-	
+	// Store the menu and activate the menu system
 	tmm.currentMenu = mainMenu
+	tmm.activeMenus[TWX_MAIN] = mainMenu
 	atomic.StoreInt32(&tmm.isActive, 1) // atomic true
 	
 	tmm.displayCurrentMenu()
@@ -162,23 +158,34 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 		return
 	}
 
-	output := "\r\n" + tmm.currentMenu.Description + "\r\n"
-	output += strings.Repeat("-", len(tmm.currentMenu.Description)) + "\r\n"
-
+	// Build output with ANSI formatting
+	var output strings.Builder
+	
+	// Add menu title with formatting
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle(tmm.currentMenu.Description))
+	
+	// Add menu options with ANSI formatting
 	for _, child := range tmm.currentMenu.Children {
-		output += "(" + string(child.Hotkey) + ")" + child.Description + "\r\n"
+		output.WriteString(display.FormatMenuOption(child.Hotkey, child.Description, true))
+		output.WriteString("\r\n")
 	}
 
+	// Add standard navigation options
 	if tmm.currentMenu.Parent != nil {
-		output += "(Q)Back to " + tmm.currentMenu.Parent.Name + "\r\n"
+		output.WriteString(display.FormatMenuOption('Q', "Back to " + tmm.currentMenu.Parent.Name, true))
 	} else {
-		output += "(Q)Exit Menu\r\n"
+		output.WriteString(display.FormatMenuOption('Q', "Exit Menu", true))
 	}
+	output.WriteString("\r\n")
 	
-	output += "(?)Help\r\n"
-	output += "\r\nSelection: "
+	output.WriteString(display.FormatMenuOption('?', "Help", true))
+	output.WriteString("\r\n")
 	
-	tmm.sendOutput(output)
+	// Add input prompt
+	output.WriteString(display.FormatInputPrompt("Selection"))
+	
+	tmm.sendOutput(output.String())
 }
 
 func (tmm *TerminalMenuManager) showHelp() {
@@ -188,12 +195,12 @@ func (tmm *TerminalMenuManager) showHelp() {
 		}
 	}()
 
-	help := "\r\n=== Menu Help ===\r\n"
-	help += "Use the letter keys to navigate menus.\r\n"
-	help += "'Q' - Go back or exit menu\r\n"
-	help += "'?' - Show this help\r\n"
-	help += "Enter - Refresh current menu\r\n"
-	help += "==================\r\n\r\n"
+	helpText := "Use the letter keys to navigate menus.\n" +
+		"'Q' - Go back or exit menu\n" +
+		"'?' - Show this help\n" +
+		"Enter - Refresh current menu"
+	
+	help := "\r\n" + display.FormatHelpText(helpText) + "\r\n"
 	
 	tmm.sendOutput(help)
 	tmm.displayCurrentMenu()
@@ -270,4 +277,119 @@ func (tmm *TerminalMenuManager) SetMenuKey(key rune) {
 
 func (tmm *TerminalMenuManager) GetMenuKey() rune {
 	return tmm.menuKey
+}
+
+func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in createTWXMainMenu: %v", r)
+		}
+	}()
+
+	mainMenu := NewTerminalMenuItem(TWX_MAIN, "TWX Main Menu", 0)
+	
+	// Add menu items matching TWX structure
+	burstItem := NewTerminalMenuItem("Burst Commands", "Burst Commands", 'B')
+	burstItem.Handler = tmm.handleBurstCommands
+	mainMenu.AddChild(burstItem)
+	
+	loadScriptItem := NewTerminalMenuItem("Load Script", "Load Script", 'L')
+	loadScriptItem.Handler = tmm.handleLoadScript
+	mainMenu.AddChild(loadScriptItem)
+	
+	terminateScriptItem := NewTerminalMenuItem("Terminate Script", "Terminate Script", 'T')
+	terminateScriptItem.Handler = tmm.handleTerminateScript
+	mainMenu.AddChild(terminateScriptItem)
+	
+	scriptMenuItem := NewTerminalMenuItem("Script Menu", "Script Menu", 'S')
+	scriptMenuItem.Handler = tmm.handleScriptMenu
+	mainMenu.AddChild(scriptMenuItem)
+	
+	dataMenuItem := NewTerminalMenuItem("View Data Menu", "View Data Menu", 'V')
+	dataMenuItem.Handler = tmm.handleDataMenu
+	mainMenu.AddChild(dataMenuItem)
+	
+	portMenuItem := NewTerminalMenuItem("Port Menu", "Port Menu", 'P')
+	portMenuItem.Handler = tmm.handlePortMenu
+	mainMenu.AddChild(portMenuItem)
+	
+	return mainMenu
+}
+
+func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleBurstCommands: %v", r)
+		}
+	}()
+
+	// TODO: Implement burst commands functionality
+	tmm.sendOutput("Burst commands functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleLoadScript: %v", r)
+		}
+	}()
+
+	// TODO: Implement script loading functionality
+	tmm.sendOutput("Script loading functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleTerminateScript: %v", r)
+		}
+	}()
+
+	// TODO: Implement script termination functionality
+	tmm.sendOutput("Script termination functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptMenu: %v", r)
+		}
+	}()
+
+	// This handler will navigate to the script submenu
+	tmm.sendOutput("Script menu functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleDataMenu: %v", r)
+		}
+	}()
+
+	// This handler will navigate to the data submenu
+	tmm.sendOutput("Data menu functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handlePortMenu: %v", r)
+		}
+	}()
+
+	// This handler will navigate to the port submenu
+	tmm.sendOutput("Port menu functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
 }
