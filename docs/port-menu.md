@@ -366,6 +366,97 @@ SETMENUKEY newKey
 - Menu history and navigation breadcrumbs
 - Menu accessibility features (screen reader compatible ANSI)
 
+### Phase 7: TUI Menu Integration - GUI Shortcuts
+**Agent Task**: Add GUI shortcuts and modal dialogs for common terminal menu functions
+
+**Background:**
+Instead of exposing the entire terminal menu system through APIs, Phase 7 focuses on making the most commonly used terminal menu functions available through the existing TUI system as keyboard shortcuts and modal dialogs. This provides a more intuitive user experience while preserving the full terminal menu system for advanced users.
+
+**Deliverables:**
+- Add keyboard shortcuts to existing TUI components for common menu functions
+- Create modal dialogs for script loading, burst commands, and data queries
+- Integrate with existing GlobalShortcutManager system
+- Maintain terminal menu system as primary interface ($ key still works)
+
+**Core Functions to Expose:**
+1. **Script Management** (Ctrl+L, Ctrl+T)
+   - Load Script: Modal dialog with file picker and recent scripts
+   - Terminate Script: Confirmation dialog showing running scripts
+2. **Burst Commands** (Ctrl+B, Ctrl+R)  
+   - Send Burst: Modal input dialog with command history
+   - Repeat Last Burst: Direct execution with notification
+3. **Data Queries** (Ctrl+D)
+   - Quick access to sector info, port data, trader lists via dropdown menu
+4. **Menu Access** (Ctrl+M)
+   - Open terminal menu system (alternative to $ key)
+
+**Implementation Details:**
+```go
+// Add to internal/tui/components/global_shortcuts.go
+func (gs *GlobalShortcutManager) setupMenuShortcuts() {
+    gs.AddShortcut("Ctrl+L", "Load Script", gs.showLoadScriptDialog)
+    gs.AddShortcut("Ctrl+T", "Terminate Scripts", gs.showTerminateScriptDialog) 
+    gs.AddShortcut("Ctrl+B", "Send Burst", gs.showBurstCommandDialog)
+    gs.AddShortcut("Ctrl+R", "Repeat Burst", gs.repeatLastBurst)
+    gs.AddShortcut("Ctrl+D", "Data Menu", gs.showDataQueryMenu)
+    gs.AddShortcut("Ctrl+M", "Terminal Menu", gs.activateTerminalMenu)
+}
+```
+
+**File Structure:**
+```
+internal/tui/components/
+├── script_dialog.go          # Script management modal dialogs
+├── burst_dialog.go           # Burst command modal dialog  
+├── data_query_dropdown.go    # Quick data access dropdown
+└── menu_shortcuts.go         # Menu shortcut handlers
+```
+
+**Acceptance Criteria:**
+- Keyboard shortcuts work from any TUI component
+- Modal dialogs provide same functionality as terminal menu equivalents
+- Terminal menu system ($ key) continues to work unchanged
+- Dialogs integrate cleanly with existing TUI theme and styling
+- No API changes required - uses existing proxy methods
+- Shortcuts are discoverable (shown in help menu, status bar hints)
+
+### Phase 8: Advanced TUI Menu Features
+**Agent Task**: Enhanced TUI integration for power users and accessibility
+
+**Background:**
+Phase 8 builds on Phase 7 to provide advanced TUI features that complement the terminal menu system, focusing on power user workflows and accessibility improvements.
+
+**Deliverables:**
+- Menu panel sidebar showing current terminal menu state
+- Advanced keyboard navigation between TUI and terminal menus
+- Status bar integration showing menu context
+- Accessibility improvements for screen readers
+
+**Advanced Features:**
+1. **Menu Panel Sidebar** - Optional sidebar showing current terminal menu options
+2. **Unified Navigation** - Seamless Tab/arrow key navigation between TUI and terminal
+3. **Status Bar Integration** - Menu context and available shortcuts display
+4. **Enhanced Input Collection** - Rich input dialogs as alternative to terminal prompts
+
+**File Structure:**
+```
+internal/tui/components/
+├── menu_panel.go             # Optional menu sidebar panel
+├── menu_navigator.go         # Enhanced navigation system
+├── menu_status.go            # Status bar menu integration  
+├── rich_input_dialog.go      # Enhanced input collection
+└── menu_accessibility.go     # Screen reader compatibility
+```
+
+**Acceptance Criteria:**
+- Menu panel accurately reflects terminal menu state
+- Navigation seamlessly transitions between TUI and terminal
+- Status bar provides useful context without being distracting
+- Input dialogs are more user-friendly than terminal prompts
+- All features are optional and don't interfere with terminal menu
+- Screen reader compatibility for visually impaired users
+- Performance impact is minimal (menu panel updates don't cause lag)
+
 ## Implementation Guidelines for Agents
 
 ### Code Standards
@@ -459,120 +550,92 @@ p.eventBus.Publish(event)
 
 This implementation leverages Twist's existing architecture while adding the missing TWX terminal menu functionality as a separate, complementary system.
 
-## ProxyApi/TuiApi Integration Phase
+## Current Implementation Status
 
-**TUI Menu System Integration:**
-The terminal menu system should be exposed via the existing ProxyApi/TuiApi interface pattern to enable the TUI interface to access and display menu options alongside the traditional '$' character terminal access.
+### ✅ **Phase 1: Core Terminal Menu Framework** - COMPLETED
+- `internal/proxy/menu/terminal_menu_item.go` - TerminalMenuItem struct implemented
+- `internal/proxy/menu/terminal_menu_manager.go` - TerminalMenuManager with state management
+- `internal/proxy/menu/display/ansi_output.go` - ANSI formatting functions
+- `internal/proxy/menu/categories.go` - Built-in menu category constants
+- Unit tests passing in `internal/proxy/menu/menu_test.go`
 
-**ProxyApi Extensions:**
-Add menu methods to the existing ProxyAPI interface:
+### ✅ **Phase 2: Menu Key Detection & Data Stream Integration** - COMPLETED
+- Modified `internal/proxy/proxy.go` to include TerminalMenuManager
+- Modified `internal/proxy/streaming/twx_parser.go` ProcessOutBound() to detect '$'
+- Input routing distinguishes menu input vs game input
+- Menu output injection into data stream working
+- '$' character activates terminal menu system, menu output appears in TUI terminal
 
-```go
-// Menu Management (Phase 7)
-GetCurrentMenu() (*MenuStateInfo, error)
-GetMenuTree() (*MenuTreeInfo, error)
-ActivateMenu(menuName string) error
-SendMenuInput(input string) error
-CloseMenu() error
+### ✅ **Phase 3: TWX_MAIN Menu Implementation** - COMPLETED
+- TWX_MAIN menu with proper ANSI display
+- Hotkey navigation (B for burst, L for load script, T for terminate, S for script menu, V for data menu, P for port menu)
+- 'Q' exits menu, '?' shows contextual help
+- All menu handlers implemented and functional
+- Tests passing in `internal/proxy/menu/phase3_test.go`
+
+### ✅ **Phase 4: Script Integration Menus** - COMPLETED
+- TWX_SCRIPT menu with script loading, termination, debug, variable dump
+- TWX_DATA menu with sector display, trader list, port list, route plot, bubble info
+- Integration with existing ScriptManager and database systems
+- Menu navigation between categories working correctly
+- Database queries display formatted results
+
+### ✅ **Phase 5: Script Command Interface** - COMPLETED
+- All 8 TWX script commands implemented in `internal/proxy/scripting/vm/commands/menu.go`:
+  - ADDMENU, OPENMENU, CLOSEMENU, GETMENUVALUE, SETMENUVALUE, SETMENUHELP, SETMENUOPTIONS, SETMENUKEY
+- Commands registered in existing command registry
+- Script-created menus support hotkeys, descriptions, handlers
+- Two-stage input collection functional
+- Menu cleanup on script termination working
+- Tests passing in `internal/proxy/menu/phase5_test.go`
+
+### ✅ **Phase 6: Advanced Features & Polish** - COMPLETED
+- `internal/proxy/menu/input/collector.go` - Extracted two-stage input collection system
+- `internal/proxy/menu/help_system.go` - Contextual help system with menu-specific help
+- Menu cleanup on script termination implemented
+- Comprehensive error handling and input validation
+- Performance optimized with atomic operations
+- Menu parameter validation, state management, navigation breadcrumbs
+- All tests passing, refactored for better separation of concerns
+
+### 🔄 **Phase 7: TUI Menu Integration - GUI Shortcuts** - PENDING
+**Architectural Decision Required**: Need to resolve synchronization concerns between terminal menu system and TUI shortcuts to avoid duplicate/conflicting menu systems while maintaining proper TUI/proxy separation.
+
+**Options under consideration:**
+1. Single Source of Truth with Event Broadcasting
+2. Command Pattern - TUI triggers terminal menu system  
+3. Shared Command Layer (MenuCommandExecutor)
+
+### 🔄 **Phase 8: Advanced TUI Menu Features** - PENDING
+Depends on Phase 7 architectural decisions.
+
+## Key Achievements
+- **Complete TWX compatibility**: Terminal menu system matches original TWX behavior
+- **Clean architecture**: Proper separation between terminal menus (proxy) and GUI menus (TUI)
+- **Comprehensive functionality**: All burst commands, script management, data queries working
+- **Robust implementation**: Input collection, help system, error handling, script integration
+- **Maintainable code**: Separated concerns with input collector and help system components
+- **Extensive testing**: Unit and integration tests covering all functionality
+
+## Files Created/Modified
+**New Files (23):**
+```
+internal/proxy/menu/
+├── categories.go
+├── terminal_menu_item.go
+├── terminal_menu_manager.go (1419 lines - needs further breakdown)
+├── help_system.go
+├── display/ansi_output.go
+├── input/collector.go
+├── menu_test.go
+├── phase3_test.go
+└── phase5_test.go
+
+internal/proxy/scripting/vm/commands/menu.go
 ```
 
-**TuiApi Extensions:**
-Add menu event callbacks to the existing TuiAPI interface:
+**Modified Files:**
+- Integration points in proxy and parser systems (as planned)
 
-```go
-// Menu Events (Phase 7) - must return immediately
-OnMenuStateChanged(menuState MenuStateInfo)
-OnMenuClosed()
-```
-
-**New API Types:**
-Add to `internal/api/api.go`:
-
-```go
-// MenuStateInfo represents current terminal menu state
-type MenuStateInfo struct {
-    MenuName    string           `json:"menu_name"`    // Current menu name (e.g., "TWX_MAIN")
-    Title       string           `json:"title"`        // Menu title for display
-    Prompt      string           `json:"prompt"`       // Current prompt text
-    Options     []MenuOptionInfo `json:"options"`      // Available menu options
-    InputMode   string           `json:"input_mode"`   // "selection" or "text_input"
-    CurrentLine string           `json:"current_line"` // Current input buffer
-}
-
-type MenuOptionInfo struct {
-    Hotkey string `json:"hotkey"` // Single character hotkey
-    Title  string `json:"title"`  // Option display text
-    Help   string `json:"help"`   // Help text for option
-}
-
-type MenuTreeInfo struct {
-    Menus map[string]MenuInfo `json:"menus"` // All available menus
-}
-
-type MenuInfo struct {
-    Name     string   `json:"name"`     // Menu identifier
-    Title    string   `json:"title"`    // Display title
-    Parent   string   `json:"parent"`   // Parent menu name (empty for root)
-    Children []string `json:"children"` // Child menu names
-    Options  []MenuOptionInfo `json:"options"` // Menu options
-}
-```
-
-**TUI Integration Points:**
-
-- **Menu Panel Component**: Display current menu options in TUI sidebar/panel
-- **Menu Navigation**: TUI hotkeys mirror terminal menu hotkeys 
-- **Input Collection**: TUI forms for complex multi-stage inputs
-- **Menu History**: Breadcrumb navigation showing menu hierarchy
-- **Real-time Updates**: Via existing TuiApi event callbacks
-
-**State Synchronization:**
-- Menu state changes in terminal trigger `OnMenuStateChanged()` callback
-- TUI menu actions call ProxyApi menu methods
-- Shared menu session state between terminal and TUI clients
-- Consistent menu availability based on game/script state
-
-**Implementation Strategy:**
-1. **Phase 1-6**: Implement core terminal menu system in Go (as outlined above)
-2. **Phase 7**: Extend ProxyApi/TuiApi interfaces with menu methods  
-3. **Phase 8**: Integrate TUI components consuming menu API
-4. **Phase 9**: Synchronize menu state between terminal and TUI
-
-**TUI Menu Benefits:**
-- **Visual Menu Navigation**: Mouse and keyboard navigation
-- **Contextual Help Display**: Integrated help text in TUI panels
-- **Form-based Input**: Rich input forms for complex menu operations
-- **Menu History**: Visual breadcrumb navigation
-- **Multi-panel Layout**: Menu alongside game data views
-
-**Phase 7: ProxyApi/TuiApi Extensions**
-**Agent Task**: Extend existing API interfaces to support terminal menu system
-
-**Deliverables:**
-- Extend `internal/api/api.go` with menu types and interface methods
-- Implement menu methods in `internal/proxy/proxy_api_impl.go`
-- Implement menu callbacks in `internal/tui/api/tui_api_impl.go`
-- Menu state synchronization via existing event system
-
-**Acceptance Criteria:**
-- ProxyApi menu methods functional and integrated with TerminalMenuManager
-- TuiApi callbacks fire when menu state changes
-- Menu data structures properly serialized for TUI consumption
-- No breaking changes to existing API interfaces
-- API responses match TWX menu behavior
-
-**Phase 8: TUI Menu Panel**
-**Agent Task**: Create TUI menu panel component that displays terminal menu options
-
-**Deliverables:**
-- `internal/tui/components/terminal_menu_panel.go` - Menu display component
-- Integration with existing TUI layout system
-- Menu navigation via TUI hotkeys
-- Form components for complex menu inputs
-
-**Acceptance Criteria:**
-- Menu panel displays current terminal menu options
-- TUI hotkeys trigger same menu actions as terminal
-- Complex inputs use TUI forms instead of terminal prompts
-- Menu panel updates in real-time with menu state changes
-- Panel integrates cleanly with existing TUI layout
+## Next Steps
+Phase 7 requires architectural decision on TUI integration approach to maintain clean separation while avoiding menu system duplication.
