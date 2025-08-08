@@ -1,6 +1,7 @@
 package menu
 
 import (
+	"fmt"
 	"strings"
 	"sync/atomic"
 
@@ -18,7 +19,29 @@ type TerminalMenuManager struct {
 	// Function to inject data into the stream - will be set by proxy
 	// This is the only field that needs protection since it's set by another goroutine
 	injectDataFunc atomic.Value // stores func([]byte)
+	
+	// Reference to proxy for accessing ScriptManager and Database
+	proxyInterface ProxyInterface
 }
+
+// ProxyInterface defines methods needed by menu system
+type ProxyInterface interface {
+	GetScriptManager() ScriptManagerInterface
+	GetDatabase() interface{}
+}
+
+// ScriptManagerInterface defines methods needed for script management
+type ScriptManagerInterface interface {
+	LoadAndRunScript(filename string) error
+	Stop() error
+	GetStatus() map[string]interface{}
+	GetEngine() interface{}
+}
+
+// Since Engine is from internal/proxy/scripting, we'll use interface{} and type assertion
+
+// Import the actual database interface via interface embedding
+// We can't import it directly to avoid cycles, so we'll use interface{} and type assertions
 
 func NewTerminalMenuManager() *TerminalMenuManager {
 	defer func() {
@@ -36,6 +59,10 @@ func NewTerminalMenuManager() *TerminalMenuManager {
 
 func (tmm *TerminalMenuManager) SetInjectDataFunc(injectFunc func([]byte)) {
 	tmm.injectDataFunc.Store(injectFunc)
+}
+
+func (tmm *TerminalMenuManager) SetProxyInterface(proxy ProxyInterface) {
+	tmm.proxyInterface = proxy
 }
 
 func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
@@ -362,8 +389,10 @@ func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params 
 		}
 	}()
 
-	// This handler will navigate to the script submenu
-	tmm.sendOutput("Script menu functionality not yet implemented.\r\n")
+	// Create and navigate to script submenu
+	scriptMenu := tmm.createTWXScriptMenu()
+	scriptMenu.Parent = tmm.currentMenu
+	tmm.currentMenu = scriptMenu
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -375,8 +404,10 @@ func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []
 		}
 	}()
 
-	// This handler will navigate to the data submenu
-	tmm.sendOutput("Data menu functionality not yet implemented.\r\n")
+	// Create and navigate to data submenu
+	dataMenu := tmm.createTWXDataMenu()
+	dataMenu.Parent = tmm.currentMenu
+	tmm.currentMenu = dataMenu
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -392,4 +423,400 @@ func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []
 	tmm.sendOutput("Port menu functionality not yet implemented.\r\n")
 	tmm.displayCurrentMenu()
 	return nil
+}
+
+func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in createTWXScriptMenu: %v", r)
+		}
+	}()
+
+	scriptMenu := NewTerminalMenuItem(TWX_SCRIPT, "TWX Script Menu", 0)
+	
+	// Load Script
+	loadScriptItem := NewTerminalMenuItem("Load Script", "Load Script", 'L')
+	loadScriptItem.Handler = tmm.handleScriptLoad
+	scriptMenu.AddChild(loadScriptItem)
+	
+	// Terminate Script
+	terminateScriptItem := NewTerminalMenuItem("Terminate Script", "Terminate Script", 'T')
+	terminateScriptItem.Handler = tmm.handleScriptTerminate
+	scriptMenu.AddChild(terminateScriptItem)
+	
+	// Pause Script (placeholder - TWX has this but our engine may not support it yet)
+	pauseScriptItem := NewTerminalMenuItem("Pause Script", "Pause Script", 'P')
+	pauseScriptItem.Handler = tmm.handleScriptPause
+	scriptMenu.AddChild(pauseScriptItem)
+	
+	// Resume Script (placeholder)
+	resumeScriptItem := NewTerminalMenuItem("Resume Script", "Resume Script", 'R')
+	resumeScriptItem.Handler = tmm.handleScriptResume
+	scriptMenu.AddChild(resumeScriptItem)
+	
+	// Debug Script
+	debugScriptItem := NewTerminalMenuItem("Debug Script", "Debug Script", 'D')
+	debugScriptItem.Handler = tmm.handleScriptDebug
+	scriptMenu.AddChild(debugScriptItem)
+	
+	// Variable Dump
+	variableDumpItem := NewTerminalMenuItem("Variable Dump", "Variable Dump", 'V')
+	variableDumpItem.Handler = tmm.handleVariableDump
+	scriptMenu.AddChild(variableDumpItem)
+	
+	return scriptMenu
+}
+
+func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in createTWXDataMenu: %v", r)
+		}
+	}()
+
+	dataMenu := NewTerminalMenuItem(TWX_DATA, "TWX Data Menu", 0)
+	
+	// Sector Display
+	sectorDisplayItem := NewTerminalMenuItem("Sector Display", "Sector Display", 'S')
+	sectorDisplayItem.Handler = tmm.handleSectorDisplay
+	dataMenu.AddChild(sectorDisplayItem)
+	
+	// Trader List
+	traderListItem := NewTerminalMenuItem("Trader List", "Trader List", 'T')
+	traderListItem.Handler = tmm.handleTraderList
+	dataMenu.AddChild(traderListItem)
+	
+	// Port List
+	portListItem := NewTerminalMenuItem("Port List", "Port List", 'P')
+	portListItem.Handler = tmm.handlePortList
+	dataMenu.AddChild(portListItem)
+	
+	// Route Plot
+	routePlotItem := NewTerminalMenuItem("Route Plot", "Route Plot", 'R')
+	routePlotItem.Handler = tmm.handleRoutePlot
+	dataMenu.AddChild(routePlotItem)
+	
+	// Bubble Info
+	bubbleInfoItem := NewTerminalMenuItem("Bubble Info", "Bubble Info", 'B')
+	bubbleInfoItem.Handler = tmm.handleBubbleInfo
+	dataMenu.AddChild(bubbleInfoItem)
+	
+	return dataMenu
+}
+
+// Script Menu Handlers
+func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptLoad: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// TODO: Implement file picker or prompt for filename
+	// For now, show current status
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Script Loading"))
+	output.WriteString("Current running scripts:\r\n")
+	
+	// Use type assertion to get the engine and its running scripts
+	engine := scriptManager.GetEngine()
+	if engine != nil {
+		// Type assert to get the actual engine interface with GetRunningScripts method
+		// This is safe since we know the engine type from our architecture
+		if scriptEngine, ok := engine.(interface{ GetRunningScripts() []interface{} }); ok {
+			scripts := scriptEngine.GetRunningScripts()
+			if len(scripts) == 0 {
+				output.WriteString("No scripts currently running.\r\n")
+			} else {
+				output.WriteString("Found " + fmt.Sprintf("%d", len(scripts)) + " running scripts.\r\n")
+			}
+		} else {
+			output.WriteString("Unable to access script information.\r\n")
+		}
+	} else {
+		output.WriteString("Script engine not available.\r\n")
+	}
+	
+	output.WriteString("\r\nScript loading functionality will be implemented in Phase 5.\r\n")
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptTerminate: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// Terminate all running scripts
+	err := scriptManager.Stop()
+	if err != nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error stopping scripts: " + err.Error()))
+	} else {
+		tmm.sendOutput(display.FormatSuccessMessage("All scripts terminated successfully"))
+	}
+	
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleScriptPause(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptPause: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Script pause functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleScriptResume(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptResume: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Script resume functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptDebug: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	status := scriptManager.GetStatus()
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Script Debug Information"))
+	
+	for key, value := range status {
+		output.WriteString(key + ": " + fmt.Sprintf("%v", value) + "\r\n")
+	}
+	
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleVariableDump: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Variable dump functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+// Data Menu Handlers
+func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleSectorDisplay: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Sector Information"))
+
+	// Use type assertions to access database methods
+	if db, ok := dbInterface.(interface {
+		GetDatabaseOpen() bool
+		GetSectors() int
+		LoadSector(int) (interface{}, error)
+	}); ok {
+		if !db.GetDatabaseOpen() {
+			output.WriteString("Error: Database not open\r\n")
+		} else {
+			sectorCount := db.GetSectors()
+			output.WriteString("Total sectors in database: " + fmt.Sprintf("%d", sectorCount) + "\r\n")
+			
+			if sectorCount > 0 {
+				// Show first few sectors as sample
+				output.WriteString("\r\nSample sectors:\r\n")
+				for i := 1; i <= min(5, sectorCount); i++ {
+					sectorData, err := db.LoadSector(i)
+					if err == nil && sectorData != nil {
+						// Type assert the sector data to get constellation
+						// Since we know this returns TSector struct, we can try to access it directly
+						output.WriteString("- Sector " + fmt.Sprintf("%d", i) + ": (sector data loaded)\r\n")
+					} else {
+						output.WriteString("- Sector " + fmt.Sprintf("%d", i) + ": (no data)\r\n")
+					}
+				}
+			}
+		}
+	} else {
+		output.WriteString("Error: Invalid database interface\r\n")
+	}
+	
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleTraderList: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Trader list functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handlePortList: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Port Information"))
+	
+	// Use type assertions to access database methods
+	if db, ok := dbInterface.(interface {
+		GetDatabaseOpen() bool
+		FindPortsByClass(int) ([]interface{}, error)
+	}); ok {
+		if !db.GetDatabaseOpen() {
+			output.WriteString("Error: Database not open\r\n")
+		} else {
+			// Try to find ports by class (class 0 = special ports)
+			portsData, err := db.FindPortsByClass(0)
+			if err != nil {
+				output.WriteString("Error querying ports: " + err.Error() + "\r\n")
+			} else {
+				output.WriteString("Special ports (Class 0): " + fmt.Sprintf("%d", len(portsData)) + "\r\n")
+				for i := range portsData {
+					if i >= 10 { // Limit display
+						output.WriteString("... and " + fmt.Sprintf("%d", len(portsData)-i) + " more\r\n")
+						break
+					}
+					// Since we know this returns TPort struct, show basic info
+					output.WriteString("- Port " + fmt.Sprintf("%d", i+1) + ": (port data available)\r\n")
+				}
+			}
+		}
+	} else {
+		output.WriteString("Error: Invalid database interface\r\n")
+	}
+	
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleRoutePlot(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleRoutePlot: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Route plot functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleBubbleInfo(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleBubbleInfo: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("Bubble info functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+// Helper function for minimum
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }

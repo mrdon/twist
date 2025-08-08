@@ -14,6 +14,19 @@ import (
 	"twist/internal/api"
 )
 
+// proxyAdapter adapts the Proxy to work with menu.ProxyInterface
+type proxyAdapter struct {
+	proxy *Proxy
+}
+
+func (pa *proxyAdapter) GetScriptManager() menu.ScriptManagerInterface {
+	return pa.proxy.scriptManager
+}
+
+func (pa *proxyAdapter) GetDatabase() interface{} {
+	return pa.proxy.db
+}
+
 type Proxy struct {
 	conn     net.Conn
 	reader   *bufio.Reader
@@ -73,6 +86,9 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	
 	// Set up menu data injection function
 	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	
+	// Set up proxy interface for menu system
+	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
 	
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
