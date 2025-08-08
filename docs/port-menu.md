@@ -458,3 +458,121 @@ p.eventBus.Publish(event)
 7. **Performance**: Menu operations don't impact game latency
 
 This implementation leverages Twist's existing architecture while adding the missing TWX terminal menu functionality as a separate, complementary system.
+
+## ProxyApi/TuiApi Integration Phase
+
+**TUI Menu System Integration:**
+The terminal menu system should be exposed via the existing ProxyApi/TuiApi interface pattern to enable the TUI interface to access and display menu options alongside the traditional '$' character terminal access.
+
+**ProxyApi Extensions:**
+Add menu methods to the existing ProxyAPI interface:
+
+```go
+// Menu Management (Phase 7)
+GetCurrentMenu() (*MenuStateInfo, error)
+GetMenuTree() (*MenuTreeInfo, error)
+ActivateMenu(menuName string) error
+SendMenuInput(input string) error
+CloseMenu() error
+```
+
+**TuiApi Extensions:**
+Add menu event callbacks to the existing TuiAPI interface:
+
+```go
+// Menu Events (Phase 7) - must return immediately
+OnMenuStateChanged(menuState MenuStateInfo)
+OnMenuClosed()
+```
+
+**New API Types:**
+Add to `internal/api/api.go`:
+
+```go
+// MenuStateInfo represents current terminal menu state
+type MenuStateInfo struct {
+    MenuName    string           `json:"menu_name"`    // Current menu name (e.g., "TWX_MAIN")
+    Title       string           `json:"title"`        // Menu title for display
+    Prompt      string           `json:"prompt"`       // Current prompt text
+    Options     []MenuOptionInfo `json:"options"`      // Available menu options
+    InputMode   string           `json:"input_mode"`   // "selection" or "text_input"
+    CurrentLine string           `json:"current_line"` // Current input buffer
+}
+
+type MenuOptionInfo struct {
+    Hotkey string `json:"hotkey"` // Single character hotkey
+    Title  string `json:"title"`  // Option display text
+    Help   string `json:"help"`   // Help text for option
+}
+
+type MenuTreeInfo struct {
+    Menus map[string]MenuInfo `json:"menus"` // All available menus
+}
+
+type MenuInfo struct {
+    Name     string   `json:"name"`     // Menu identifier
+    Title    string   `json:"title"`    // Display title
+    Parent   string   `json:"parent"`   // Parent menu name (empty for root)
+    Children []string `json:"children"` // Child menu names
+    Options  []MenuOptionInfo `json:"options"` // Menu options
+}
+```
+
+**TUI Integration Points:**
+
+- **Menu Panel Component**: Display current menu options in TUI sidebar/panel
+- **Menu Navigation**: TUI hotkeys mirror terminal menu hotkeys 
+- **Input Collection**: TUI forms for complex multi-stage inputs
+- **Menu History**: Breadcrumb navigation showing menu hierarchy
+- **Real-time Updates**: Via existing TuiApi event callbacks
+
+**State Synchronization:**
+- Menu state changes in terminal trigger `OnMenuStateChanged()` callback
+- TUI menu actions call ProxyApi menu methods
+- Shared menu session state between terminal and TUI clients
+- Consistent menu availability based on game/script state
+
+**Implementation Strategy:**
+1. **Phase 1-6**: Implement core terminal menu system in Go (as outlined above)
+2. **Phase 7**: Extend ProxyApi/TuiApi interfaces with menu methods  
+3. **Phase 8**: Integrate TUI components consuming menu API
+4. **Phase 9**: Synchronize menu state between terminal and TUI
+
+**TUI Menu Benefits:**
+- **Visual Menu Navigation**: Mouse and keyboard navigation
+- **Contextual Help Display**: Integrated help text in TUI panels
+- **Form-based Input**: Rich input forms for complex menu operations
+- **Menu History**: Visual breadcrumb navigation
+- **Multi-panel Layout**: Menu alongside game data views
+
+**Phase 7: ProxyApi/TuiApi Extensions**
+**Agent Task**: Extend existing API interfaces to support terminal menu system
+
+**Deliverables:**
+- Extend `internal/api/api.go` with menu types and interface methods
+- Implement menu methods in `internal/proxy/proxy_api_impl.go`
+- Implement menu callbacks in `internal/tui/api/tui_api_impl.go`
+- Menu state synchronization via existing event system
+
+**Acceptance Criteria:**
+- ProxyApi menu methods functional and integrated with TerminalMenuManager
+- TuiApi callbacks fire when menu state changes
+- Menu data structures properly serialized for TUI consumption
+- No breaking changes to existing API interfaces
+- API responses match TWX menu behavior
+
+**Phase 8: TUI Menu Panel**
+**Agent Task**: Create TUI menu panel component that displays terminal menu options
+
+**Deliverables:**
+- `internal/tui/components/terminal_menu_panel.go` - Menu display component
+- Integration with existing TUI layout system
+- Menu navigation via TUI hotkeys
+- Form components for complex menu inputs
+
+**Acceptance Criteria:**
+- Menu panel displays current terminal menu options
+- TUI hotkeys trigger same menu actions as terminal
+- Complex inputs use TUI forms instead of terminal prompts
+- Menu panel updates in real-time with menu state changes
+- Panel integrates cleanly with existing TUI layout

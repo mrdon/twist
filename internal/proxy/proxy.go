@@ -27,6 +27,14 @@ func (pa *proxyAdapter) GetDatabase() interface{} {
 	return pa.proxy.db
 }
 
+func (pa *proxyAdapter) SendInput(input string) {
+	pa.proxy.SendInput(input)
+}
+
+func (pa *proxyAdapter) SendDirectToServer(input string) {
+	pa.proxy.SendDirectToServer(input)
+}
+
 type Proxy struct {
 	conn     net.Conn
 	reader   *bufio.Reader
@@ -274,6 +282,38 @@ func (p *Proxy) SendInput(input string) {
 	case p.inputChan <- input:
 	default:
 		// Channel full, drop input
+	}
+}
+
+func (p *Proxy) SendDirectToServer(input string) {
+	p.mu.RLock()
+	connected := p.connected && p.writer != nil
+	p.mu.RUnlock()
+	
+	if !connected {
+		return
+	}
+	
+	// Process outgoing text through script manager
+	if p.scriptManager != nil {
+		p.scriptManager.ProcessOutgoingText(input)
+	}
+	
+	// Process user input through game detector
+	if p.gameDetector != nil {
+		p.gameDetector.ProcessUserInput(input)
+	}
+	
+	// Send directly to server bypassing menu system
+	_, err := p.writer.WriteString(input)
+	if err != nil {
+		p.errorChan <- fmt.Errorf("direct write error: %w", err)
+		return
+	}
+	
+	err = p.writer.Flush()
+	if err != nil {
+		p.errorChan <- fmt.Errorf("direct flush error: %w", err)
 	}
 }
 

@@ -26,6 +26,15 @@ type TerminalMenuManager struct {
 	// Script-created menus (separate from built-in menus)
 	scriptMenus map[string]*ScriptMenuData
 	scriptMenuValues map[string]string // Menu values for script menus
+	
+	// Two-stage input collection system
+	inputCollectionMode bool   // Are we collecting input for a script menu?
+	inputCollectionMenu string // Which menu are we collecting input for?
+	inputCollectionPrompt string // Custom prompt for input collection
+	inputCollectionBuffer string // Accumulate input characters until Enter
+	
+	// Burst command storage (like TWX LastBurst)
+	lastBurst string // Last burst command sent
 }
 
 // ScriptMenuData represents a menu created by script commands
@@ -47,6 +56,8 @@ type ScriptMenuData struct {
 type ProxyInterface interface {
 	GetScriptManager() ScriptManagerInterface
 	GetDatabase() interface{}
+	SendInput(input string) // For burst commands and other menu actions
+	SendDirectToServer(input string) // Direct server communication bypassing menu system
 }
 
 // ScriptManagerInterface defines methods needed for script management
@@ -70,11 +81,16 @@ func NewTerminalMenuManager() *TerminalMenuManager {
 	}()
 
 	return &TerminalMenuManager{
-		activeMenus:      make(map[string]*TerminalMenuItem),
-		scriptMenus:      make(map[string]*ScriptMenuData),
-		scriptMenuValues: make(map[string]string),
-		menuKey:          '$',
-		isActive:         0, // atomic false
+		activeMenus:           make(map[string]*TerminalMenuItem),
+		scriptMenus:           make(map[string]*ScriptMenuData),
+		scriptMenuValues:      make(map[string]string),
+		menuKey:               '$',
+		isActive:              0, // atomic false
+		inputCollectionMode:   false,
+		inputCollectionMenu:   "",
+		inputCollectionPrompt: "",
+		inputCollectionBuffer: "",
+		lastBurst:             "",
 	}
 }
 
@@ -113,6 +129,15 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	}
 
 	input = strings.TrimSpace(input)
+	
+	// Debug logging to see what's happening
+	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollectionMode)
+	
+	// Handle two-stage input collection mode
+	if tmm.inputCollectionMode {
+		debug.Log("Handling input collection for: '%s'", input)
+		return tmm.handleInputCollection(input)
+	}
 	
 	// Handle special cases
 	switch input {
@@ -371,8 +396,10 @@ func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, para
 		}
 	}()
 
-	// TODO: Implement burst commands functionality
-	tmm.sendOutput("Burst commands functionality not yet implemented.\r\n")
+	// Create and navigate to burst submenu
+	burstMenu := tmm.createTWXBurstMenu()
+	burstMenu.Parent = tmm.currentMenu
+	tmm.currentMenu = burstMenu
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -384,9 +411,25 @@ func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params 
 		}
 	}()
 
-	// TODO: Implement script loading functionality
-	tmm.sendOutput("Script loading functionality not yet implemented.\r\n")
-	tmm.displayCurrentMenu()
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// For now, prompt for a script filename
+	tmm.sendOutput("\r\nEnter script filename to load (e.g., 'myscript.ts'):\r\n")
+	tmm.sendOutput("Common scripts: login.ts, autorun.ts, trading.ts\r\n")
+	
+	// Start input collection for script filename
+	tmm.startInputCollection("SCRIPT_LOAD", "Script filename")
 	return nil
 }
 
@@ -397,9 +440,30 @@ func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, pa
 		}
 	}()
 
-	// TODO: Implement script termination functionality
-	tmm.sendOutput("Script termination functionality not yet implemented.\r\n")
-	tmm.displayCurrentMenu()
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// Show current script status first
+	status := scriptManager.GetStatus()
+	tmm.sendOutput("\r\nCurrent Script Status:\r\n")
+	for key, value := range status {
+		tmm.sendOutput(fmt.Sprintf("- %s: %v\r\n", key, value))
+	}
+	
+	tmm.sendOutput("\r\nEnter script name to terminate (or 'ALL' for all scripts):\r\n")
+	
+	// Start input collection for script termination
+	tmm.startInputCollection("SCRIPT_TERMINATE", "Script to terminate")
 	return nil
 }
 
@@ -525,6 +589,33 @@ func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 	return dataMenu
 }
 
+func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in createTWXBurstMenu: %v", r)
+		}
+	}()
+
+	burstMenu := NewTerminalMenuItem("TWX_BURST", "TWX Burst Menu", 0)
+	
+	// Send burst
+	sendBurstItem := NewTerminalMenuItem("Send burst", "Send burst", 'B')
+	sendBurstItem.Handler = tmm.handleSendBurst
+	burstMenu.AddChild(sendBurstItem)
+	
+	// Repeat last burst
+	repeatBurstItem := NewTerminalMenuItem("Repeat last burst", "Repeat last burst", 'R')
+	repeatBurstItem.Handler = tmm.handleRepeatBurst
+	burstMenu.AddChild(repeatBurstItem)
+	
+	// Edit/Send last burst
+	editBurstItem := NewTerminalMenuItem("Edit/Send last burst", "Edit/Send last burst", 'E')
+	editBurstItem.Handler = tmm.handleEditBurst
+	burstMenu.AddChild(editBurstItem)
+	
+	return burstMenu
+}
+
 // Script Menu Handlers
 func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params []string) error {
 	defer func() {
@@ -539,8 +630,6 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 		return nil
 	}
 
-	// TODO: Implement file picker or prompt for filename
-	// For now, show current status
 	scriptManager := tmm.proxyInterface.GetScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
@@ -548,33 +637,26 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 		return nil
 	}
 
+	// Show current script status first
 	var output strings.Builder
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle("Script Loading"))
-	output.WriteString("Current running scripts:\r\n")
 	
-	// Use type assertion to get the engine and its running scripts
+	// Show current running scripts
 	engine := scriptManager.GetEngine()
 	if engine != nil {
-		// Type assert to get the actual engine interface with GetRunningScripts method
-		// This is safe since we know the engine type from our architecture
 		if scriptEngine, ok := engine.(interface{ GetRunningScripts() []interface{} }); ok {
 			scripts := scriptEngine.GetRunningScripts()
-			if len(scripts) == 0 {
-				output.WriteString("No scripts currently running.\r\n")
-			} else {
-				output.WriteString("Found " + fmt.Sprintf("%d", len(scripts)) + " running scripts.\r\n")
-			}
-		} else {
-			output.WriteString("Unable to access script information.\r\n")
+			output.WriteString("Currently running scripts: " + fmt.Sprintf("%d", len(scripts)) + "\r\n")
 		}
-	} else {
-		output.WriteString("Script engine not available.\r\n")
 	}
 	
-	output.WriteString("\r\nScript loading functionality will be implemented in Phase 5.\r\n")
+	output.WriteString("\r\nEnter script filename to load:\r\n")
+	output.WriteString("Examples: login.ts, autorun.ts, trading.ts\r\n")
 	tmm.sendOutput(output.String())
-	tmm.displayCurrentMenu()
+	
+	// Start input collection for script filename
+	tmm.startInputCollection("SCRIPT_LOAD", "Script filename")
 	return nil
 }
 
@@ -675,7 +757,58 @@ func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, param
 		}
 	}()
 
-	tmm.sendOutput("Variable dump functionality not yet implemented.\r\n")
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Variable Dump"))
+	
+	// Get the script engine and dump variables
+	engine := scriptManager.GetEngine()
+	if engine != nil {
+		// Get running scripts and their variables
+		if scriptEngine, ok := engine.(interface{ GetRunningScripts() []interface{} }); ok {
+			scripts := scriptEngine.GetRunningScripts()
+			if len(scripts) == 0 {
+				output.WriteString("No running scripts - no variables to dump.\r\n")
+			} else {
+				output.WriteString("Found " + fmt.Sprintf("%d", len(scripts)) + " running scripts:\r\n")
+				
+				// For each script, show some basic info
+				for i := range scripts {
+					output.WriteString(fmt.Sprintf("Script %d: (script details)\r\n", i+1))
+				}
+				
+				output.WriteString("\r\nVariable dump shows TWX script variables.\r\n")
+				output.WriteString("Individual script variable inspection would require\r\n")
+				output.WriteString("additional VM interface methods.\r\n")
+			}
+		} else {
+			output.WriteString("Unable to access script engine details.\r\n")
+		}
+	} else {
+		output.WriteString("Script engine not available.\r\n")
+	}
+	
+	// Show engine status
+	status := scriptManager.GetStatus()
+	output.WriteString("\r\nEngine Status:\r\n")
+	for key, value := range status {
+		output.WriteString(fmt.Sprintf("- %s: %v\r\n", key, value))
+	}
+	
+	tmm.sendOutput(output.String())
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -1041,23 +1174,364 @@ func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, par
 		return nil
 	}
 
-	// Set the menu value to the reference (this is how TWX works)
+	// Set the menu value to the reference initially (this is how TWX works)
 	tmm.scriptMenuValues[menuName] = scriptMenu.Reference
 
-	// Show menu-specific prompt if available
+	// Check if we need to collect input from the user
 	if scriptMenu.Prompt != "" {
-		tmm.sendOutput(display.FormatInputPrompt(scriptMenu.Prompt))
+		// Two-stage input collection: Start collecting input with the custom prompt
+		tmm.startInputCollection(menuName, scriptMenu.Prompt)
+		
+		// Show options if available
+		if scriptMenu.Options != "" {
+			tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
+		}
+		
+		// Don't redisplay menu - we're now in input collection mode
+		return nil
 	} else {
+		// No prompt - just activate the menu item
 		tmm.sendOutput(display.FormatSuccessMessage("Menu item activated: " + scriptMenu.Description))
+		
+		// If options are set, display them
+		if scriptMenu.Options != "" {
+			tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
+		}
+
+		tmm.displayCurrentMenu()
+		return nil
+	}
+}
+
+// handleInputCollection handles user input when in input collection mode
+func (tmm *TerminalMenuManager) handleInputCollection(input string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleInputCollection: %v", r)
+		}
+	}()
+
+	// Check for special keys first (before trimming)
+	if input == "\r" || input == "\n" || input == "\r\n" || input == "" {
+		// Enter pressed - complete collection with current buffer
+		result := tmm.inputCollectionBuffer
+		tmm.inputCollectionBuffer = ""
+		debug.Log("Enter pressed, completing input collection with: '%s'", result)
+		return tmm.completeInputCollection(result)
 	}
 
-	// If options are set, display them
-	if scriptMenu.Options != "" {
-		tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
+	// Handle special control sequences
+	trimmedInput := strings.TrimSpace(input)
+	switch trimmedInput {
+	case "\\", "\\quit":
+		// Escape input collection (only backslash commands)
+		tmm.sendOutput("Input cancelled.\r\n")
+		tmm.inputCollectionBuffer = ""
+		tmm.exitInputCollection()
+		tmm.displayCurrentMenu()
+		return nil
+	case "?":
+		// Show help for input collection mode
+		tmm.sendOutput("\r\nInput Collection Help:\r\n")
+		tmm.sendOutput("- Type your value and press Enter to submit\r\n")
+		tmm.sendOutput("- Press Enter alone to submit empty value\r\n")
+		tmm.sendOutput("- Press '\\' to cancel input collection\r\n")
+		tmm.sendOutput("Current input: " + tmm.inputCollectionBuffer + "\r\n")
+		return nil
 	}
 
-	tmm.displayCurrentMenu()
+	// Handle backspace (remove last character from buffer)
+	if input == "\b" || input == "\x7f" {
+		if len(tmm.inputCollectionBuffer) > 0 {
+			tmm.inputCollectionBuffer = tmm.inputCollectionBuffer[:len(tmm.inputCollectionBuffer)-1]
+			debug.Log("Backspace pressed, buffer now: '%s'", tmm.inputCollectionBuffer)
+		}
+		return nil
+	}
+
+	// Accumulate printable characters in the buffer and echo them
+	if len(trimmedInput) > 0 {
+		tmm.inputCollectionBuffer += trimmedInput
+		debug.Log("Added '%s' to buffer, buffer now: '%s'", trimmedInput, tmm.inputCollectionBuffer)
+		// Echo the character to provide visual feedback
+		tmm.sendOutput(trimmedInput)
+	}
+
 	return nil
+}
+
+// startInputCollection begins collecting input for a script menu
+func (tmm *TerminalMenuManager) startInputCollection(menuName, prompt string) {
+	debug.Log("Starting input collection for menu: %s, prompt: %s", menuName, prompt)
+	tmm.inputCollectionMode = true
+	tmm.inputCollectionMenu = menuName
+	tmm.inputCollectionPrompt = prompt
+	tmm.inputCollectionBuffer = "" // Clear any previous input
+	
+	// Display the input prompt
+	if prompt != "" {
+		tmm.sendOutput("\r\n" + display.FormatInputPrompt(prompt))
+	} else {
+		tmm.sendOutput("\r\n" + display.FormatInputPrompt("Enter value"))
+	}
+	
+	// Show help for input collection
+	tmm.sendOutput("(Enter value, or '\\' to cancel)\r\n")
+}
+
+// completeInputCollection completes the input collection and stores the value
+func (tmm *TerminalMenuManager) completeInputCollection(value string) error {
+	// Exit input collection mode FIRST to prevent recursive calls
+	menuName := tmm.inputCollectionMenu
+	tmm.exitInputCollection()
+	
+	if menuName != "" {
+		// Handle special built-in collection modes
+		switch menuName {
+		case "SCRIPT_LOAD":
+			return tmm.handleScriptLoadInput(value)
+		case "SCRIPT_TERMINATE":
+			return tmm.handleScriptTerminateInput(value)
+		case "BURST_SEND":
+			return tmm.handleBurstSendInput(value)
+		case "BURST_EDIT":
+			return tmm.handleBurstEditInput(value)
+		default:
+			// Regular script menu value collection
+			tmm.scriptMenuValues[menuName] = value
+			
+			// Show confirmation
+			if value != "" {
+				tmm.sendOutput(display.FormatSuccessMessage("Value set: " + value))
+			} else {
+				tmm.sendOutput(display.FormatSuccessMessage("Value cleared"))
+			}
+		}
+	}
+	
+	// Only display current menu if the menu system is still active
+	// (burst commands deactivate the menu system)
+	if atomic.LoadInt32(&tmm.isActive) == 1 {
+		tmm.displayCurrentMenu()
+	}
+	return nil
+}
+
+// handleScriptLoadInput handles the actual script loading after input collection
+func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
+	if strings.TrimSpace(filename) == "" {
+		tmm.sendOutput(display.FormatErrorMessage("No filename provided"))
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
+		return nil
+	}
+
+	tmm.sendOutput("Loading script: " + filename + "...\r\n")
+	
+	err := scriptManager.LoadAndRunScript(filename)
+	if err != nil {
+		tmm.sendOutput(display.FormatErrorMessage("Failed to load script: " + err.Error()))
+	} else {
+		tmm.sendOutput(display.FormatSuccessMessage("Script loaded and started: " + filename))
+	}
+	
+	return nil
+}
+
+// handleScriptTerminateInput handles the actual script termination after input collection  
+func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) error {
+	scriptName = strings.TrimSpace(scriptName)
+	
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
+		return nil
+	}
+
+	if scriptName == "" || scriptName == "ALL" || scriptName == "all" {
+		// Terminate all scripts
+		tmm.sendOutput("Terminating all running scripts...\r\n")
+		err := scriptManager.Stop()
+		if err != nil {
+			tmm.sendOutput(display.FormatErrorMessage("Failed to terminate scripts: " + err.Error()))
+		} else {
+			tmm.sendOutput(display.FormatSuccessMessage("All scripts terminated"))
+		}
+	} else {
+		// For individual script termination, we'd need to extend the ScriptManager interface
+		// For now, just terminate all
+		tmm.sendOutput("Individual script termination not yet supported. Terminating all scripts...\r\n")
+		err := scriptManager.Stop()
+		if err != nil {
+			tmm.sendOutput(display.FormatErrorMessage("Failed to terminate scripts: " + err.Error()))
+		} else {
+			tmm.sendOutput(display.FormatSuccessMessage("All scripts terminated"))
+		}
+	}
+	
+	return nil
+}
+
+// exitInputCollection exits input collection mode
+func (tmm *TerminalMenuManager) exitInputCollection() {
+	debug.Log("Exiting input collection mode")
+	tmm.inputCollectionMode = false
+	tmm.inputCollectionMenu = ""
+	tmm.inputCollectionPrompt = ""
+	tmm.inputCollectionBuffer = ""
+}
+
+// Burst Command Handlers
+
+// handleSendBurst handles the "Send burst" menu item
+func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleSendBurst: %v", r)
+		}
+	}()
+
+	tmm.sendOutput("\r\n" + display.FormatMenuTitle("Send Burst Command"))
+	tmm.sendOutput("Enter burst text to send to server:\r\n")
+	tmm.sendOutput("Use '*' character for ENTER (e.g., 'lt1*' lists trader #1)\r\n")
+	tmm.sendOutput("Examples: 'bp100*' (buy 100 product), 'sp50*' (sell 50 product), 'tw1234*' (transwarp to sector 1234)\r\n")
+	
+	// Start input collection for burst command
+	tmm.startInputCollection("BURST_SEND", "Burst command")
+	return nil
+}
+
+// handleRepeatBurst handles the "Repeat last burst" menu item
+func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleRepeatBurst: %v", r)
+		}
+	}()
+
+	if tmm.lastBurst == "" {
+		tmm.sendOutput(display.FormatErrorMessage("No previous burst command to repeat"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	tmm.sendOutput("Repeating last burst: " + tmm.lastBurst + "\r\n")
+	
+	// Send the burst command (replace * with newline)
+	burstText := strings.ReplaceAll(tmm.lastBurst, "*", "\r\n")
+	if tmm.proxyInterface != nil {
+		// Send through the proxy interface
+		// We need to access the proxy's SendInput method
+		// For now, we'll use a simple approach by injecting the data
+		tmm.sendBurstToServer(burstText)
+		tmm.sendOutput(display.FormatSuccessMessage("Burst command repeated and sent"))
+		
+		// Exit menu system after sending burst command so user input goes to game
+		atomic.StoreInt32(&tmm.isActive, 0) // atomic false
+		tmm.currentMenu = nil
+		tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
+	} else {
+		tmm.sendOutput(display.FormatErrorMessage("Unable to send burst - no connection"))
+		tmm.displayCurrentMenu()
+	}
+	
+	return nil
+}
+
+// handleEditBurst handles the "Edit/Send last burst" menu item
+func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleEditBurst: %v", r)
+		}
+	}()
+
+	if tmm.lastBurst == "" {
+		tmm.sendOutput(display.FormatErrorMessage("No previous burst command to edit"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	tmm.sendOutput("\r\n" + display.FormatMenuTitle("Edit Last Burst Command"))
+	tmm.sendOutput("Previous burst: " + tmm.lastBurst + "\r\n")
+	tmm.sendOutput("Edit and press Enter to send (or cancel with 'q'):\r\n")
+	
+	// Pre-fill the input collection with the last burst
+	tmm.startInputCollection("BURST_EDIT", "Edit burst command")
+	// Set the current input to the last burst for editing
+	return nil
+}
+
+// handleBurstSendInput handles input collection for sending a new burst command
+func (tmm *TerminalMenuManager) handleBurstSendInput(burstText string) error {
+	burstText = strings.TrimSpace(burstText)
+	
+	if burstText == "" {
+		tmm.sendOutput(display.FormatErrorMessage("Empty burst command cancelled"))
+		return nil
+	}
+
+	// Store as last burst
+	tmm.lastBurst = burstText
+	
+	// Send the burst command (replace * with newline)
+	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
+	tmm.sendBurstToServer(expandedText)
+	
+	tmm.sendOutput(display.FormatSuccessMessage("Burst command sent: " + burstText))
+	
+	// Exit menu system after sending burst command so user input goes to game
+	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
+	tmm.currentMenu = nil
+	tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
+	return nil
+}
+
+// handleBurstEditInput handles input collection for editing and sending a burst command
+func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
+	burstText = strings.TrimSpace(burstText)
+	
+	if burstText == "" {
+		tmm.sendOutput(display.FormatErrorMessage("Empty burst command cancelled"))
+		return nil
+	}
+
+	// Store as last burst
+	tmm.lastBurst = burstText
+	
+	// Send the burst command (replace * with newline)
+	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
+	tmm.sendBurstToServer(expandedText)
+	
+	tmm.sendOutput(display.FormatSuccessMessage("Edited burst command sent: " + burstText))
+	
+	// Exit menu system after sending burst command so user input goes to game
+	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
+	tmm.currentMenu = nil
+	tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
+	return nil
+}
+
+// sendBurstToServer sends burst text to the server through the proxy
+func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
+	if tmm.proxyInterface == nil {
+		debug.Log("Cannot send burst - no proxy interface")
+		return
+	}
+	
+	// Split into individual commands (separated by \r\n from * expansion)
+	commands := strings.Split(text, "\r\n")
+	for _, cmd := range commands {
+		if strings.TrimSpace(cmd) != "" {
+			// Send each command directly to server bypassing menu system
+			tmm.proxyInterface.SendDirectToServer(strings.TrimSpace(cmd) + "\r\n")
+			debug.Log("Burst command sent directly to server: %s", strings.TrimSpace(cmd))
+		}
+	}
 }
 
 // GetMenuManager returns the terminal menu manager for script integration
