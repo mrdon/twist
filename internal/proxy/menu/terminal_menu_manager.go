@@ -7,13 +7,13 @@ import (
 
 	"twist/internal/debug"
 	"twist/internal/proxy/menu/display"
+	"twist/internal/proxy/menu/input"
 )
 
 type TerminalMenuManager struct {
 	currentMenu   *TerminalMenuItem
 	activeMenus   map[string]*TerminalMenuItem
 	menuKey       rune // default '$'
-	inputBuffer   string
 	isActive      int32 // atomic bool (0 = false, 1 = true)
 	
 	// Function to inject data into the stream - will be set by proxy
@@ -27,11 +27,9 @@ type TerminalMenuManager struct {
 	scriptMenus map[string]*ScriptMenuData
 	scriptMenuValues map[string]string // Menu values for script menus
 	
-	// Two-stage input collection system
-	inputCollectionMode bool   // Are we collecting input for a script menu?
-	inputCollectionMenu string // Which menu are we collecting input for?
-	inputCollectionPrompt string // Custom prompt for input collection
-	inputCollectionBuffer string // Accumulate input characters until Enter
+	// Separate components for advanced features
+	inputCollector *input.InputCollector // Two-stage input collection
+	helpSystem     *HelpSystem           // Contextual help system
 	
 	// Burst command storage (like TWX LastBurst)
 	lastBurst string // Last burst command sent
@@ -68,11 +66,6 @@ type ScriptManagerInterface interface {
 	GetEngine() interface{}
 }
 
-// Since Engine is from internal/proxy/scripting, we'll use interface{} and type assertion
-
-// Import the actual database interface via interface embedding
-// We can't import it directly to avoid cycles, so we'll use interface{} and type assertions
-
 func NewTerminalMenuManager() *TerminalMenuManager {
 	defer func() {
 		if r := recover(); r != nil {
@@ -80,18 +73,45 @@ func NewTerminalMenuManager() *TerminalMenuManager {
 		}
 	}()
 
-	return &TerminalMenuManager{
-		activeMenus:           make(map[string]*TerminalMenuItem),
-		scriptMenus:           make(map[string]*ScriptMenuData),
-		scriptMenuValues:      make(map[string]string),
-		menuKey:               '$',
-		isActive:              0, // atomic false
-		inputCollectionMode:   false,
-		inputCollectionMenu:   "",
-		inputCollectionPrompt: "",
-		inputCollectionBuffer: "",
-		lastBurst:             "",
+	tmm := &TerminalMenuManager{
+		activeMenus:      make(map[string]*TerminalMenuItem),
+		scriptMenus:      make(map[string]*ScriptMenuData),
+		scriptMenuValues: make(map[string]string),
+		menuKey:          '$',
+		isActive:         0, // atomic false
+		lastBurst:        "",
 	}
+
+	// Initialize input collector with output function
+	tmm.inputCollector = input.NewInputCollector(tmm.sendOutput)
+	
+	// Initialize help system with output function
+	tmm.helpSystem = NewHelpSystem(tmm.sendOutput)
+	
+	// Register input completion handlers
+	tmm.setupInputHandlers()
+
+	return tmm
+}
+
+// setupInputHandlers registers completion handlers for different input operations
+func (tmm *TerminalMenuManager) setupInputHandlers() {
+	// Register handlers for built-in menu operations
+	tmm.inputCollector.RegisterCompletionHandler("SCRIPT_LOAD", func(menuName, value string) error {
+		return tmm.handleScriptLoadInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("SCRIPT_TERMINATE", func(menuName, value string) error {
+		return tmm.handleScriptTerminateInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("BURST_SEND", func(menuName, value string) error {
+		return tmm.handleBurstSendInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("BURST_EDIT", func(menuName, value string) error {
+		return tmm.handleBurstEditInput(value)
+	})
 }
 
 func (tmm *TerminalMenuManager) SetInjectDataFunc(injectFunc func([]byte)) {
@@ -131,18 +151,19 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	input = strings.TrimSpace(input)
 	
 	// Debug logging to see what's happening
-	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollectionMode)
+	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollector.IsCollecting())
 	
-	// Handle two-stage input collection mode
-	if tmm.inputCollectionMode {
+	// Handle two-stage input collection mode using the input collector
+	if tmm.inputCollector.IsCollecting() {
 		debug.Log("Handling input collection for: '%s'", input)
-		return tmm.handleInputCollection(input)
+		return tmm.inputCollector.HandleInput(input)
 	}
 	
 	// Handle special cases
 	switch input {
 	case "?":
-		tmm.showHelp()
+		tmm.helpSystem.ShowContextualHelp(tmm.currentMenu)
+		tmm.displayCurrentMenu()
 		return nil
 	case "q", "Q":
 		tmm.closeCurrentMenu()
@@ -259,24 +280,6 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 	output.WriteString(display.FormatInputPrompt("Selection"))
 	
 	tmm.sendOutput(output.String())
-}
-
-func (tmm *TerminalMenuManager) showHelp() {
-	defer func() {
-		if r := recover(); r != nil {
-			debug.Log("PANIC in showHelp: %v", r)
-		}
-	}()
-
-	helpText := "Use the letter keys to navigate menus.\n" +
-		"'Q' - Go back or exit menu\n" +
-		"'?' - Show this help\n" +
-		"Enter - Refresh current menu"
-	
-	help := "\r\n" + display.FormatHelpText(helpText) + "\r\n"
-	
-	tmm.sendOutput(help)
-	tmm.displayCurrentMenu()
 }
 
 func (tmm *TerminalMenuManager) closeCurrentMenu() {
@@ -429,7 +432,7 @@ func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params 
 	tmm.sendOutput("Common scripts: login.ts, autorun.ts, trading.ts\r\n")
 	
 	// Start input collection for script filename
-	tmm.startInputCollection("SCRIPT_LOAD", "Script filename")
+	tmm.inputCollector.StartCollection("SCRIPT_LOAD", "Script filename")
 	return nil
 }
 
@@ -463,7 +466,7 @@ func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, pa
 	tmm.sendOutput("\r\nEnter script name to terminate (or 'ALL' for all scripts):\r\n")
 	
 	// Start input collection for script termination
-	tmm.startInputCollection("SCRIPT_TERMINATE", "Script to terminate")
+	tmm.inputCollector.StartCollection("SCRIPT_TERMINATE", "Script to terminate")
 	return nil
 }
 
@@ -656,7 +659,7 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 	tmm.sendOutput(output.String())
 	
 	// Start input collection for script filename
-	tmm.startInputCollection("SCRIPT_LOAD", "Script filename")
+	tmm.inputCollector.StartCollection("SCRIPT_LOAD", "Script filename")
 	return nil
 }
 
@@ -1180,7 +1183,7 @@ func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, par
 	// Check if we need to collect input from the user
 	if scriptMenu.Prompt != "" {
 		// Two-stage input collection: Start collecting input with the custom prompt
-		tmm.startInputCollection(menuName, scriptMenu.Prompt)
+		tmm.inputCollector.StartCollection(menuName, scriptMenu.Prompt)
 		
 		// Show options if available
 		if scriptMenu.Options != "" {
@@ -1201,120 +1204,6 @@ func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, par
 		tmm.displayCurrentMenu()
 		return nil
 	}
-}
-
-// handleInputCollection handles user input when in input collection mode
-func (tmm *TerminalMenuManager) handleInputCollection(input string) error {
-	defer func() {
-		if r := recover(); r != nil {
-			debug.Log("PANIC in handleInputCollection: %v", r)
-		}
-	}()
-
-	// Check for special keys first (before trimming)
-	if input == "\r" || input == "\n" || input == "\r\n" || input == "" {
-		// Enter pressed - complete collection with current buffer
-		result := tmm.inputCollectionBuffer
-		tmm.inputCollectionBuffer = ""
-		debug.Log("Enter pressed, completing input collection with: '%s'", result)
-		return tmm.completeInputCollection(result)
-	}
-
-	// Handle special control sequences
-	trimmedInput := strings.TrimSpace(input)
-	switch trimmedInput {
-	case "\\", "\\quit":
-		// Escape input collection (only backslash commands)
-		tmm.sendOutput("Input cancelled.\r\n")
-		tmm.inputCollectionBuffer = ""
-		tmm.exitInputCollection()
-		tmm.displayCurrentMenu()
-		return nil
-	case "?":
-		// Show help for input collection mode
-		tmm.sendOutput("\r\nInput Collection Help:\r\n")
-		tmm.sendOutput("- Type your value and press Enter to submit\r\n")
-		tmm.sendOutput("- Press Enter alone to submit empty value\r\n")
-		tmm.sendOutput("- Press '\\' to cancel input collection\r\n")
-		tmm.sendOutput("Current input: " + tmm.inputCollectionBuffer + "\r\n")
-		return nil
-	}
-
-	// Handle backspace (remove last character from buffer)
-	if input == "\b" || input == "\x7f" {
-		if len(tmm.inputCollectionBuffer) > 0 {
-			tmm.inputCollectionBuffer = tmm.inputCollectionBuffer[:len(tmm.inputCollectionBuffer)-1]
-			debug.Log("Backspace pressed, buffer now: '%s'", tmm.inputCollectionBuffer)
-		}
-		return nil
-	}
-
-	// Accumulate printable characters in the buffer and echo them
-	if len(trimmedInput) > 0 {
-		tmm.inputCollectionBuffer += trimmedInput
-		debug.Log("Added '%s' to buffer, buffer now: '%s'", trimmedInput, tmm.inputCollectionBuffer)
-		// Echo the character to provide visual feedback
-		tmm.sendOutput(trimmedInput)
-	}
-
-	return nil
-}
-
-// startInputCollection begins collecting input for a script menu
-func (tmm *TerminalMenuManager) startInputCollection(menuName, prompt string) {
-	debug.Log("Starting input collection for menu: %s, prompt: %s", menuName, prompt)
-	tmm.inputCollectionMode = true
-	tmm.inputCollectionMenu = menuName
-	tmm.inputCollectionPrompt = prompt
-	tmm.inputCollectionBuffer = "" // Clear any previous input
-	
-	// Display the input prompt
-	if prompt != "" {
-		tmm.sendOutput("\r\n" + display.FormatInputPrompt(prompt))
-	} else {
-		tmm.sendOutput("\r\n" + display.FormatInputPrompt("Enter value"))
-	}
-	
-	// Show help for input collection
-	tmm.sendOutput("(Enter value, or '\\' to cancel)\r\n")
-}
-
-// completeInputCollection completes the input collection and stores the value
-func (tmm *TerminalMenuManager) completeInputCollection(value string) error {
-	// Exit input collection mode FIRST to prevent recursive calls
-	menuName := tmm.inputCollectionMenu
-	tmm.exitInputCollection()
-	
-	if menuName != "" {
-		// Handle special built-in collection modes
-		switch menuName {
-		case "SCRIPT_LOAD":
-			return tmm.handleScriptLoadInput(value)
-		case "SCRIPT_TERMINATE":
-			return tmm.handleScriptTerminateInput(value)
-		case "BURST_SEND":
-			return tmm.handleBurstSendInput(value)
-		case "BURST_EDIT":
-			return tmm.handleBurstEditInput(value)
-		default:
-			// Regular script menu value collection
-			tmm.scriptMenuValues[menuName] = value
-			
-			// Show confirmation
-			if value != "" {
-				tmm.sendOutput(display.FormatSuccessMessage("Value set: " + value))
-			} else {
-				tmm.sendOutput(display.FormatSuccessMessage("Value cleared"))
-			}
-		}
-	}
-	
-	// Only display current menu if the menu system is still active
-	// (burst commands deactivate the menu system)
-	if atomic.LoadInt32(&tmm.isActive) == 1 {
-		tmm.displayCurrentMenu()
-	}
-	return nil
 }
 
 // handleScriptLoadInput handles the actual script loading after input collection
@@ -1376,15 +1265,6 @@ func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) er
 	return nil
 }
 
-// exitInputCollection exits input collection mode
-func (tmm *TerminalMenuManager) exitInputCollection() {
-	debug.Log("Exiting input collection mode")
-	tmm.inputCollectionMode = false
-	tmm.inputCollectionMenu = ""
-	tmm.inputCollectionPrompt = ""
-	tmm.inputCollectionBuffer = ""
-}
-
 // Burst Command Handlers
 
 // handleSendBurst handles the "Send burst" menu item
@@ -1401,7 +1281,7 @@ func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params [
 	tmm.sendOutput("Examples: 'bp100*' (buy 100 product), 'sp50*' (sell 50 product), 'tw1234*' (transwarp to sector 1234)\r\n")
 	
 	// Start input collection for burst command
-	tmm.startInputCollection("BURST_SEND", "Burst command")
+	tmm.inputCollector.StartCollection("BURST_SEND", "Burst command")
 	return nil
 }
 
@@ -1461,7 +1341,7 @@ func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params [
 	tmm.sendOutput("Edit and press Enter to send (or cancel with 'q'):\r\n")
 	
 	// Pre-fill the input collection with the last burst
-	tmm.startInputCollection("BURST_EDIT", "Edit burst command")
+	tmm.inputCollector.StartCollection("BURST_EDIT", "Edit burst command")
 	// Set the current input to the last burst for editing
 	return nil
 }

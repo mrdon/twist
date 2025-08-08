@@ -90,9 +90,9 @@ func TestTWXMainMenuHandlers(t *testing.T) {
 		expectedMsg string
 		description string
 	}{
-		{"B", "Burst commands functionality not yet implemented", "Burst Commands (not implemented)"},
-		{"L", "Script loading functionality not yet implemented", "Load Script from main menu"},
-		{"T", "Script termination functionality not yet implemented", "Terminate Script from main menu"},
+		{"B", "TWX Burst Menu", "Navigate to Burst Commands submenu"},
+		{"L", "Error: No proxy interface available", "Load Script from main menu (no proxy)"},
+		{"T", "Error: No proxy interface available", "Terminate Script from main menu (no proxy)"},
 		{"S", "TWX Script Menu", "Navigate to Script submenu"},
 		{"V", "TWX Data Menu", "Navigate to Data submenu"},
 		{"P", "Port menu functionality not yet implemented", "Port Menu (not implemented)"},
@@ -144,11 +144,11 @@ func TestTWXMainMenuHelp(t *testing.T) {
 	combinedOutput := strings.Join(capturedOutput, "")
 	
 	expectedHelpContent := []string{
-		"Help",
-		"letter keys",
-		"navigate", 
-		"'Q'",
-		"'?'",
+		"TWX Main Menu",
+		"Burst Commands",
+		"Load Script", 
+		"Script Menu",
+		"Data Menu",
 	}
 	
 	for _, content := range expectedHelpContent {
