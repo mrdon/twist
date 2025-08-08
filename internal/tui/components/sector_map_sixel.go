@@ -269,21 +269,34 @@ func (smc *SixelSectorMapComponent) drawSectorNodeOnCanvas(canvas *SixelCanvas, 
 	canvas.DrawFilledCircle(x, y, nodeRadius, fillColor, borderColor)
 	
 	// Add sector number as text overlay
-	smc.drawSectorLabelOnCanvas(canvas, x, y, sectorNum)
+	smc.drawSectorLabelOnCanvas(canvas, x, y, sectorNum, info)
 }
 
 // drawSectorLabelOnCanvas adds a sector number label on the canvas
-func (smc *SixelSectorMapComponent) drawSectorLabelOnCanvas(canvas *SixelCanvas, x, y, sectorNum int) {
+func (smc *SixelSectorMapComponent) drawSectorLabelOnCanvas(canvas *SixelCanvas, x, y, sectorNum int, info api.SectorInfo) {
 	// Draw sector number in white text
 	sectorText := fmt.Sprintf("%d", sectorNum)
 	textColor := 4 // White
 	
-	// Center the text approximately
+	// Center the sector number text
 	textWidth := len(sectorText) * 6 // Approximate character width
 	textX := x - textWidth/2
-	textY := y - 4 // Center vertically
+	textY := y - 8 // Move up to make room for port info
 	
 	canvas.DrawText(textX, textY, sectorText, textColor)
+	
+	// If sector has a port, display port type on second line
+	if info.HasPort && smc.proxyAPI != nil {
+		portInfo, err := smc.proxyAPI.GetPortInfo(sectorNum)
+		if err == nil && portInfo != nil {
+			portText := fmt.Sprintf("(%s)", portInfo.ClassType.String())
+			portTextWidth := len(portText) * 6
+			portTextX := x - portTextWidth/2
+			portTextY := y + 2 // Below the sector number
+			
+			canvas.DrawText(portTextX, portTextY, portText, textColor)
+		}
+	}
 }
 
 // drawWarpConnectionsOnCanvas draws directed arrows showing warp connections on the canvas

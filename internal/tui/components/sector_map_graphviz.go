@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"strings"
 	"twist/internal/api"
+	"twist/internal/debug"
 	"twist/internal/theme"
 
 	"github.com/BourgeoisBear/rasterm"
@@ -39,16 +40,24 @@ type GraphvizSectorMap struct {
 	hasBorder     bool
 	sixelLayer    *SixelLayer
 	regionID      string
+	isGenerating  bool        // Track when image generation is in progress
 }
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
 func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
-	// Get theme colors for panels
+	// Get theme colors - use default colors for proper background
 	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
 	panelColors := currentTheme.PanelColors()
 	
+	r, g, b := defaultColors.Background.RGB()
+	debug.Log("GraphvizSectorMap: Constructor - theme default background RGB(%d,%d,%d)", r, g, b)
+	
+	r2, g2, b2 := panelColors.Background.RGB()
+	debug.Log("GraphvizSectorMap: Constructor - theme panel background RGB(%d,%d,%d)", r2, g2, b2)
+	
 	box := tview.NewBox()
-	box.SetBackgroundColor(panelColors.Background)
+	box.SetBackgroundColor(defaultColors.Background)  // Use theme's default background
 	box.SetBorderColor(panelColors.Border)
 	box.SetTitleColor(panelColors.Title)
 	
@@ -57,11 +66,11 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 		sectorData:   make(map[int]api.SectorInfo),
 		sectorLevels: make(map[int]int),
 		needsRedraw:  true,
-		hasBorder:    false,  // Disable tview border, use only content border
+		hasBorder:    false,  // No border, just background
 		sixelLayer:   sixelLayer,
 		regionID:     "sector_map", // Unique ID for this component
 	}
-	gsm.SetBorder(false).SetTitle("Sector Map (Graphviz)")
+	gsm.SetBorder(false).SetTitle("")
 	return gsm
 }
 
@@ -74,17 +83,30 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
-	// Draw the background first to ensure proper theming
-	gsm.Box.DrawForSubclass(screen, gsm)
-
-	x, y, width, height := gsm.GetInnerRect()
+	debug.Log("GraphvizSectorMap.Draw: Starting draw")
+	
+	// Get the component area and fill with theme background
+	x, y, width, height := gsm.GetRect()
+	debug.Log("GraphvizSectorMap.Draw: Component rect x=%d y=%d w=%d h=%d", x, y, width, height)
 
 	if width <= 0 || height <= 0 {
+		debug.Log("GraphvizSectorMap.Draw: Invalid dimensions, returning")
 		return
+	}
+	
+	// Fill entire component area with theme background (no border, no title)
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	bgStyle := tcell.StyleDefault.Background(defaultColors.Background)
+	for py := y; py < y+height; py++ {
+		for px := x; px < x+width; px++ {
+			screen.SetContent(px, py, ' ', nil, bgStyle)
+		}
 	}
 
 	// Check if dimensions changed and invalidate cache if needed
 	if gsm.cachedWidth != width || gsm.cachedHeight != height {
+		debug.Log("GraphvizSectorMap.Draw: Dimensions changed, invalidating cache")
 		gsm.cachedImage = nil
 		gsm.cachedSixel = ""
 		
@@ -100,8 +122,20 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	}
 
 	// Generate map image and sixel if needed
-	if gsm.needsRedraw || gsm.cachedImage == nil || gsm.cachedSixel == "" {
+	needsGeneration := gsm.needsRedraw || gsm.cachedImage == nil || gsm.cachedSixel == ""
+	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, cachedImage==nil=%t, cachedSixel==\"\"=%t), isGenerating=%t", 
+		needsGeneration, gsm.needsRedraw, gsm.cachedImage == nil, gsm.cachedSixel == "", gsm.isGenerating)
+	
+	
+	if needsGeneration {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil {
+			debug.Log("GraphvizSectorMap.Draw: Generating new sector map for sector %d", gsm.currentSector)
+			gsm.isGenerating = true  // Mark that we're generating
+			
+			// CRITICAL: Set terminal background to theme background before generation
+			// This prevents the status bar's red background from bleeding through during screen redraws
+			screen.SetStyle(tcell.StyleDefault.Background(defaultColors.Background))
+			
 			// Clear the region before generating new content to prevent artifacts
 			if gsm.sixelLayer != nil {
 				gsm.sixelLayer.ClearRegion(gsm.regionID)
@@ -111,20 +145,36 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 			// Generate new graphviz image
 			g, err := gsm.buildSectorGraph()
 			if err == nil {
+				debug.Log("GraphvizSectorMap.Draw: Graph built successfully, generating image")
 				imageData, err := gsm.generateGraphvizImage(g, width, height)
 				if err == nil {
+					debug.Log("GraphvizSectorMap.Draw: Image generated successfully")
 					gsm.cachedImage = imageData
 					gsm.cachedSixel = "" // Clear sixel cache when image changes
 					gsm.needsRedraw = false
+					gsm.isGenerating = false  // Mark generation complete
+				} else {
+					debug.Log("GraphvizSectorMap.Draw: Error generating image: %v", err)
+					gsm.isGenerating = false
 				}
+			} else {
+				debug.Log("GraphvizSectorMap.Draw: Error building graph: %v", err)
+				gsm.isGenerating = false
 			}
+		} else {
+			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t", 
+				gsm.currentSector, gsm.proxyAPI != nil)
 		}
 	}
 
 	// Register sixel region with the layer if we have cached image
 	if gsm.cachedImage != nil && gsm.sixelLayer != nil {
+		debug.Log("GraphvizSectorMap.Draw: Registering sixel region")
 		gsm.registerSixelRegion(x, y, width, height)
 	} else {
+		debug.Log("GraphvizSectorMap.Draw: Showing status text - cachedImage==nil=%t, sixelLayer!=nil=%t", 
+			gsm.cachedImage == nil, gsm.sixelLayer != nil)
+		
 		// Show status text
 		gsm.drawStatusText(screen, x, y, width, height, "Generating sector map...")
 		// Hide sixel region when not ready
@@ -132,6 +182,8 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 		}
 	}
+	
+	debug.Log("GraphvizSectorMap.Draw: Draw complete")
 }
 
 // registerSixelRegion registers this component's sixel region with the layer
@@ -218,7 +270,20 @@ func (gsm *GraphvizSectorMap) drawCustomBorder(screen tcell.Screen) {
 
 // drawStatusText draws simple status text in the panel
 func (gsm *GraphvizSectorMap) drawStatusText(screen tcell.Screen, x, y, width, height int, text string) {
-	style := tcell.StyleDefault.Foreground(tcell.ColorYellow)
+	// Get theme colors
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	
+	// Fill background with theme's default background color
+	bgStyle := tcell.StyleDefault.Background(defaultColors.Background)
+	for py := y; py < y+height; py++ {
+		for px := x; px < x+width; px++ {
+			screen.SetContent(px, py, ' ', nil, bgStyle)
+		}
+	}
+	
+	// Draw text using theme's waiting color on theme's background
+	style := tcell.StyleDefault.Foreground(defaultColors.Waiting).Background(defaultColors.Background)
 
 	// Center the text
 	startX := x + (width-len(text))/2
@@ -486,9 +551,13 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	}
 	defer gvGraph.Close()
 
+	// Get theme colors for consistent styling
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	
 	// Use neato engine with increased spacing for better layout
 	gvGraph.SetLayout("neato")          // Force-directed layout engine
-	gvGraph.SetBackgroundColor("black") // Black background
+	gvGraph.SetBackgroundColor(gsm.colorToString(defaultColors.Background)) // Use theme's default background
 	gvGraph.SetDPI(150.0)              // Higher DPI for better border rendering
 	
 	// Set default edge color to white for visibility on black background
@@ -559,6 +628,20 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 				}
 				label = fmt.Sprintf("%d\\n(%s)", sector, portType)
 				fillColor = "lightblue"
+			} else if sectorInfo.HasPort {
+				// Sector has port but no traders
+				var portType string
+				if gsm.proxyAPI != nil {
+					if portData, err := gsm.proxyAPI.GetPortInfo(sector); err == nil && portData != nil {
+						portType = portData.ClassType.String() // Show actual port type like "BSB"
+					} else {
+						portType = "PORT" // Port exists but couldn't get details
+					}
+				} else {
+					portType = "PORT" // No API access
+				}
+				label = fmt.Sprintf("%d\\n(%s)", sector, portType)
+				fillColor = "lightgreen"
 			} else {
 				label = fmt.Sprintf("%d", sector)
 				fillColor = "gray"
@@ -796,11 +879,14 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	// Create a panel-sized canvas to center the scaled image
 	panelImg := image.NewRGBA(image.Rect(0, 0, panelPixelWidth, panelPixelHeight))
 	
-	// Fill with black background
-	black := color.RGBA{0, 0, 0, 255}
+	// Get theme colors and fill with theme's default background
+	currentTheme = theme.Current()
+	defaultColors = currentTheme.DefaultColors()
+	r32, g32, b32 := defaultColors.Background.RGB()
+	bgColor := color.RGBA{uint8(r32), uint8(g32), uint8(b32), 255}
 	for y := 0; y < panelPixelHeight; y++ {
 		for x := 0; x < panelPixelWidth; x++ {
-			panelImg.Set(x, y, black)
+			panelImg.Set(x, y, bgColor)
 		}
 	}
 	
@@ -977,5 +1063,10 @@ func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, off
 	}
 }
 
+// colorToString converts tcell.Color to hex string for graphviz
+func (gsm *GraphvizSectorMap) colorToString(color tcell.Color) string {
+	r, g, b := color.RGB()
+	return fmt.Sprintf("#%02x%02x%02x", r, g, b)
+}
 
 // Note: outputSixelImage and outputSixelToTerminal methods removed - now handled in renderSixelInPanel

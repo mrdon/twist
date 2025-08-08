@@ -254,6 +254,41 @@ func (c *SixelCanvas) DrawText(x, y int, text string, color int) {
 		case '9':
 			c.DrawRectangle(charX, y, charWidth-1, charHeight, 0, color)
 			c.DrawLine(charX, y+charHeight/2, charX+charWidth-1, y+charHeight/2, color)
+		case 'S':
+			// Draw 'S' - like '5' but slightly different
+			c.DrawLine(charX, y, charX+charWidth-1, y, color)
+			c.DrawLine(charX, y, charX, y+charHeight/2, color)
+			c.DrawLine(charX, y+charHeight/2, charX+charWidth-1, y+charHeight/2, color)
+			c.DrawLine(charX+charWidth-1, y+charHeight/2, charX+charWidth-1, y+charHeight-1, color)
+			c.DrawLine(charX, y+charHeight-1, charX+charWidth-1, y+charHeight-1, color)
+		case 'B':
+			// Draw 'B' - vertical line with two horizontal segments
+			c.DrawLine(charX, y, charX, y+charHeight-1, color)
+			c.DrawLine(charX, y, charX+charWidth-2, y, color)
+			c.DrawLine(charX, y+charHeight/2, charX+charWidth-2, y+charHeight/2, color)
+			c.DrawLine(charX, y+charHeight-1, charX+charWidth-2, y+charHeight-1, color)
+			c.DrawLine(charX+charWidth-2, y, charX+charWidth-2, y+charHeight/2, color)
+			c.DrawLine(charX+charWidth-2, y+charHeight/2, charX+charWidth-2, y+charHeight-1, color)
+		case '(':
+			// Draw left parenthesis
+			c.DrawLine(charX+2, y, charX+1, y+1, color)
+			c.DrawLine(charX+1, y+1, charX+1, y+charHeight-2, color)
+			c.DrawLine(charX+1, y+charHeight-2, charX+2, y+charHeight-1, color)
+		case ')':
+			// Draw right parenthesis
+			c.DrawLine(charX+1, y, charX+2, y+1, color)
+			c.DrawLine(charX+2, y+1, charX+2, y+charHeight-2, color)
+			c.DrawLine(charX+2, y+charHeight-2, charX+1, y+charHeight-1, color)
+		case 'T':
+			// Draw 'T' for Stardock
+			c.DrawLine(charX, y, charX+charWidth-1, y, color)
+			c.DrawLine(charX+charWidth/2, y, charX+charWidth/2, y+charHeight-1, color)
+		case 'D':
+			// Draw 'D' 
+			c.DrawLine(charX, y, charX, y+charHeight-1, color)
+			c.DrawLine(charX, y, charX+charWidth-2, y, color)
+			c.DrawLine(charX, y+charHeight-1, charX+charWidth-2, y+charHeight-1, color)
+			c.DrawLine(charX+charWidth-2, y, charX+charWidth-2, y+charHeight-1, color)
 		default:
 			// Draw a small rectangle for unknown characters
 			c.DrawRectangle(charX+1, y+2, 2, 4, color, color)

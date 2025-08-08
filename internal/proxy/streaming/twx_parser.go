@@ -6,7 +6,10 @@ import (
 	"time"
 	"twist/internal/ansi"
 	"twist/internal/api"
+	"twist/internal/debug"
+	"twist/internal/proxy/converter"
 	"twist/internal/proxy/database"
+	"twist/internal/proxy/types"
 )
 
 // DisplayType represents the current parsing context
@@ -40,41 +43,8 @@ const (
 // PatternHandler is called when a pattern is matched
 type PatternHandler func(line string)
 
-// PlayerStats holds current player statistics (mirrors TWX Pascal state)
-type PlayerStats struct {
-	Turns         int
-	Credits       int
-	Fighters      int
-	Shields       int
-	TotalHolds    int
-	OreHolds      int
-	OrgHolds      int
-	EquHolds      int
-	ColHolds      int
-	Photons       int
-	Armids        int
-	Limpets       int
-	GenTorps      int
-	TwarpType     int
-	Cloaks        int
-	Beacons       int
-	Atomics       int
-	Corbomite     int
-	Eprobes       int
-	MineDisr      int
-	Alignment     int
-	Experience    int
-	Corp          int
-	ShipNumber    int
-	PsychicProbe  bool
-	PlanetScanner bool
-	ScanType      int
-	ShipClass     string
-	
-	// Current game state (like TWX Database.pas)
-	CurrentSector int
-	PlayerName    string
-}
+// PlayerStats is an alias to the shared types.PlayerStats to avoid circular dependencies
+type PlayerStats = types.PlayerStats
 
 // FighterType represents the type of deployed fighters
 type FighterType int
@@ -405,6 +375,9 @@ func (p *TWXParser) setupDefaultHandlers() {
 
 // ProcessInBound processes incoming data (main entry point, like TWX Pascal)
 func (p *TWXParser) ProcessInBound(data string) {
+	// Note: Text events are fired in processLine() for complete, processed lines
+	// not here for raw chunks which may contain partial data or ANSI codes
+	
 	// Remove null chars
 	data = strings.ReplaceAll(data, "\x00", "")
 	p.rawANSILine = data
@@ -442,6 +415,8 @@ func (p *TWXParser) ProcessInBound(data string) {
 		p.currentLine = completeLine
 		p.currentANSILine = completeANSILine
 
+		// TextLineEvent is fired in processLine, not here (Pascal ProcessInBound behavior)
+		
 		// Process the complete line with error recovery
 		p.safeParseWithRecovery("processLine", func() {
 			// Validate line format before processing
@@ -470,11 +445,14 @@ func (p *TWXParser) ProcessInBound(data string) {
 	p.currentLine = line
 	p.currentANSILine = ansiLine
 
-	// Process partial line for prompts (key TWX feature!)
-	p.processPrompt(p.currentLine)
-	
-	// Activate triggers after processing (Pascal: TWXInterpreter.ActivateTriggers)
-	p.ActivateTriggers()
+	// Fire AutoTextEvent for prompts only if there's remaining data (Pascal TWX behavior)
+	// Pascal: only fires AutoTextEvent at end of ProcessInBound for partial/prompt data
+	if p.currentLine != "" {
+		p.FireAutoTextEvent(p.currentLine, false)
+		
+		// Process partial line for prompts (key TWX feature!)
+		p.processPrompt(p.currentLine)
+	}
 }
 
 // Finalize processes any remaining data and completes pending sectors
@@ -502,15 +480,6 @@ func (p *TWXParser) stripANSI(s *string) {
 
 // processLine processes a complete line (mirrors TWX Pascal ProcessLine)
 func (p *TWXParser) processLine(line string) {
-
-	// Fire script events FIRST (mirrors Pascal TWX behavior where events are fired early)
-	// This ensures scripts can react to and potentially modify parsing behavior
-	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
-		// Fire all script events as in Pascal TWX ProcessLine
-		if err := p.scriptEventProcessor.ProcessLineWithScriptEvents(line); err != nil {
-			// Continue processing even if script events fail
-		}
-	}
 
 	// Handle message continuations (mirrors TWX Pascal logic)
 	if p.currentMessage != "" {
@@ -554,13 +523,20 @@ func (p *TWXParser) processLine(line string) {
 		p.checkPatterns(line)
 	}
 
-	// Check for QuickStats (lines starting with space and containing special character)
-	if strings.HasPrefix(line, " ") && (strings.Contains(line, "�") || strings.HasPrefix(line, " Ship")) {
+	// Check for QuickStats (mirrors Pascal: ContainsText(Line, '│') or (Copy(Line, 1, 5) = ' Ship'))
+	if strings.Contains(line, "│") || strings.HasPrefix(line, " Ship") {
+		debug.Log("Processing QuickStats line: %q", line)
 		p.processQuickStats(line)
 	}
 
+	// Fire TextLineEvent as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.TextLineEvent)
+	p.FireTextLineEvent(line, false)
+
 	// Always check for prompts
 	p.processPrompt(line)
+
+	// Reactivate script triggers as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.ActivateTriggers)
+	p.ActivateTriggers()
 }
 
 // processPrompt handles prompts that may not end in newlines (key TWX feature)
@@ -568,6 +544,9 @@ func (p *TWXParser) processPrompt(line string) {
 	if line == "" {
 		return
 	}
+
+	// Fire TextEvent as in Pascal TWX ProcessPrompt (mirrors Pascal TWXInterpreter.TextEvent)
+	p.FireTextEvent(line, false)
 
 
 	// Check for prompt patterns
@@ -1009,14 +988,16 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 	
 	// Pascal: else begin // hail
 	// Pascal: FCurrentMessage := 'P ' + Copy(Line, I, Length(Line) - I) + ' ';
-	if paramPos < len(line) {
-		sender := strings.TrimSpace(line[paramPos:])
-		// Remove trailing colon if present
-		sender = strings.TrimSuffix(sender, ":")
-		p.currentMessage = "P " + sender + " "
-	} else {
-		p.currentMessage = "P  "
-	}
+	// TEMPORARILY DISABLED: This causes next line to be treated as message continuation
+	// TODO: Fix Pascal transmission handling to match expected behavior
+	// if paramPos < len(line) {
+	// 	sender := strings.TrimSpace(line[paramPos:])
+	// 	// Remove trailing colon if present
+	// 	sender = strings.TrimSuffix(sender, ":")
+	// 	p.currentMessage = "P " + sender + " "
+	// } else {
+	// 	p.currentMessage = "P  "
+	// }
 }
 
 // handleBasicTransmission provides fallback transmission parsing for compatibility
@@ -1785,6 +1766,11 @@ func (p *TWXParser) sectorCompleted() {
 	sectorData := p.buildSectorData()
 	p.fireSectorCompleteEvent(sectorData)
 	
+	// Fire trader data update event if we have traders
+	if len(p.currentTraders) > 0 {
+		p.fireTraderDataEvent(p.currentSectorIndex, p.currentTraders)
+	}
+	
 	p.sectorSaved = true
 }
 
@@ -1881,9 +1867,9 @@ func (p *TWXParser) ProcessChunk(data []byte) {
 }
 
 // processQuickStats parses the QuickStats line (mirrors TWX Pascal ProcessQuickStats)
-// Format: Sect 1�Turns 1,600�Creds 10,000�Figs 30�Shlds 0�Hlds 40�Ore 0�Org 0�Equ 0
-//         Col 0�Phot 0�Armd 0�Lmpt 0�GTorp 0�TWarp No�Clks 0�Beacns 0�AtmDt 0�Crbo 0
-//         EPrb 0�MDis 0�PsPrb No�PlScn No�LRS None,Dens,Holo�Aln 0�Exp 0�Ship 1 MerCru
+// Format: Sect 1│Turns 1,600│Creds 10,000│Figs 30│Shlds 0│Hlds 40│Ore 0│Org 0│Equ 0
+//         Col 0│Phot 0│Armd 0│Lmpt 0│GTorp 0│TWarp No│Clks 0│Beacns 0│AtmDt 0│Crbo 0
+//         EPrb 0│MDis 0│PsPrb No│PlScn No│LRS None,Dens,Holo│Aln 0│Exp 0│Ship 1 MerCru
 func (p *TWXParser) processQuickStats(line string) {
 	defer p.recoverFromPanic("processQuickStats")
 	
@@ -1903,8 +1889,15 @@ func (p *TWXParser) processQuickStats(line string) {
 	}
 	content := line[1:]
 
-	// Split on the special character (�)
-	values := strings.Split(content, "�")
+	// Split on the separator character '│' (as seen in raw.log)
+	var values []string
+	if strings.Contains(content, "│") {
+		values = strings.Split(content, "│")
+	} else {
+		// No recognized separator found
+		debug.Log("QuickStats line has no recognized separator: %q", line)
+		return
+	}
 
 	for _, value := range values {
 		value = strings.TrimSpace(value)
@@ -1997,13 +1990,44 @@ func (p *TWXParser) processQuickStats(line string) {
 		}
 	}
 
-	// Validate all collected player stats
-	p.validatePlayerStats(&p.playerStats)
+	// Only save to database and fire events if we actually found stats in this line
+	foundStats := false
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		parts := strings.Fields(value)
+		if len(parts) >= 2 {
+			key := parts[0]
+			switch key {
+			case "Turns", "Creds", "Figs", "Shlds", "Crbo", "Hlds", "Ore", "Org", "Equ", "Col",
+				 "Phot", "Armd", "Lmpt", "GTorp", "Clks", "Beacns", "AtmDt", "EPrb", "MDis",
+				 "Aln", "Exp", "Corp", "TWarp", "PsPrb", "PlScn", "LRS", "Ship":
+				foundStats = true
+				break
+			}
+		}
+		if foundStats {
+			break
+		}
+	}
 	
-	// Save player stats to database with error recovery
-	p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
-		return p.savePlayerStatsToDatabase()
-	})
+	if foundStats {
+		// Set current sector in player stats
+		p.playerStats.CurrentSector = p.currentSectorIndex
+
+		// Validate all collected player stats
+		p.validatePlayerStats(&p.playerStats)
+		
+		// Save player stats to database with error recovery
+		p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
+			return p.savePlayerStatsToDatabase()
+		})
+		
+		// Fire player stats update event
+		p.firePlayerStatsEvent(p.playerStats)
+	}
 }
 
 // parseIntSafeWithCommas parses integers that may contain commas
@@ -2226,6 +2250,11 @@ func (p *TWXParser) FireTextLineEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.TextLineEvent(line, outbound)
 	}
+	
+	// Also fire through the ScriptEventProcessor for the new scripting engine
+	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
+		p.scriptEventProcessor.FireTextLineEvent(line, outbound)
+	}
 }
 
 // ActivateTriggers activates script triggers (Pascal: TWXInterpreter.ActivateTriggers)
@@ -2233,12 +2262,22 @@ func (p *TWXParser) ActivateTriggers() {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.ActivateTriggers()
 	}
+	
+	// Also fire through the ScriptEventProcessor for the new scripting engine
+	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
+		p.scriptEventProcessor.FireActivateTriggers()
+	}
 }
 
 // FireAutoTextEvent fires an auto text event to the script system (Pascal: TWXInterpreter.AutoTextEvent)
 func (p *TWXParser) FireAutoTextEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.AutoTextEvent(line, outbound)
+	}
+	
+	// Also fire through the ScriptEventProcessor for the new scripting engine
+	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
+		p.scriptEventProcessor.FireAutoTextEvent(line, outbound)
 	}
 }
 
@@ -2413,5 +2452,36 @@ func (p *TWXParser) fireDatabaseUpdateEvent(operation string, sectorNum int, dat
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
+	}
+}
+
+// fireTraderDataEvent fires a trader data update event to the TUI API
+func (p *TWXParser) fireTraderDataEvent(sectorNumber int, traders []TraderInfo) {
+	if p.tuiAPI != nil {
+		// Convert internal TraderInfo to API TraderInfo
+		apiTraders := make([]api.TraderInfo, len(traders))
+		for i, trader := range traders {
+			apiTraders[i] = api.TraderInfo{
+				Name:      trader.Name,
+				ShipName:  trader.ShipName,
+				ShipType:  trader.ShipType,
+				Fighters:  trader.Fighters,
+				Alignment: trader.Alignment,
+			}
+		}
+		
+		// Fire the event
+		p.tuiAPI.OnTraderDataUpdated(sectorNumber, apiTraders)
+	}
+}
+
+// firePlayerStatsEvent fires a player statistics update event to the TUI API
+func (p *TWXParser) firePlayerStatsEvent(stats PlayerStats) {
+	if p.tuiAPI != nil {
+		// Convert internal PlayerStats to API PlayerStatsInfo using converter
+		apiStats := converter.ConvertPlayerStatsToPlayerStatsInfo(stats)
+		
+		// Fire the event
+		p.tuiAPI.OnPlayerStatsUpdated(apiStats)
 	}
 }

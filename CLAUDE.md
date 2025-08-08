@@ -24,3 +24,8 @@ Lexer Development (golex):
 * Only modify the .l lexer definition file (game_lexer.l) and regenerate using golex
 * Use `~/go/bin/golex -o game_lexer_generated.go game_lexer.l` to regenerate lexer code
 * Debug lexer issues by modifying the .l file patterns and regenerating, not by editing generated code
+
+Source of truth:
+* The source of truth for the proxy is in twx-src. See docs/twx-arch.md for how that is structured
+* Our proxy is aiming for 100% compatability with TWX, so treat any algorithms or patterns in twx as the source of truth
+* We don't care about backwards compatability or proxy features that conflict with TWX compatability

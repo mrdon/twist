@@ -108,25 +108,22 @@ func (sep *ScriptEventProcessor) ProcessLineWithScriptEvents(line string) error 
 		return nil
 	}
 	
-	// Fire all events as in Pascal TWX (mirrors ProcessLine in Process.pas)
+	// For complete lines, fire TextLineEvent, TextEvent (in processPrompt), and ActivateTriggers
+	// Pascal TWX: ProcessLine -> TextLineEvent -> ProcessPrompt -> TextEvent -> ActivateTriggers
+	// AutoTextEvent is NOT fired for complete lines, only for prompts
 	
-	// 1. TextEvent for the complete line
-	if err := sep.FireTextEvent(line, false); err != nil {
-		return err
-	}
-	
-	// 2. TextLineEvent for line-specific processing
+	// Fire TextLineEvent (mirrors Pascal ProcessLine)
 	if err := sep.FireTextLineEvent(line, false); err != nil {
 		return err
 	}
 	
-	// 3. ActivateTriggers to process any pending triggers
-	if err := sep.FireActivateTriggers(); err != nil {
+	// Fire TextEvent (mirrors Pascal ProcessPrompt)
+	if err := sep.FireTextEvent(line, false); err != nil {
 		return err
 	}
 	
-	// 4. AutoTextEvent for automatic text processing
-	if err := sep.FireAutoTextEvent(line, false); err != nil {
+	// Activate triggers (mirrors Pascal ProcessLine end)
+	if err := sep.FireActivateTriggers(); err != nil {
 		return err
 	}
 	

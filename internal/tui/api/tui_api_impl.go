@@ -2,6 +2,7 @@ package api
 
 import (
 	coreapi "twist/internal/api"
+	"twist/internal/debug"
 )
 
 // Forward declaration - will be defined when we update app.go
@@ -14,6 +15,8 @@ type TwistApp interface {
 	HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo)
 	HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo)
 	HandlePortUpdated(portInfo coreapi.PortInfo)
+	HandleTraderDataUpdated(sectorNumber int, traders []coreapi.TraderInfo)
+	HandlePlayerStatsUpdated(stats coreapi.PlayerStatsInfo)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -49,6 +52,7 @@ func (tui *TuiApiImpl) OnConnectionError(err error) {
 
 func (tui *TuiApiImpl) OnData(data []byte) {
 	// Log raw data chunks for debugging
+	debug.LogDataChunk("OnData", data)
 	
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))
@@ -84,6 +88,16 @@ func (tui *TuiApiImpl) OnCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 // Port update event handler - detailed port information updates
 func (tui *TuiApiImpl) OnPortUpdated(portInfo coreapi.PortInfo) {
 	go tui.app.HandlePortUpdated(portInfo)
+}
+
+// Trader data event handler - called when trader information is captured
+func (tui *TuiApiImpl) OnTraderDataUpdated(sectorNumber int, traders []coreapi.TraderInfo) {
+	go tui.app.HandleTraderDataUpdated(sectorNumber, traders)
+}
+
+// Player statistics event handler - called when player stats are updated
+func (tui *TuiApiImpl) OnPlayerStatsUpdated(stats coreapi.PlayerStatsInfo) {
+	go tui.app.HandlePlayerStatsUpdated(stats)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

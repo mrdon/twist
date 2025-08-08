@@ -123,6 +123,9 @@ type ProxyAPI interface {
 	
 	// Port Information (Phase 2)
 	GetPortInfo(sectorNum int) (*PortInfo, error)
+	
+	// Player Statistics
+	GetPlayerStats() (*PlayerStatsInfo, error)
 }
 
 // TuiAPI defines notifications from Proxy to TUI
@@ -147,6 +150,10 @@ type TuiAPI interface {
 	
 	// Game State Events (Phase 4.3 - MINIMAL)
 	OnCurrentSectorChanged(sectorInfo SectorInfo) // Sector change callback with full sector information
+	
+	// Trader and Player Info Events - called when trader data or player stats are updated
+	OnTraderDataUpdated(sectorNumber int, traders []TraderInfo) // Trader information captured from sector display
+	OnPlayerStatsUpdated(stats PlayerStatsInfo) // Player statistics updated from QuickStats or inventory commands
 }
 
 // ConnectionStatus represents the current connection state
@@ -202,5 +209,48 @@ type DatabaseStateInfo struct {
 	ServerPort   string `json:"server_port"`    // Server port (e.g., "23")
 	DatabaseName string `json:"database_name"`  // Database filename
 	IsLoaded     bool   `json:"is_loaded"`      // true when database is loaded, false when unloaded
+}
+
+// TraderInfo represents trader information for TUI API
+type TraderInfo struct {
+	Name      string `json:"name"`       // Trader name
+	ShipName  string `json:"ship_name"`  // Ship name (e.g., "USS Enterprise")
+	ShipType  string `json:"ship_type"`  // Ship type (e.g., "Imperial StarShip")
+	Fighters  int    `json:"fighters"`   // Number of fighters
+	Alignment string `json:"alignment"`  // Alignment (Good, Evil, Neutral, etc.)
+}
+
+// PlayerStatsInfo represents current player statistics for TUI API
+type PlayerStatsInfo struct {
+	Turns         int    `json:"turns"`          // Turns remaining
+	Credits       int    `json:"credits"`        // Credits
+	Fighters      int    `json:"fighters"`       // Fighters
+	Shields       int    `json:"shields"`        // Shield strength
+	TotalHolds    int    `json:"total_holds"`    // Total cargo holds
+	OreHolds      int    `json:"ore_holds"`      // Ore holds
+	OrgHolds      int    `json:"org_holds"`      // Organics holds
+	EquHolds      int    `json:"equ_holds"`      // Equipment holds
+	ColHolds      int    `json:"col_holds"`      // Colonists holds
+	Photons       int    `json:"photons"`        // Photon torpedoes
+	Armids        int    `json:"armids"`         // Armid mines
+	Limpets       int    `json:"limpets"`        // Limpet mines
+	GenTorps      int    `json:"gen_torps"`      // Genesis torpedoes
+	TwarpType     int    `json:"twarp_type"`     // TransWarp type
+	Cloaks        int    `json:"cloaks"`         // Cloaking devices
+	Beacons       int    `json:"beacons"`        // Beacons
+	Atomics       int    `json:"atomics"`        // Atomic detonators
+	Corbomite     int    `json:"corbomite"`      // Corbomite devices
+	Eprobes       int    `json:"eprobes"`        // Ether probes
+	MineDisr      int    `json:"mine_disr"`      // Mine disruptors
+	Alignment     int    `json:"alignment"`      // Alignment value
+	Experience    int    `json:"experience"`     // Experience points
+	Corp          int    `json:"corp"`           // Corporation number
+	ShipNumber    int    `json:"ship_number"`    // Ship number
+	ShipClass     string `json:"ship_class"`     // Ship class (e.g., "MerCru")
+	PsychicProbe  bool   `json:"psychic_probe"`  // Has psychic probe
+	PlanetScanner bool   `json:"planet_scanner"` // Has planet scanner
+	ScanType      int    `json:"scan_type"`      // Long range scanner type
+	CurrentSector int    `json:"current_sector"` // Current sector number
+	PlayerName    string `json:"player_name"`    // Player name
 }
 

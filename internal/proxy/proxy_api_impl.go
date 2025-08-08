@@ -319,3 +319,27 @@ func (p *ProxyApiImpl) GetPortInfo(sectorNum int) (*api.PortInfo, error) {
 	return portInfo, nil
 }
 
+
+func (p *ProxyApiImpl) GetPlayerStats() (*api.PlayerStatsInfo, error) {
+	if p.proxy == nil {
+		return nil, errors.New("not connected")
+	}
+	
+	// Get database from proxy - this is the single source of truth
+	database := p.proxy.GetDatabase()
+	if database == nil {
+		return nil, errors.New("database not available")
+	}
+	
+	// Load player stats from database
+	playerStats, err := database.LoadPlayerStats()
+	if err != nil {
+		return nil, err
+	}
+	
+	// Convert TPlayerStats to API format using converter
+	apiStats := converter.ConvertTPlayerStatsToPlayerStatsInfo(playerStats)
+	
+	return &apiStats, nil
+}
+

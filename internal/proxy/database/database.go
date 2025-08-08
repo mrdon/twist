@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"twist/internal/debug"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -527,6 +528,8 @@ func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
 
 // SavePlayerStats saves current player statistics to database
 func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
+	debug.Log("SavePlayerStats: saving stats - credits: %d, turns: %d, sector: %d", 
+		stats.Credits, stats.Turns, stats.CurrentSector)
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}

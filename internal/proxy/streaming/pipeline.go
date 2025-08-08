@@ -346,6 +346,11 @@ func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {
 	return p.bytesProcessed, p.batchesProcessed
 }
 
+// GetParser returns the TWX parser instance
+func (p *Pipeline) GetParser() *TWXParser {
+	return p.twxParser
+}
+
 // escapeANSI converts ANSI escape sequences to readable text
 func escapeANSI(data []byte) string {
 	str := string(data)

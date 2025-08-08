@@ -3,6 +3,7 @@ package streaming
 import (
 	"fmt"
 	"twist/internal/api"
+	"twist/internal/debug"
 )
 
 // database_integration.go - Clean database integration points
@@ -78,10 +79,9 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	
 	
 	// Update current sector in player stats (like TWX Database.pas)
+	// NOTE: We don't save player stats here because it would overwrite QuickStats data with zeros
+	// Current sector is updated when QuickStats is parsed
 	p.playerStats.CurrentSector = p.currentSectorIndex
-	if err := p.savePlayerStatsToDatabase(); err != nil {
-	} else {
-	}
 	
 	// Notify TUI API if available
 	if p.tuiAPI != nil {
@@ -94,9 +94,15 @@ func (p *TWXParser) saveSectorToDatabase() error {
 
 // savePlayerStatsToDatabase saves current player stats to database
 func (p *TWXParser) savePlayerStatsToDatabase() error {
+	debug.Log("savePlayerStatsToDatabase: p.playerStats - credits: %d, turns: %d, sector: %d", 
+		p.playerStats.Credits, p.playerStats.Turns, p.playerStats.CurrentSector)
+	
 	// Convert to database format using converter
 	converter := NewPlayerStatsConverter()
 	dbStats := converter.ToDatabase(p.playerStats)
+	
+	debug.Log("savePlayerStatsToDatabase: after conversion - credits: %d, turns: %d, sector: %d", 
+		dbStats.Credits, dbStats.Turns, dbStats.CurrentSector)
 	
 	// Save to database
 	if err := p.database.SavePlayerStats(dbStats); err != nil {

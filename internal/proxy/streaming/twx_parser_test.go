@@ -233,9 +233,10 @@ func TestTWXParser_IntegerParsing(t *testing.T) {
 func TestTWXParser_QuickStats(t *testing.T) {
 	parser := NewTestTWXParser()
 	
-	// Test QuickStats parsing
-	quickStatsLine := " Turns 150�Creds 10,000�Figs 500�Shlds 100�Ship 1 Merchant"
-	parser.processQuickStats(quickStatsLine)
+	// Test QuickStats parsing using the complete TWX behavior
+	// This should trigger QuickStats detection and processing
+	quickStatsLine := " Turns 150│Creds 10,000│Figs 500│Shlds 100│Ship 1 Merchant"
+	parser.processLine(quickStatsLine)
 	
 	stats := parser.GetPlayerStats()
 	
@@ -435,13 +436,115 @@ func TestTWXParser_DensityScanning(t *testing.T) {
 	})
 }
 
+func TestTWXParser_QuickStatsRegressionTest(t *testing.T) {
+	// Regression test for QuickStats parsing - ensures we correctly detect the │ character
+	// and parse real QuickStats data from the game without false positives
+	
+	t.Run("RealQuickStatsFromRawLog", func(t *testing.T) {
+		parser := NewTestTWXParser()
+		
+		// Process all three real QuickStats lines from raw.log in sequence
+		parser.processLine(" Sect 2│Turns 25,000│Creds 627,991│Figs 20│Shlds 0│Hlds 75│Ore 0│Org 0│Equ 75  ")
+		parser.processLine(" Col 0│Phot 0│Armd 0│Lmpt 0│GTorp 0│TWarp No│Clks 0│Beacns 0│AtmDt 0│Crbo 0    ")
+		parser.processLine(" EPrb 0│MDis 0│PsPrb No│PlScn No│LRS None│Aln 250│Exp 59│Ship 22 MerCru        ")
+		
+		stats := parser.GetPlayerStats()
+		
+		// Verify key stats from first line
+		if stats.Turns != 25000 {
+			t.Errorf("Expected turns 25000, got %d", stats.Turns)
+		}
+		if stats.Credits != 627991 {
+			t.Errorf("Expected credits 627991, got %d", stats.Credits)
+		}
+		if stats.Fighters != 20 {
+			t.Errorf("Expected fighters 20, got %d", stats.Fighters)
+		}
+		if stats.TotalHolds != 75 {
+			t.Errorf("Expected total holds 75, got %d", stats.TotalHolds)
+		}
+		if stats.EquHolds != 75 {
+			t.Errorf("Expected equ holds 75, got %d", stats.EquHolds)
+		}
+		
+		// Verify stats from second line
+		if stats.ColHolds != 0 {
+			t.Errorf("Expected col holds 0, got %d", stats.ColHolds)
+		}
+		if stats.Photons != 0 {
+			t.Errorf("Expected photons 0, got %d", stats.Photons)
+		}
+		if stats.TwarpType != 0 { // TWarp No = 0
+			t.Errorf("Expected twarp type 0 (No), got %d", stats.TwarpType)
+		}
+		
+		// Verify stats from third line  
+		if stats.Alignment != 250 {
+			t.Errorf("Expected alignment 250, got %d", stats.Alignment)
+		}
+		if stats.Experience != 59 {
+			t.Errorf("Expected experience 59, got %d", stats.Experience)
+		}
+		if stats.ShipNumber != 22 {
+			t.Errorf("Expected ship number 22, got %d", stats.ShipNumber)
+		}
+		if stats.ShipClass != "MerCru" {
+			t.Errorf("Expected ship class MerCru, got %s", stats.ShipClass)
+		}
+		if stats.PsychicProbe != false { // PsPrb No = false
+			t.Errorf("Expected psychic probe false, got %v", stats.PsychicProbe)
+		}
+		if stats.PlanetScanner != false { // PlScn No = false
+			t.Errorf("Expected planet scanner false, got %v", stats.PlanetScanner)
+		}
+	})
+	
+	t.Run("NoFalsePositivesFromLoadingBars", func(t *testing.T) {
+		parser := NewTestTWXParser()
+		
+		// These lines contain │ but are just loading bars, not QuickStats
+		loadingBars := []string{
+			"│                    │",
+			"│█████               │", 
+			"│██████████          │",
+			"│███████████████     │",
+		}
+		
+		// Process all loading bar lines
+		for _, line := range loadingBars {
+			parser.processLine(line)
+		}
+		
+		// Stats should remain at zero/default values since these aren't real QuickStats
+		stats := parser.GetPlayerStats()
+		if stats.Turns != 0 || stats.Credits != 0 || stats.Fighters != 0 {
+			t.Errorf("Loading bars should not update player stats, but got: Turns=%d, Credits=%d, Fighters=%d", 
+				stats.Turns, stats.Credits, stats.Fighters)
+		}
+	})
+	
+	t.Run("QuickStatsCharacterDetection", func(t *testing.T) {
+		parser := NewTestTWXParser()
+		
+		// Test that the detection logic works - lines with │ should trigger QuickStats processing
+		// (even if they don't contain valid stat data)
+		testLine := " │ Login Menu     │"
+		
+		parser.processLine(testLine)
+		
+		// This line should have triggered QuickStats processing but not updated any meaningful stats
+		// (it would go through processQuickStats but find no recognized stat names)
+		// We can't easily test this without exposing internal state, so we just ensure it doesn't crash
+	})
+}
+
 func TestTWXParser_CompleteGameSession(t *testing.T) {
 	parser := NewTestTWXParser()
 	
 	// Simulate a complete game session with various data types
 	gameSession := []string{
 		"Command [TL=150] (2500) ?",
-		" Turns 150�Creds 10,000�Figs 500�Shlds 100�Ship 1 Merchant",
+		" Turns 150│Creds 10,000│Figs 500│Shlds 100│Ship 1 Merchant",
 		"Sector  : 1 in The Sphere",
 		"Beacon  : FedSpace, FedLaw Enforced", 
 		"Ports   : Stargate Alpha I, Class 9 Port (SSSx3)",

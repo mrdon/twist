@@ -54,7 +54,7 @@ func TestDatabaseIntegrationEndToEnd(t *testing.T) {
 	
 	t.Run("PlayerStatsIntegration", func(t *testing.T) {
 		// Test player stats being saved to database  
-		quickStats := " Turns 150�Creds 10,000�Figs 500�Shlds 100�Ship 1 Merchant"
+		quickStats := " Turns 150│Creds 10,000│Figs 500│Shlds 100│Ship 1 Merchant"
 		parser.processQuickStats(quickStats)
 		
 		// Verify stats were saved to database

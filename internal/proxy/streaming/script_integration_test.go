@@ -23,6 +23,7 @@ func NewMockScriptEngine() *MockScriptEngine {
 }
 
 func (m *MockScriptEngine) ProcessText(text string) error {
+	println("ProcessText:", text)
 	m.textEvents = append(m.textEvents, text)
 	return nil
 }
@@ -152,8 +153,9 @@ func TestScriptEventProcessor_ProcessLineWithScriptEvents(t *testing.T) {
 		t.Errorf("Expected 1 text line event, got %d", len(mockEngine.textLineEvents))
 	}
 	
-	if len(mockEngine.autoTextEvents) != 1 {
-		t.Errorf("Expected 1 auto text event, got %d", len(mockEngine.autoTextEvents))
+	// Pascal TWX: AutoTextEvent is only fired for prompts, not complete lines
+	if len(mockEngine.autoTextEvents) != 0 {
+		t.Errorf("Expected 0 auto text events for complete line (Pascal behavior), got %d", len(mockEngine.autoTextEvents))
 	}
 	
 	if mockEngine.triggersCalled != 1 {
@@ -169,9 +171,7 @@ func TestScriptEventProcessor_ProcessLineWithScriptEvents(t *testing.T) {
 		t.Errorf("TextLineEvent received wrong line: expected '%s', got '%s'", testLine, mockEngine.textLineEvents[0])
 	}
 	
-	if mockEngine.autoTextEvents[0] != testLine {
-		t.Errorf("AutoTextEvent received wrong line: expected '%s', got '%s'", testLine, mockEngine.autoTextEvents[0])
-	}
+	// No AutoTextEvent content check since there should be 0 events for complete lines
 }
 
 func TestScriptEventProcessor_DisabledEngine(t *testing.T) {
@@ -327,8 +327,10 @@ func TestTWXParser_PascalIntegrationBehavior(t *testing.T) {
 		t.Errorf("Expected %d text line events, got %d", len(testLines), len(mockEngine.textLineEvents))
 	}
 	
-	if len(mockEngine.autoTextEvents) != len(testLines) {
-		t.Errorf("Expected %d auto text events, got %d", len(testLines), len(mockEngine.autoTextEvents))
+	// Pascal TWX: AutoTextEvent is only fired for prompts (partial lines), not complete lines
+	// Since we're processing complete lines (with \r), AutoTextEvent should NOT be fired
+	if len(mockEngine.autoTextEvents) != 0 {
+		t.Errorf("Expected 0 auto text events for complete lines (Pascal behavior), got %d", len(mockEngine.autoTextEvents))
 	}
 	
 	if mockEngine.triggersCalled != len(testLines) {

@@ -89,7 +89,7 @@ func TestErrorRecovery(t *testing.T) {
 
 	t.Run("PlayerStatsValidation", func(t *testing.T) {
 		// Test player stats validation with extreme values
-		extremeStats := " Turns -1000�Creds -5000000�Figs -999999�Shlds -50�Hlds -10�Ore -5"
+		extremeStats := " Turns -1000│Creds -5000000│Figs -999999│Shlds -50│Hlds -10│Ore -5"
 		parser.ProcessString(extremeStats + "\r")
 
 		// All negative values should be corrected to 0 or reasonable values

@@ -158,7 +158,7 @@ func (ta *TwistApp) setupUILayout() {
 		// Left panel: 20 chars, Terminal: fixed 80 chars, Right panel: remaining space
 		ta.mainGrid = tview.NewGrid().
 			SetRows(1, 0, 1).
-			SetColumns(20, 80, 0).
+			SetColumns(30, 80, 0).
 			SetBorders(false)
 		
 		ta.mainGrid.SetBackgroundColor(defaultColors.Background)
@@ -236,7 +236,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 			}
 			
 			// Calculate panel widths based on progress
-			leftPanelWidth := int(20.0 * progress)
+			leftPanelWidth := int(30.0 * progress)
 			terminalWidth := 80
 			// Right panel uses remaining space (0 means use remaining space in tview grid)
 			
@@ -566,6 +566,26 @@ func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
 	})
 }
 
+// HandleTraderDataUpdated processes trader information update events
+func (ta *TwistApp) HandleTraderDataUpdated(sectorNumber int, traders []coreapi.TraderInfo) {
+	ta.app.QueueUpdateDraw(func() {
+		// Update trader panel with new trader data
+		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			ta.panelComponent.UpdateTraderData(sectorNumber, traders)
+		}
+	})
+}
+
+// HandlePlayerStatsUpdated processes player statistics update events  
+func (ta *TwistApp) HandlePlayerStatsUpdated(stats coreapi.PlayerStatsInfo) {
+	ta.app.QueueUpdateDraw(func() {
+		// Update trader panel with current player stats (for display context)
+		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			ta.panelComponent.UpdatePlayerStats(stats)
+		}
+	})
+}
+
 // refreshPanelDataWithInfo refreshes panel data using provided sector info
 func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
 	
@@ -577,12 +597,10 @@ func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
 	// Update panels directly with the provided sector info
 	ta.panelComponent.UpdateSectorInfo(sectorInfo)
 	
-	// Create player info with the current sector
-	playerInfo := coreapi.PlayerInfo{
-		Name:          "Player", // We don't have the real name from GetPlayerInfo
-		CurrentSector: sectorInfo.Number,
-	}
-	ta.panelComponent.UpdateTraderInfo(playerInfo)
+	// Always attempt to load/update player stats when sector changes
+	debug.Log("refreshPanelDataWithInfo: sector %d, hasDetailedStats: %v", sectorInfo.Number, ta.panelComponent.HasDetailedPlayerStats())
+	debug.Log("refreshPanelDataWithInfo: always calling UpdatePlayerStatsSector")
+	ta.panelComponent.UpdatePlayerStatsSector(sectorInfo.Number)
 }
 
 // refreshPanelData refreshes panel data using API calls

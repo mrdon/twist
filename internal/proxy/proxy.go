@@ -347,6 +347,14 @@ func (p *Proxy) GetDatabase() database.Database {
 	return p.db
 }
 
+// GetParser returns the TWX parser for accessing live game state
+func (p *Proxy) GetParser() *streaming.TWXParser {
+	if p.pipeline == nil {
+		return nil
+	}
+	return p.pipeline.GetParser()
+}
+
 // GetSector returns sector data using database LoadSector method
 func (p *Proxy) GetSector(sectorNum int) (database.TSector, error) {
 	return p.db.LoadSector(sectorNum)

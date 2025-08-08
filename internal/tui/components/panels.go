@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
+	"twist/internal/debug"
 	"twist/internal/theme"
 	
 	"github.com/rivo/tview"
@@ -21,6 +22,7 @@ type PanelComponent struct {
 	proxyAPI     api.ProxyAPI             // API access for game data
 	sixelLayer   *SixelLayer              // Sixel rendering layer
 	lastContentHeight int                 // Track last calculated content height
+	lastPlayerStats   *api.PlayerStatsInfo // Store last received player stats
 }
 
 // NewPanelComponent creates new panel components
@@ -146,13 +148,22 @@ func (pc *PanelComponent) LoadRealData() {
 	sectorInfo, err := pc.proxyAPI.GetSectorInfo(playerInfo.CurrentSector)
 	if err != nil {
 		// Show player info even if sector info fails
-		pc.UpdateTraderInfo(playerInfo)
+		if pc.lastPlayerStats != nil {
+			pc.UpdatePlayerStats(*pc.lastPlayerStats)
+		} else {
+			pc.UpdateTraderInfo(playerInfo)
+		}
 		return
 	}
 	
 	
 	// Update displays with real data
-	pc.UpdateTraderInfo(playerInfo)
+	// Use detailed player stats if available, otherwise fall back to basic player info
+	if pc.lastPlayerStats != nil {
+		pc.UpdatePlayerStats(*pc.lastPlayerStats)
+	} else {
+		pc.UpdateTraderInfo(playerInfo)
+	}
 	pc.UpdateSectorInfo(sectorInfo)
 	
 	// Also trigger sector map data loading
@@ -275,6 +286,133 @@ func (pc *PanelComponent) UpdateTraderInfo(playerInfo api.PlayerInfo) {
 	pc.UpdateLeftPanelSize()
 }
 
+// UpdateTraderData updates trader panel with actual trader data from sector
+func (pc *PanelComponent) UpdateTraderData(sectorNumber int, traders []api.TraderInfo) {
+	var info strings.Builder
+	
+	// Helper function to format a labeled line with proper alignment
+	formatLine := func(label, value, valueColor string) string {
+		return fmt.Sprintf("%-12s : [%s]%s[-]\n", label, valueColor, value)
+	}
+	
+	// Header section
+	info.WriteString("[yellow]Trader Info[-]\n\n")
+	
+	// Show current sector
+	sectorValue := fmt.Sprintf("%d", sectorNumber)
+	info.WriteString(formatLine("Sector", sectorValue, "cyan"))
+	
+	// Show trader count and details
+	if len(traders) == 0 {
+		info.WriteString("\n[gray]No traders in this sector.[-]\n")
+	} else {
+		info.WriteString(fmt.Sprintf("\n[white]%d Trader(s) in sector:[-]\n\n", len(traders)))
+		
+		for i, trader := range traders {
+			// Trader number and name
+			traderNum := fmt.Sprintf("Trader %d", i+1)
+			info.WriteString(fmt.Sprintf("[yellow]%s[-]\n", traderNum))
+			
+			// Trader details
+			info.WriteString(formatLine("Name", trader.Name, "white"))
+			
+			if trader.ShipName != "" {
+				info.WriteString(formatLine("Ship", trader.ShipName, "cyan"))
+			}
+			
+			if trader.ShipType != "" {
+				info.WriteString(formatLine("Type", trader.ShipType, "cyan"))
+			}
+			
+			if trader.Fighters > 0 {
+				fighterStr := fmt.Sprintf("%d", trader.Fighters)
+				info.WriteString(formatLine("Fighters", fighterStr, "red"))
+			}
+			
+			if trader.Alignment != "" {
+				alignColor := "white"
+				switch strings.ToLower(trader.Alignment) {
+				case "good":
+					alignColor = "green"
+				case "evil":
+					alignColor = "red"
+				case "neutral":
+					alignColor = "yellow"
+				}
+				info.WriteString(formatLine("Alignment", trader.Alignment, alignColor))
+			}
+			
+			if i < len(traders)-1 {
+				info.WriteString("\n")
+			}
+		}
+	}
+	
+	pc.leftView.SetText(info.String())
+	pc.UpdateLeftPanelSize()
+}
+
+// formatNumber formats large numbers with k/m/b suffixes
+func formatNumber(n int) string {
+	if n >= 1000000000 {
+		return fmt.Sprintf("%.1fb", float64(n)/1000000000)
+	} else if n >= 1000000 {
+		return fmt.Sprintf("%.1fm", float64(n)/1000000)
+	} else if n >= 1000 {
+		return fmt.Sprintf("%.1fk", float64(n)/1000)
+	}
+	return fmt.Sprintf("%d", n)
+}
+
+// UpdatePlayerStats updates trader panel with current player statistics
+func (pc *PanelComponent) UpdatePlayerStats(stats api.PlayerStatsInfo) {
+	// Store the player stats for future use
+	pc.lastPlayerStats = &stats
+	
+	var info strings.Builder
+	
+	// Helper function to format a labeled line with proper alignment - no individual colors
+	formatLine := func(label, value string) string {
+		return fmt.Sprintf("%-12s : %s\n", label, value)
+	}
+	
+	// Header section
+	info.WriteString("[yellow]Player Stats[-]\n\n")
+	
+	// Basic info
+	info.WriteString(formatLine("Sector", fmt.Sprintf("%d", stats.CurrentSector)))
+	info.WriteString(formatLine("Credits", formatNumber(stats.Credits)))
+	info.WriteString(formatLine("Turns", formatNumber(stats.Turns)))
+	
+	// Cargo section 
+	info.WriteString("\n[yellow]Cargo[-]\n")
+	info.WriteString(formatLine("Fuel Ore", fmt.Sprintf("%d", stats.OreHolds)))
+	info.WriteString(formatLine("Organics", fmt.Sprintf("%d", stats.OrgHolds)))
+	info.WriteString(formatLine("Equipment", fmt.Sprintf("%d", stats.EquHolds)))
+	info.WriteString(formatLine("Colonists", fmt.Sprintf("%d", stats.ColHolds)))
+	
+	empty := stats.TotalHolds - stats.OreHolds - stats.OrgHolds - stats.EquHolds - stats.ColHolds
+	if empty < 0 {
+		empty = 0
+	}
+	info.WriteString(formatLine("Empty", fmt.Sprintf("%d", empty)))
+	
+	// Ship Info section
+	info.WriteString("\n[yellow]Ship Info[-]\n")
+	info.WriteString(formatLine("Ship Type", stats.ShipClass))
+	info.WriteString(formatLine("Fighters", fmt.Sprintf("%d", stats.Fighters)))
+	info.WriteString(formatLine("Shields", fmt.Sprintf("%d", stats.Shields)))
+	info.WriteString(formatLine("Holds", fmt.Sprintf("%d/%d", stats.TotalHolds-empty, stats.TotalHolds)))
+	info.WriteString(formatLine("Photons", fmt.Sprintf("%d", stats.Photons)))
+	info.WriteString(formatLine("Armids", fmt.Sprintf("%d", stats.Armids)))
+	info.WriteString(formatLine("Limpets", fmt.Sprintf("%d", stats.Limpets)))
+	info.WriteString(formatLine("Alignment", fmt.Sprintf("%d", stats.Alignment)))
+	info.WriteString(formatLine("Experience", formatNumber(stats.Experience)))
+	
+	pc.leftView.SetText(info.String())
+	pc.UpdateLeftPanelSize()
+}
+
 // UpdateSectorInfo updates the sector map with current sector info
 func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
 	if pc.useGraphviz && pc.graphvizMap != nil {
@@ -393,4 +531,61 @@ func (pc *PanelComponent) UpdateLeftPanelSize() {
 	pc.leftWrapper.Clear()
 	pc.leftWrapper.AddItem(pc.leftView, requiredHeight, 0, false) // Fixed height, no flex
 	
+}
+
+// loadPlayerStatsFromAPI loads current player stats from the live parser
+func (pc *PanelComponent) loadPlayerStatsFromAPI() {
+	if pc.proxyAPI == nil {
+		debug.Log("loadPlayerStatsFromAPI: proxyAPI is nil")
+		return
+	}
+	
+	// Get player stats from API (single source of truth)
+	playerStats, err := pc.proxyAPI.GetPlayerStats()
+	if err != nil {
+		debug.Log("loadPlayerStatsFromAPI: failed to load player stats: %v", err)
+		return
+	}
+	
+	if playerStats != nil {
+		// Store and display the stats
+		pc.lastPlayerStats = playerStats
+		debug.Log("loadPlayerStatsFromAPI: successfully loaded stats - credits: %d, turns: %d, sector: %d", 
+			playerStats.Credits, playerStats.Turns, playerStats.CurrentSector)
+		pc.UpdatePlayerStats(*pc.lastPlayerStats)
+	} else {
+		debug.Log("loadPlayerStatsFromAPI: playerStats is nil")
+	}
+}
+
+// HasDetailedPlayerStats returns true if we have detailed player stats available
+func (pc *PanelComponent) HasDetailedPlayerStats() bool {
+	return pc.lastPlayerStats != nil
+}
+
+// UpdatePlayerStatsSector updates the current sector in existing player stats and refreshes display
+func (pc *PanelComponent) UpdatePlayerStatsSector(sectorNumber int) {
+	debug.Log("UpdatePlayerStatsSector: called with sector %d, lastPlayerStats is nil: %v", sectorNumber, pc.lastPlayerStats == nil)
+	
+	if pc.lastPlayerStats == nil {
+		// First sector change - try to load from API
+		debug.Log("UpdatePlayerStatsSector: attempting to load from API")
+		pc.loadPlayerStatsFromAPI()
+		if pc.lastPlayerStats != nil {
+			// Successfully loaded from API, update sector and display
+			pc.lastPlayerStats.CurrentSector = sectorNumber
+			debug.Log("UpdatePlayerStatsSector: loaded from API and updating sector to %d", sectorNumber)
+			pc.UpdatePlayerStats(*pc.lastPlayerStats)
+		} else {
+			debug.Log("UpdatePlayerStatsSector: failed to load from API")
+		}
+		return
+	}
+	
+	// Update the sector in the existing stats
+	pc.lastPlayerStats.CurrentSector = sectorNumber
+	debug.Log("UpdatePlayerStatsSector: updating existing stats sector to %d", sectorNumber)
+	
+	// Refresh the display with updated stats
+	pc.UpdatePlayerStats(*pc.lastPlayerStats)
 }
