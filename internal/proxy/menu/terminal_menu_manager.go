@@ -22,6 +22,25 @@ type TerminalMenuManager struct {
 	
 	// Reference to proxy for accessing ScriptManager and Database
 	proxyInterface ProxyInterface
+	
+	// Script-created menus (separate from built-in menus)
+	scriptMenus map[string]*ScriptMenuData
+	scriptMenuValues map[string]string // Menu values for script menus
+}
+
+// ScriptMenuData represents a menu created by script commands
+type ScriptMenuData struct {
+	Name        string
+	Description string
+	Hotkey      rune
+	Reference   string
+	Prompt      string
+	CloseMenu   bool
+	ScriptOwner string
+	Parent      string
+	Help        string
+	Options     string
+	MenuItem    *TerminalMenuItem // Associated terminal menu item
 }
 
 // ProxyInterface defines methods needed by menu system
@@ -51,9 +70,11 @@ func NewTerminalMenuManager() *TerminalMenuManager {
 	}()
 
 	return &TerminalMenuManager{
-		activeMenus: make(map[string]*TerminalMenuItem),
-		menuKey:     '$',
-		isActive:    0, // atomic false
+		activeMenus:      make(map[string]*TerminalMenuItem),
+		scriptMenus:      make(map[string]*ScriptMenuData),
+		scriptMenuValues: make(map[string]string),
+		menuKey:          '$',
+		isActive:         0, // atomic false
 	}
 }
 
@@ -819,4 +840,227 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// Script Menu Management Methods
+
+// AddScriptMenu adds a script-created menu
+func (tmm *TerminalMenuManager) AddScriptMenu(name, description, parent, reference, prompt, scriptOwner string, hotkey rune, closeMenu bool) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in AddScriptMenu: %v", r)
+		}
+	}()
+
+	// Create script menu data
+	scriptMenu := &ScriptMenuData{
+		Name:        name,
+		Description: description,
+		Hotkey:      hotkey,
+		Reference:   reference,
+		Prompt:      prompt,
+		CloseMenu:   closeMenu,
+		ScriptOwner: scriptOwner,
+		Parent:      parent,
+		Help:        "",
+		Options:     "",
+	}
+
+	// Create terminal menu item with script handler
+	menuItem := NewTerminalMenuItem(name, description, hotkey)
+	menuItem.Handler = func(item *TerminalMenuItem, params []string) error {
+		return tmm.handleScriptMenuItem(item, params, name)
+	}
+	menuItem.CloseMenu = closeMenu
+	scriptMenu.MenuItem = menuItem
+
+	// Store the script menu
+	tmm.scriptMenus[name] = scriptMenu
+
+	// Add to parent menu if specified
+	if parent != "" && parent != "MAIN" {
+		if parentMenu, exists := tmm.activeMenus[parent]; exists {
+			parentMenu.AddChild(menuItem)
+		} else if parentScriptMenu, exists := tmm.scriptMenus[parent]; exists {
+			parentScriptMenu.MenuItem.AddChild(menuItem)
+		}
+	} else {
+		// Add to main menu
+		if mainMenu, exists := tmm.activeMenus[TWX_MAIN]; exists {
+			mainMenu.AddChild(menuItem)
+		}
+	}
+
+	// Initialize empty value
+	tmm.scriptMenuValues[name] = ""
+
+	return nil
+}
+
+// OpenScriptMenu opens a script-created menu
+func (tmm *TerminalMenuManager) OpenScriptMenu(menuName string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in OpenScriptMenu: %v", r)
+		}
+	}()
+
+	scriptMenu, exists := tmm.scriptMenus[menuName]
+	if !exists {
+		return fmt.Errorf("script menu '%s' not found", menuName)
+	}
+
+	// Set the current menu to the script menu
+	tmm.currentMenu = scriptMenu.MenuItem
+	atomic.StoreInt32(&tmm.isActive, 1)
+	tmm.displayCurrentMenu()
+
+	return nil
+}
+
+// CloseScriptMenu closes a script-created menu
+func (tmm *TerminalMenuManager) CloseScriptMenu(menuName string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in CloseScriptMenu: %v", r)
+		}
+	}()
+
+	scriptMenu, exists := tmm.scriptMenus[menuName]
+	if !exists {
+		return fmt.Errorf("script menu '%s' not found", menuName)
+	}
+
+	// If this is the current menu, go back to parent or exit
+	if tmm.currentMenu == scriptMenu.MenuItem {
+		if scriptMenu.MenuItem.Parent != nil {
+			tmm.currentMenu = scriptMenu.MenuItem.Parent
+			tmm.displayCurrentMenu()
+		} else {
+			atomic.StoreInt32(&tmm.isActive, 0)
+			tmm.currentMenu = nil
+			tmm.sendOutput("\r\nExiting menu system.\r\n")
+		}
+	}
+
+	return nil
+}
+
+// GetScriptMenuValue gets the value of a script-created menu
+func (tmm *TerminalMenuManager) GetScriptMenuValue(menuName string) (string, error) {
+	if value, exists := tmm.scriptMenuValues[menuName]; exists {
+		return value, nil
+	}
+	return "", fmt.Errorf("script menu '%s' not found", menuName)
+}
+
+// SetScriptMenuValue sets the value of a script-created menu
+func (tmm *TerminalMenuManager) SetScriptMenuValue(menuName, value string) error {
+	if _, exists := tmm.scriptMenus[menuName]; exists {
+		tmm.scriptMenuValues[menuName] = value
+		return nil
+	}
+	return fmt.Errorf("script menu '%s' not found", menuName)
+}
+
+// SetScriptMenuHelp sets the help text for a script-created menu
+func (tmm *TerminalMenuManager) SetScriptMenuHelp(menuName, helpText string) error {
+	if scriptMenu, exists := tmm.scriptMenus[menuName]; exists {
+		scriptMenu.Help = helpText
+		return nil
+	}
+	return fmt.Errorf("script menu '%s' not found", menuName)
+}
+
+// SetScriptMenuOptions sets the options for a script-created menu
+func (tmm *TerminalMenuManager) SetScriptMenuOptions(menuName, options string) error {
+	if scriptMenu, exists := tmm.scriptMenus[menuName]; exists {
+		scriptMenu.Options = options
+		return nil
+	}
+	return fmt.Errorf("script menu '%s' not found", menuName)
+}
+
+// RemoveScriptMenusByOwner removes all menus owned by a specific script
+func (tmm *TerminalMenuManager) RemoveScriptMenusByOwner(scriptID string) {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in RemoveScriptMenusByOwner: %v", r)
+		}
+	}()
+
+	menusToRemove := make([]string, 0)
+	for name, menu := range tmm.scriptMenus {
+		if menu.ScriptOwner == scriptID {
+			menusToRemove = append(menusToRemove, name)
+		}
+	}
+
+	for _, menuName := range menusToRemove {
+		tmm.removeScriptMenu(menuName)
+	}
+}
+
+// removeScriptMenu removes a script menu completely
+func (tmm *TerminalMenuManager) removeScriptMenu(menuName string) {
+	if scriptMenu, exists := tmm.scriptMenus[menuName]; exists {
+		// Remove from parent if it has one
+		if scriptMenu.MenuItem.Parent != nil {
+			scriptMenu.MenuItem.Parent.RemoveChild(scriptMenu.MenuItem)
+		}
+
+		// Remove from our tracking
+		delete(tmm.scriptMenus, menuName)
+		delete(tmm.scriptMenuValues, menuName)
+
+		// If this was the current menu, go back to parent or exit
+		if tmm.currentMenu == scriptMenu.MenuItem {
+			if scriptMenu.MenuItem.Parent != nil {
+				tmm.currentMenu = scriptMenu.MenuItem.Parent
+				tmm.displayCurrentMenu()
+			} else {
+				atomic.StoreInt32(&tmm.isActive, 0)
+				tmm.currentMenu = nil
+			}
+		}
+	}
+}
+
+// handleScriptMenuItem handles execution of script-created menu items
+func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, params []string, menuName string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleScriptMenuItem: %v", r)
+		}
+	}()
+
+	scriptMenu, exists := tmm.scriptMenus[menuName]
+	if !exists {
+		tmm.sendOutput(display.FormatErrorMessage("Script menu not found: " + menuName))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// Set the menu value to the reference (this is how TWX works)
+	tmm.scriptMenuValues[menuName] = scriptMenu.Reference
+
+	// Show menu-specific prompt if available
+	if scriptMenu.Prompt != "" {
+		tmm.sendOutput(display.FormatInputPrompt(scriptMenu.Prompt))
+	} else {
+		tmm.sendOutput(display.FormatSuccessMessage("Menu item activated: " + scriptMenu.Description))
+	}
+
+	// If options are set, display them
+	if scriptMenu.Options != "" {
+		tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
+	}
+
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+// GetMenuManager returns the terminal menu manager for script integration
+func (tmm *TerminalMenuManager) GetMenuManager() *TerminalMenuManager {
+	return tmm
 }

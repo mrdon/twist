@@ -285,7 +285,13 @@ func (e *Engine) StopScript(scriptID string) error {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
 	
-	return script.Stop()
+	err := script.Stop()
+	if err == nil {
+		// Notify about script termination
+		e.onScriptTerminated(scriptID)
+	}
+	
+	return err
 }
 
 // StopAllScripts stops all running scripts
@@ -303,6 +309,8 @@ func (e *Engine) StopAllScripts() error {
 		if err := script.Stop(); err != nil {
 			return err
 		}
+		// Notify about script termination
+		e.onScriptTerminated(script.ID)
 	}
 	
 	return nil
@@ -555,6 +563,30 @@ func (e *Engine) GetRunningScriptCount() int {
 		}
 	}
 	return count
+}
+
+// onScriptTerminated handles cleanup when a script terminates
+func (e *Engine) onScriptTerminated(scriptID string) {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in onScriptTerminated: %v", r)
+		}
+	}()
+
+	// Notify menu manager to clean up any menus owned by this script
+	if e.gameInterface != nil {
+		if gameAdapter, ok := e.gameInterface.(interface {
+			GetMenuManager() interface{}
+		}); ok {
+			if menuManager := gameAdapter.GetMenuManager(); menuManager != nil {
+				if tmm, ok := menuManager.(interface {
+					RemoveScriptMenusByOwner(string)
+				}); ok {
+					tmm.RemoveScriptMenusByOwner(scriptID)
+				}
+			}
+		}
+	}
 }
 
 // ValidateScript validates a script without executing it

@@ -96,6 +96,9 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	// Setup script manager connections immediately so sendHandler is available
 	p.scriptManager.SetupConnections(p, nil)
 	
+	// Setup menu manager for script menu commands
+	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
+	
 	// Start input handler immediately so menu system works even when not connected
 	p.mu.Lock()
 	p.inputHandlerStarted = true

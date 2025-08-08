@@ -24,6 +24,7 @@ type GameAdapter struct {
 	systemConstants *constants.SystemConstants
 	proxy           ProxyInterface
 	terminal        TerminalInterface
+	menuManager     interface{} // Terminal menu manager
 }
 
 // NewGameAdapter creates a new game adapter
@@ -42,6 +43,16 @@ func (g *GameAdapter) SetProxy(proxy ProxyInterface) {
 // SetTerminal sets the terminal interface for getting output
 func (g *GameAdapter) SetTerminal(terminal TerminalInterface) {
 	g.terminal = terminal
+}
+
+// SetMenuManager sets the terminal menu manager for script menu commands
+func (g *GameAdapter) SetMenuManager(menuManager interface{}) {
+	g.menuManager = menuManager
+}
+
+// GetMenuManager returns the terminal menu manager
+func (g *GameAdapter) GetMenuManager() interface{} {
+	return g.menuManager
 }
 
 // SetDatabase updates the database reference
@@ -355,6 +366,11 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 		// Echo is typically for local display, for now we'll send it as output
 		return sm.gameAdapter.SendCommand(text)
 	})
+}
+
+// SetupMenuManager sets up the menu manager for script menu commands
+func (sm *ScriptManager) SetupMenuManager(menuManager interface{}) {
+	sm.gameAdapter.SetMenuManager(menuManager)
 }
 
 // GetEngine returns the scripting engine as interface{} to avoid import cycles

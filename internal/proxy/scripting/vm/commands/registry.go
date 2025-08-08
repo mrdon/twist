@@ -16,6 +16,7 @@ func RegisterAllCommands(vm CommandRegistry) {
 	RegisterComparisonCommands(vm)
 	RegisterMiscCommands(vm)
 	RegisterNetworkCommands(vm)
+	RegisterMenuCommands(vm)
 }
 
 // Internal function to avoid naming conflicts
