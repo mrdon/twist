@@ -50,21 +50,125 @@ Provides the foundation for the command system:
 - **TCmdParam**: Type-safe parameter handling with automatic conversions
 - **TCmdAction**: Command execution results (caNone, caStop, caPause, caAuth)
 
-### Menu System (Menu.pas)
+### Terminal Menu System (Menu.pas)
 
-Text-based user interface implementation:
+Text-based terminal interface triggered by '$' character for in-game menu access:
 
-- **TModMenu**: Menu controller with navigation state
-- **TTWXMenuItem**: Individual menu items with hotkey support
-- Hierarchical menu structure
-- Input handling and validation
-- Script integration for custom menus
+- **TModMenu**: Central controller for terminal menu operations
+  - Menu navigation state tracking within terminal session
+  - Custom script menu creation via `AddCustomMenu()`
+  - Menu lookup by name via `GetMenuByName()`  
+  - Script input collection with `BeginScriptInput()`
+  - Menu lifecycle management (open/close operations)
 
-**Menu Categories:**
-- Main system functions (connect, scripts, data)
-- Script management (load, stop, debug)
-- Database operations (create, edit, query)
-- Game utilities (sector display, plotting)
+- **TTWXMenuItem**: Individual terminal menu items
+  - Hotkey-driven navigation (single character selection)
+  - Event-driven activation via `TMenuEvent` callbacks
+  - Hierarchical parent-child menu relationships
+  - Parameter storage for multi-stage input collection
+  - Script ownership for dynamic script-generated menus
+
+**Terminal Menu Architecture:**
+- '$' character intercept triggers menu activation from game terminal
+- Two-stage input handling: initial activation + completion callback pattern
+- Built-in navigation options (exit, list, help) configurable per menu
+- Script macro support for automated terminal interactions
+- Reference-based identification for script integration
+
+**Core Menu Categories:**
+- **Main Menu** (`TWX_MAIN`): System functions (connect, burst commands, client management)
+- **Script Menu** (`TWX_SCRIPT`): Script control (load, terminate, debug, variable dumps)
+- **Data Menu** (`TWX_DATA`): Game database queries (sectors, traders, route plotting, bubbles)
+- **Port Menu** (`TWX_PORT`): Port operations (display, listings, class filtering)
+- **Setup Menu** (`TWX_SETUP`): System configuration (ports, logging, reconnection)
+- **Database Menu** (`TWX_DATABASE`): Database management (create, edit, selection)
+
+**Implementation Details:**
+- Menu handlers implemented as `mi*` procedures (e.g., `miBurst`, `miLoad`)
+- Two-stage input: initial handler → `OnLineComplete` callback for complex inputs
+- Contextual help system integrated per menu item
+- Script-generated custom menus via `ADDMENU` command
+- Input validation and parameter collection through menu properties
+
+**Terminal Integration Points:**
+
+- **Process.pas** (`TModExtractor:1520`): Menu activation core
+  - MenuKey property ('$') intercepts terminal input
+  - `ProcessOutBound()` detects menu key and activates `TWX_MAIN` menu
+  - Active menu input routing via `TWXMenu.MenuText()` 
+  - Escape key handling for script operations
+
+- **Script.pas**: Script-menu interaction
+  - Special input menus (`TWX_SCRIPTTEXT`, `TWX_SCRIPTKEY`) for script GetInput commands
+  - Menu item lifecycle tracking in `MenuItemList` for cleanup
+  - Script termination closes associated menus
+
+- **ScriptCmd.pas**: Script command interface for terminal menus
+  - `ADDMENU`: Creates custom menus (parent, name, description, hotkey, reference, prompt, closeMenu)
+  - `CLOSEMENU`/`OPENMENU`: Programmatic menu control
+  - `GETMENUVALUE`/`SETMENUVALUE`: Menu state manipulation
+  - `SETMENUHELP`/`SETMENUOPTIONS`: Menu configuration
+  - `SETMENUKEY`: Changes terminal menu activation character
+
+**Terminal Menu Flow:**
+1. User types '$' in game terminal → Menu system intercepts and opens `TWX_MAIN`
+2. Single-character hotkey navigation → `MenuText()` processes selection
+3. Menu item activation → Corresponding `mi*` handler executes functionality  
+4. Complex inputs → Two-stage collection via completion callbacks
+5. Menu exit → Returns terminal to normal game input mode
+
+## Porting Considerations for Twist
+
+**Display System Requirements:**
+- **ANSI Color Support**: TWX uses extensive ANSI color codes (`ANSI_2`, `ANSI_10`, etc.)
+  - Menu colors: `MENU_LIGHT` (ANSI_15), `MENU_MID` (ANSI_10), `MENU_DARK` (ANSI_2)
+  - Color-coded game data display with contextual meaning
+  - Line clearing with `ANSI_CLEARLINE` for prompt management
+
+- **Terminal Control Sequences**:
+  - Carriage return (`#13`) + line clear for prompt updates
+  - Cursor positioning for menu overlay on game text
+  - Dynamic prompt rendering based on menu state
+
+**Input Processing Architecture:**
+- **Character-by-character processing** in `MenuKey()` procedure
+- **Input validation** and hotkey matching against menu items
+- **Two-stage input collection** for complex parameters
+- **Line buffering** via `FLine` property for text collection
+- **Special key handling**: '?', 'Q', ESC for menu navigation
+
+**State Management:**
+- **Menu hierarchy tracking** via parent-child relationships
+- **Current menu state** in `FCurrentMenu` with null checks
+- **Input script binding** for GetInput command integration
+- **Parameter collection** via `AddParam()` for multi-stage inputs
+- **Menu cleanup** on script termination
+
+**Critical Implementation Details:**
+- **Prompt formatting**: `GetPrompt()` returns `MENU_LIGHT + FPrompt + MENU_MID + '> ' + ANSI_7 + FLine`
+- **Option display**: `DumpOptions()` shows hierarchical menu structure with color coding
+- **ClearLine property**: Controls whether menu overwrites existing terminal content
+- **Menu validation**: Extensive null checking for `CurrentMenu` state
+- **Error handling**: Script runtime errors during menu activation
+
+**Integration Points to Replicate:**
+- **Process.pas integration**: Menu key detection in outbound data stream
+- **Script command interface**: 8 script commands for menu manipulation
+- **Database integration**: Menu operations query/display game database
+- **Server broadcasting**: All output via `TWXServer.Broadcast()` for multi-client support
+
+**Key Functions to Implement:**
+- `ProcessOutBound()` menu key detection
+- `MenuText()` input processing engine  
+- `DumpOptions()` menu display formatter
+- `GetPrompt()` prompt generation
+- Script command handlers (`CmdAddMenu`, `CmdOpenMenu`, etc.)
+
+**Modern Go Equivalents:**
+- Replace Pascal's manual memory management with Go's garbage collector
+- Use Go's string handling instead of Pascal string manipulation
+- Implement ANSI terminal package for color/cursor control
+- Channel-based input processing instead of procedural callbacks
 
 ### Global Coordination (Global.pas)
 

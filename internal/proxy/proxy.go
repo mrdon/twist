@@ -10,6 +10,7 @@ import (
 	"twist/internal/proxy/streaming"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
+	"twist/internal/proxy/menu"
 	"twist/internal/api"
 )
 
@@ -30,6 +31,9 @@ type Proxy struct {
 	scriptManager *scripting.ScriptManager
 	db            database.Database
 	
+	// Terminal menu system
+	terminalMenuManager *menu.TerminalMenuManager
+	
 	// Direct TuiAPI reference
 	tuiAPI api.TuiAPI
 	
@@ -44,6 +48,9 @@ type Proxy struct {
 	// Game state tracking (Phase 4.3) - based on parser CurrentSectorIndex
 	currentSector int    // Track current sector number (from parser)
 	playerName    string // Track current player name
+	
+	// Input handler state
+	inputHandlerStarted bool
 }
 
 func New(tuiAPI api.TuiAPI) *Proxy {
@@ -61,11 +68,23 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 		gameDetector:  nil,     // Will be created when connection is established
 	}
 	
+	// Initialize terminal menu manager
+	p.terminalMenuManager = menu.NewTerminalMenuManager()
+	
+	// Set up menu data injection function
+	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
 	
 	// Setup script manager connections immediately so sendHandler is available
 	p.scriptManager.SetupConnections(p, nil)
+	
+	// Start input handler immediately so menu system works even when not connected
+	p.mu.Lock()
+	p.inputHandlerStarted = true
+	p.mu.Unlock()
+	go p.handleInput()
 	
 	return p
 }
@@ -179,7 +198,13 @@ func (p *Proxy) Connect(address string) error {
 	}
 
 	// Start goroutines for handling I/O
-	go p.handleInput()
+	// Since we already start handleInput in New(), it should already be running
+	// No need for complex locking - just start handleOutput
+	if !p.inputHandlerStarted {
+		go p.handleInput()
+		p.inputHandlerStarted = true
+	}
+	
 	go p.handleOutput()
 
 	return nil
@@ -249,6 +274,27 @@ func (p *Proxy) handleInput() {
 		connected := p.connected && p.writer != nil
 		p.mu.RUnlock()
 
+		// Check for terminal menu activation - works even when disconnected
+		if p.terminalMenuManager != nil {
+			// Process menu key and suppress sending to server if consumed
+			if p.terminalMenuManager.ProcessMenuKey(input) {
+				// Menu key was processed - don't send to server
+				continue
+			}
+		}
+
+		// Check if terminal menu should handle this input - works even when disconnected
+		if p.terminalMenuManager != nil && p.terminalMenuManager.IsActive() {
+			// Menu is active - route input to menu system
+			err := p.terminalMenuManager.MenuText(input)
+			if err != nil {
+				// Menu processing error - log but continue
+				p.errorChan <- fmt.Errorf("menu processing error: %w", err)
+			}
+			// Don't send menu input to server
+			continue
+		}
+
 		if !connected {
 			continue
 		}
@@ -283,14 +329,19 @@ func (p *Proxy) handleOutput() {
 	for {
 		p.mu.RLock()
 		connected := p.connected
+		reader := p.reader
 		p.mu.RUnlock()
 
 		if !connected {
 			break
 		}
 
+		if reader == nil {
+			break
+		}
+
 		// Read raw bytes from connection
-		n, err := p.reader.Read(buffer)
+		n, err := reader.Read(buffer)
 		if err != nil {
 			// Read error in handleOutput - connection likely closed
 			if err.Error() != "EOF" {
@@ -315,6 +366,20 @@ func (p *Proxy) handleOutput() {
 	p.mu.Lock()
 	p.connected = false
 	p.mu.Unlock()
+}
+
+// injectInboundData injects data into the inbound stream as if it came from the server
+// This is used by the terminal menu system to display menu output
+func (p *Proxy) injectInboundData(data []byte) {
+	// Only inject if we have an active pipeline and are connected
+	p.mu.RLock()
+	pipeline := p.pipeline
+	connected := p.connected
+	p.mu.RUnlock()
+	
+	if pipeline != nil && connected {
+		pipeline.Write(data)
+	}
 }
 
 // GetScriptManager returns the script manager for external access
