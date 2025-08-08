@@ -822,6 +822,18 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	adjustedHeight := componentHeight - 1 // Reserve space for title
 	panelPixelWidth := int(float64(componentWidth) * charWidthPixels)
 	panelPixelHeight := int(float64(adjustedHeight) * charHeightPixels)
+	
+	// Ensure panel dimensions are strictly bounded by component dimensions
+	// This prevents any possibility of the image exceeding terminal bounds
+	maxAllowedWidth := componentWidth * 8  // Conservative character width estimate
+	maxAllowedHeight := adjustedHeight * 16 // Conservative character height estimate
+	
+	if panelPixelWidth > maxAllowedWidth {
+		panelPixelWidth = maxAllowedWidth
+	}
+	if panelPixelHeight > maxAllowedHeight {
+		panelPixelHeight = maxAllowedHeight
+	}
 
 	// Use the font-based scale as our primary scale
 	scale := fontScale
