@@ -10,7 +10,9 @@ func ConvertTSectorToSectorInfo(sectorNum int, dbSector database.TSector) (api.S
 	
 	// Extract valid warp connections from the Warp array
 	var warps []int
-	for i := 0; i < int(dbSector.Warps) && i < 6; i++ {
+	// Iterate through all 6 warp slots and collect non-zero values
+	// Don't rely on dbSector.Warps count as it may be incorrect
+	for i := 0; i < 6; i++ {
 		if dbSector.Warp[i] > 0 {
 			warps = append(warps, dbSector.Warp[i])
 		}

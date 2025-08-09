@@ -226,6 +226,22 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 		sector.UpDate = upDate.Time
 	}
 	
+	// Automatic warp count enforcement: always keep warp array and count in sync
+	// Calculate actual warps from warp array
+	calculatedWarps := 0
+	for _, warp := range sector.Warp {
+		if warp > 0 {
+			calculatedWarps++
+		}
+	}
+	
+	// If warp array has connections, that's authoritative (overrides any stored count)
+	if calculatedWarps > 0 {
+		sector.Warps = calculatedWarps
+	}
+	// If no warp connections but count > 0, keep stored value (from density scans)
+	// This allows density scans to provide warp counts without warp destinations
+	
 	// Load related data (ships, traders, planets)
 	if err = d.loadSectorRelatedData(index, &sector); err != nil {
 		return sector, fmt.Errorf("failed to load related data for sector %d: %w", index, err)
@@ -271,6 +287,19 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 	
 	// Update timestamp
 	sector.UpDate = time.Now()
+	
+	// Calculate and enforce warp count before saving (interceptor pattern)
+	calculatedWarps := 0
+	for _, warp := range sector.Warp {
+		if warp > 0 {
+			calculatedWarps++
+		}
+	}
+	// If warp array has connections, always update the count
+	if calculatedWarps > 0 {
+		sector.Warps = calculatedWarps
+	}
+	// Otherwise preserve existing count (allows density scans to set counts)
 	
 	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `
@@ -342,6 +371,19 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 	
 	// Update timestamp
 	sector.UpDate = time.Now()
+	
+	// Calculate and enforce warp count before saving (interceptor pattern)
+	calculatedWarps := 0
+	for _, warp := range sector.Warp {
+		if warp > 0 {
+			calculatedWarps++
+		}
+	}
+	// If warp array has connections, always update the count
+	if calculatedWarps > 0 {
+		sector.Warps = calculatedWarps
+	}
+	// Otherwise preserve existing count (allows density scans to set counts)
 	
 	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `

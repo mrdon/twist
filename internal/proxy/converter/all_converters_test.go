@@ -91,7 +91,6 @@ func TestPortConverter_WithDatabase(t *testing.T) {
 			basicSector := database.NULLSector()
 			basicSector.Constellation = "Test Space"
 			basicSector.Beacon = "Test beacon"
-			basicSector.Warps = 1
 			basicSector.Warp[0] = tt.sectorID + 1
 			
 			err := db.SaveSector(basicSector, tt.sectorID)
@@ -159,7 +158,6 @@ func TestSectorConverter_WithDatabase(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{49, 51, 75, 100, 0, 0},
 				NavHaz:        35,
-				Warps:         4,
 				Constellation: "Beta Quadrant",
 				Beacon:        "Trade route intersection - safe harbor",
 				Traders: []database.TTrader{
@@ -194,7 +192,6 @@ func TestSectorConverter_WithDatabase(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{998, 0, 0, 0, 0, 0},
 				NavHaz:        95,
-				Warps:         1,
 				Constellation: "Void Space",
 				Beacon:        "WARNING: Extreme hazard zone",
 				Traders:      []database.TTrader{},

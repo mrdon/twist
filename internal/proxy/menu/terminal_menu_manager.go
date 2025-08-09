@@ -6,8 +6,10 @@ import (
 	"sync/atomic"
 
 	"twist/internal/debug"
+	"twist/internal/proxy/database"
 	"twist/internal/proxy/menu/display"
 	"twist/internal/proxy/menu/input"
+	"twist/internal/proxy/scripting/types"
 )
 
 type TerminalMenuManager struct {
@@ -111,6 +113,18 @@ func (tmm *TerminalMenuManager) setupInputHandlers() {
 	
 	tmm.inputCollector.RegisterCompletionHandler("BURST_EDIT", func(menuName, value string) error {
 		return tmm.handleBurstEditInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("SECTOR_DISPLAY", func(menuName, value string) error {
+		return tmm.handleSectorDisplayInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("PORT_DISPLAY", func(menuName, value string) error {
+		return tmm.handlePortDisplayInput(value)
+	})
+	
+	tmm.inputCollector.RegisterCompletionHandler("VARIABLE_DUMP", func(menuName, value string) error {
+		return tmm.handleVariableDumpInput(value)
 	})
 }
 
@@ -507,8 +521,10 @@ func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []
 		}
 	}()
 
-	// This handler will navigate to the port submenu
-	tmm.sendOutput("Port menu functionality not yet implemented.\r\n")
+	// Create and navigate to port submenu
+	portMenu := tmm.createTWXPortMenu()
+	portMenu.Parent = tmm.currentMenu
+	tmm.currentMenu = portMenu
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -564,32 +580,74 @@ func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 
 	dataMenu := NewTerminalMenuItem(TWX_DATA, "TWX Data Menu", 0)
 	
-	// Sector Display
-	sectorDisplayItem := NewTerminalMenuItem("Sector Display", "Sector Display", 'S')
+	// Display sector as last seen (D) - matches TWX
+	sectorDisplayItem := NewTerminalMenuItem("Display sector as last seen", "Display sector as last seen", 'D')
 	sectorDisplayItem.Handler = tmm.handleSectorDisplay
 	dataMenu.AddChild(sectorDisplayItem)
 	
-	// Trader List
-	traderListItem := NewTerminalMenuItem("Trader List", "Trader List", 'T')
-	traderListItem.Handler = tmm.handleTraderList
-	dataMenu.AddChild(traderListItem)
+	// Show all sectors with foreign fighters (F) - matches TWX
+	fightersItem := NewTerminalMenuItem("Show all sectors with foreign fighters", "Show all sectors with foreign fighters", 'F')
+	fightersItem.Handler = tmm.handleShowFighters
+	dataMenu.AddChild(fightersItem)
 	
-	// Port List
-	portListItem := NewTerminalMenuItem("Port List", "Port List", 'P')
-	portListItem.Handler = tmm.handlePortList
-	dataMenu.AddChild(portListItem)
+	// Show all sectors with mines (M) - matches TWX
+	minesItem := NewTerminalMenuItem("Show all sectors with mines", "Show all sectors with mines", 'M')
+	minesItem.Handler = tmm.handleShowMines
+	dataMenu.AddChild(minesItem)
 	
-	// Route Plot
-	routePlotItem := NewTerminalMenuItem("Route Plot", "Route Plot", 'R')
-	routePlotItem.Handler = tmm.handleRoutePlot
-	dataMenu.AddChild(routePlotItem)
+	// Show all sectors by density comparison (S) - matches TWX
+	densityItem := NewTerminalMenuItem("Show all sectors by density comparison", "Show all sectors by density comparison", 'S')
+	densityItem.Handler = tmm.handleShowDensity
+	dataMenu.AddChild(densityItem)
 	
-	// Bubble Info
-	bubbleInfoItem := NewTerminalMenuItem("Bubble Info", "Bubble Info", 'B')
-	bubbleInfoItem.Handler = tmm.handleBubbleInfo
-	dataMenu.AddChild(bubbleInfoItem)
+	// Show all sectors with Anomaly (A) - matches TWX
+	anomalyItem := NewTerminalMenuItem("Show all sectors with Anomaly", "Show all sectors with Anomaly", 'A')
+	anomalyItem.Handler = tmm.handleShowAnomaly
+	dataMenu.AddChild(anomalyItem)
+	
+	// Show all sectors with traders (R) - matches TWX
+	tradersItem := NewTerminalMenuItem("Show all sectors with traders", "Show all sectors with traders", 'R')
+	tradersItem.Handler = tmm.handleShowTraders
+	dataMenu.AddChild(tradersItem)
+	
+	// Plot warp course (C) - matches TWX
+	plotCourseItem := NewTerminalMenuItem("Plot warp course", "Plot warp course", 'C')
+	plotCourseItem.Handler = tmm.handlePlotCourse
+	dataMenu.AddChild(plotCourseItem)
 	
 	return dataMenu
+}
+
+func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in createTWXPortMenu: %v", r)
+		}
+	}()
+
+	portMenu := NewTerminalMenuItem("TWX_PORT", "TWX Port Menu", 0)
+	
+	// Show port details as last seen (D) - matches TWX
+	showPortItem := NewTerminalMenuItem("Show port details as last seen", "Show port details as last seen", 'D')
+	showPortItem.Handler = tmm.handleShowPort
+	portMenu.AddChild(showPortItem)
+	
+	// Show all class 0/9 port sectors (0) - matches TWX
+	specialPortsItem := NewTerminalMenuItem("Show all class 0/9 port sectors", "Show all class 0/9 port sectors", '0')
+	specialPortsItem.Handler = tmm.handleShowSpecialPorts
+	portMenu.AddChild(specialPortsItem)
+	
+	// List all ports (L) - matches TWX
+	listPortsItem := NewTerminalMenuItem("List all ports", "List all ports", 'L')
+	listPortsItem.Handler = tmm.handlePortList
+	portMenu.AddChild(listPortsItem)
+	
+	// List all heavily upgraded ports (U) - matches TWX
+	upgradedPortsItem := NewTerminalMenuItem("List all heavily upgraded ports", "List all heavily upgraded ports", 'U')
+	upgradedPortsItem.Handler = tmm.handleListUpgradedPorts
+	portMenu.AddChild(upgradedPortsItem)
+	
+	return portMenu
 }
 
 func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
@@ -773,46 +831,11 @@ func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, param
 		return nil
 	}
 
-	var output strings.Builder
-	output.WriteString("\r\n")
-	output.WriteString(display.FormatMenuTitle("Variable Dump"))
+	// Follow TWX pattern: ask for variable name pattern first
+	tmm.sendOutput("\r\nEnter a full or partial variable name to search for (or blank to list them all):\r\n")
 	
-	// Get the script engine and dump variables
-	engine := scriptManager.GetEngine()
-	if engine != nil {
-		// Get running scripts and their variables
-		if scriptEngine, ok := engine.(interface{ GetRunningScripts() []interface{} }); ok {
-			scripts := scriptEngine.GetRunningScripts()
-			if len(scripts) == 0 {
-				output.WriteString("No running scripts - no variables to dump.\r\n")
-			} else {
-				output.WriteString("Found " + fmt.Sprintf("%d", len(scripts)) + " running scripts:\r\n")
-				
-				// For each script, show some basic info
-				for i := range scripts {
-					output.WriteString(fmt.Sprintf("Script %d: (script details)\r\n", i+1))
-				}
-				
-				output.WriteString("\r\nVariable dump shows TWX script variables.\r\n")
-				output.WriteString("Individual script variable inspection would require\r\n")
-				output.WriteString("additional VM interface methods.\r\n")
-			}
-		} else {
-			output.WriteString("Unable to access script engine details.\r\n")
-		}
-	} else {
-		output.WriteString("Script engine not available.\r\n")
-	}
-	
-	// Show engine status
-	status := scriptManager.GetStatus()
-	output.WriteString("\r\nEngine Status:\r\n")
-	for key, value := range status {
-		output.WriteString(fmt.Sprintf("- %s: %v\r\n", key, value))
-	}
-	
-	tmm.sendOutput(output.String())
-	tmm.displayCurrentMenu()
+	// Start input collection for variable pattern
+	tmm.inputCollector.StartCollection("VARIABLE_DUMP", "Variable pattern")
 	return nil
 }
 
@@ -837,44 +860,25 @@ func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, para
 		return nil
 	}
 
-	var output strings.Builder
-	output.WriteString("\r\n")
-	output.WriteString(display.FormatMenuTitle("Sector Information"))
-
-	// Use type assertions to access database methods
-	if db, ok := dbInterface.(interface {
-		GetDatabaseOpen() bool
-		GetSectors() int
-		LoadSector(int) (interface{}, error)
-	}); ok {
+	// Check if database is available and open
+	if db, ok := dbInterface.(database.Database); ok {
 		if !db.GetDatabaseOpen() {
-			output.WriteString("Error: Database not open\r\n")
-		} else {
-			sectorCount := db.GetSectors()
-			output.WriteString("Total sectors in database: " + fmt.Sprintf("%d", sectorCount) + "\r\n")
-			
-			if sectorCount > 0 {
-				// Show first few sectors as sample
-				output.WriteString("\r\nSample sectors:\r\n")
-				for i := 1; i <= min(5, sectorCount); i++ {
-					sectorData, err := db.LoadSector(i)
-					if err == nil && sectorData != nil {
-						// Type assert the sector data to get constellation
-						// Since we know this returns TSector struct, we can try to access it directly
-						output.WriteString("- Sector " + fmt.Sprintf("%d", i) + ": (sector data loaded)\r\n")
-					} else {
-						output.WriteString("- Sector " + fmt.Sprintf("%d", i) + ": (no data)\r\n")
-					}
-				}
-			}
+			tmm.sendOutput(display.FormatErrorMessage("Error: Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
 		}
+		
+		sectorCount := db.GetSectors()
+		tmm.sendOutput("\r\nEnter sector number to display (1-" + fmt.Sprintf("%d", sectorCount) + "):\r\n")
+		
+		// Start input collection for sector number
+		tmm.inputCollector.StartCollection("SECTOR_DISPLAY", "Sector number")
+		return nil
 	} else {
-		output.WriteString("Error: Invalid database interface\r\n")
+		tmm.sendOutput(display.FormatErrorMessage("Error: Invalid database interface"))
+		tmm.displayCurrentMenu()
+		return nil
 	}
-	
-	tmm.sendOutput(output.String())
-	tmm.displayCurrentMenu()
-	return nil
 }
 
 func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params []string) error {
@@ -909,39 +913,43 @@ func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []
 		return nil
 	}
 
-	var output strings.Builder
-	output.WriteString("\r\n")
-	output.WriteString(display.FormatMenuTitle("Port Information"))
-	
-	// Use type assertions to access database methods
-	if db, ok := dbInterface.(interface {
-		GetDatabaseOpen() bool
-		FindPortsByClass(int) ([]interface{}, error)
-	}); ok {
+	if db, ok := dbInterface.(database.Database); ok {
 		if !db.GetDatabaseOpen() {
-			output.WriteString("Error: Database not open\r\n")
-		} else {
-			// Try to find ports by class (class 0 = special ports)
-			portsData, err := db.FindPortsByClass(0)
-			if err != nil {
-				output.WriteString("Error querying ports: " + err.Error() + "\r\n")
-			} else {
-				output.WriteString("Special ports (Class 0): " + fmt.Sprintf("%d", len(portsData)) + "\r\n")
-				for i := range portsData {
-					if i >= 10 { // Limit display
-						output.WriteString("... and " + fmt.Sprintf("%d", len(portsData)-i) + " more\r\n")
-						break
-					}
-					// Since we know this returns TPort struct, show basic info
-					output.WriteString("- Port " + fmt.Sprintf("%d", i+1) + ": (port data available)\r\n")
-				}
+			tmm.sendOutput(display.FormatErrorMessage("Error: Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+
+		var output strings.Builder
+		output.WriteString("\r\n")
+		output.WriteString("Sector Class Fuel Ore     Organics     Equipment    Updated\r\n")
+		output.WriteString("-------------------------------------------------------------\r\n")
+		output.WriteString("\r\n")
+
+		sectorCount := db.GetSectors()
+		portCount := 0
+
+		// Scan through all sectors looking for ports (like TWX does)
+		for i := 1; i <= sectorCount; i++ {
+			// Try to load port for this sector
+			port, err := db.LoadPort(i)
+			if err == nil && port.Name != "" && port.ClassIndex > 0 && port.ClassIndex < 9 {
+				// Display port summary (like TWX DisplayPortSummary)
+				tmm.displayPortSummary(&output, i, port)
+				portCount++
 			}
 		}
+
+		if portCount == 0 {
+			output.WriteString("No ports found in database.\r\n")
+		}
+
+		output.WriteString("\r\n")
+		tmm.sendOutput(output.String())
 	} else {
-		output.WriteString("Error: Invalid database interface\r\n")
+		tmm.sendOutput(display.FormatErrorMessage("Error: Invalid database interface"))
 	}
-	
-	tmm.sendOutput(output.String())
+
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -1412,6 +1420,618 @@ func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 			debug.Log("Burst command sent directly to server: %s", strings.TrimSpace(cmd))
 		}
 	}
+}
+
+// handleSectorDisplayInput handles input collection for sector display
+func (tmm *TerminalMenuManager) handleSectorDisplayInput(sectorStr string) error {
+	sectorStr = strings.TrimSpace(sectorStr)
+	
+	if sectorStr == "" {
+		tmm.sendOutput(display.FormatErrorMessage("No sector number provided"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	sectorNum := 0
+	if _, err := fmt.Sscanf(sectorStr, "%d", &sectorNum); err != nil {
+		tmm.sendOutput(display.FormatErrorMessage("Invalid sector number: " + sectorStr))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	if db, ok := dbInterface.(database.Database); ok {
+		if !db.GetDatabaseOpen() {
+			tmm.sendOutput(display.FormatErrorMessage("Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		sectorCount := db.GetSectors()
+		if sectorNum < 1 || sectorNum > sectorCount {
+			tmm.sendOutput(display.FormatErrorMessage("That is not a valid sector"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		sectorData, err := db.LoadSector(sectorNum)
+		if err != nil {
+			tmm.sendOutput(display.FormatErrorMessage("Error loading sector: " + err.Error()))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		// Display the sector information in TWX format
+		tmm.displaySectorInTWXFormat(sectorData, sectorNum)
+	} else {
+		tmm.sendOutput(display.FormatErrorMessage("Invalid database interface"))
+		tmm.displayCurrentMenu()
+	}
+	
+	return nil
+}
+
+// displaySectorInTWXFormat displays a sector in the TWX format
+func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector, sectorIndex int) {
+	var output strings.Builder
+	
+	// Last seen date/time (TWX format)
+	output.WriteString("\r\nLast seen on " + sector.UpDate.Format("01/02/2006") + " at " + sector.UpDate.Format("15:04:05") + "\r\n\r\n")
+	
+	// Sector and constellation
+	constellation := sector.Constellation
+	if constellation == "" || constellation == "uncharted space." {
+		constellation = "uncharted space."
+	}
+	output.WriteString("Sector  : " + fmt.Sprintf("%d", sectorIndex) + " in " + constellation + "\r\n")
+	
+	// Check if sector has not been recorded (unexplored)
+	if sector.Explored == database.EtNo {
+		output.WriteString("\r\nThat sector has not been recorded\r\n\r\n")
+		tmm.sendOutput(output.String())
+		tmm.displayCurrentMenu()
+		return
+	}
+	
+	// Density (if available) 
+	// Note: TWX shows density with segments, but we'll show the raw number for now
+	// TODO: Implement the Segment() function equivalent
+	if sector.Density > -1 {
+		output.WriteString("Density : " + fmt.Sprintf("%d", sector.Density))
+		if sector.Anomaly {
+			output.WriteString(" (Anomaly)")
+		}
+		output.WriteString("\r\n")
+	}
+	
+	// Beacon
+	if sector.Beacon != "" {
+		output.WriteString("Beacon  : " + sector.Beacon + "\r\n")
+	}
+	
+	// Port information (from separate port table)
+	tmm.displayPortInformation(&output, sectorIndex)
+	
+	// Planets
+	if len(sector.Planets) > 0 {
+		for i, planet := range sector.Planets {
+			if i == 0 {
+				output.WriteString("Planets : " + planet.Name + "\r\n")
+			} else {
+				output.WriteString("          " + planet.Name + "\r\n")
+			}
+		}
+	}
+	
+	// Traders
+	if len(sector.Traders) > 0 {
+		for i, trader := range sector.Traders {
+			if i == 0 {
+				output.WriteString("Traders : " + trader.Name + ", w/ " + fmt.Sprintf("%d", trader.Figs) + " ftrs,\r\n")
+			} else {
+				output.WriteString("          " + trader.Name + ", w/ " + fmt.Sprintf("%d", trader.Figs) + " ftrs,\r\n")
+			}
+			output.WriteString("           in " + trader.ShipName + " (" + trader.ShipType + ")\r\n")
+		}
+	}
+	
+	// Ships
+	if len(sector.Ships) > 0 {
+		for i, ship := range sector.Ships {
+			if i == 0 {
+				output.WriteString("Ships   : " + ship.Name + " [Owned by] " + ship.Owner + ", w/ " + fmt.Sprintf("%d", ship.Figs) + " ftrs,\r\n")
+			} else {
+				output.WriteString("          " + ship.Name + " [Owned by] " + ship.Owner + ", w/ " + fmt.Sprintf("%d", ship.Figs) + " ftrs,\r\n")
+			}
+			output.WriteString("           (" + ship.ShipType + ")\r\n")
+		}
+	}
+	
+	// Fighters
+	if sector.Figs.Quantity > 0 {
+		output.WriteString("Fighters: " + fmt.Sprintf("%d", sector.Figs.Quantity) + " (" + sector.Figs.Owner + ") ")
+		switch sector.Figs.FigType {
+		case database.FtToll:
+			output.WriteString("[Toll]")
+		case database.FtDefensive:
+			output.WriteString("[Defensive]") 
+		case database.FtOffensive:
+			output.WriteString("[Offensive]")
+		default:
+			output.WriteString("[Unknown]")
+		}
+		output.WriteString("\r\n")
+	}
+	
+	// NavHaz
+	if sector.NavHaz > 0 {
+		output.WriteString("NavHaz  : " + fmt.Sprintf("%d", sector.NavHaz) + "% (Space Debris/Asteroids)\r\n")
+	}
+	
+	// Mines
+	if sector.MinesArmid.Quantity > 0 {
+		output.WriteString("Mines   : " + fmt.Sprintf("%d", sector.MinesArmid.Quantity) + " (Type 1 Armid) (" + sector.MinesArmid.Owner + ")\r\n")
+		if sector.MinesLimpet.Quantity > 0 {
+			output.WriteString("        : " + fmt.Sprintf("%d", sector.MinesLimpet.Quantity) + " (Type 2 Limpet) (" + sector.MinesLimpet.Owner + ")\r\n")
+		}
+	} else if sector.MinesLimpet.Quantity > 0 {
+		output.WriteString("Mines   : " + fmt.Sprintf("%d", sector.MinesLimpet.Quantity) + " (Type 2 Limpet) (" + sector.MinesLimpet.Owner + ")\r\n")
+	}
+	
+	// Warps
+	output.WriteString("Warps to Sector(s) :  ")
+	firstWarp := true
+	for i, warp := range sector.Warp {
+		if warp > 0 {
+			if !firstWarp {
+				output.WriteString(" - ")
+			}
+			output.WriteString(fmt.Sprintf("%d", warp))
+			firstWarp = false
+		} else if i > 0 { // TWX checks warps 2-6, we check 1-5 (0-based)
+			break
+		}
+	}
+	
+	// TODO: Add backdoors information when available
+	
+	output.WriteString("\r\n\r\n\r\n")
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+}
+
+// displayPortInformation displays port information for a sector
+func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, sectorIndex int) {
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		return
+	}
+	
+	if db, ok := dbInterface.(database.Database); ok {
+		port, err := db.LoadPort(sectorIndex)
+		if err == nil && port.Name != "" && !port.Dead {
+			output.WriteString("Ports   : " + port.Name + ", Class " + fmt.Sprintf("%d", port.ClassIndex) + " (")
+			
+			if port.ClassIndex == 0 || port.ClassIndex == 9 {
+				output.WriteString("Special")
+			} else {
+				// Show buy/sell pattern (B=buy, S=sell)
+				// Product indices: 0=Fuel Ore, 1=Organics, 2=Equipment
+				if len(port.BuyProduct) >= 3 {
+					if port.BuyProduct[0] {
+						output.WriteString("B")
+					} else {
+						output.WriteString("S")
+					}
+					if port.BuyProduct[1] {
+						output.WriteString("B")
+					} else {
+						output.WriteString("S")
+					}
+					if port.BuyProduct[2] {
+						output.WriteString("B")
+					} else {
+						output.WriteString("S")
+					}
+				}
+			}
+			output.WriteString(")\r\n")
+			
+			// Construction status
+			if port.BuildTime > 0 {
+				output.WriteString("           (Under Construction - " + fmt.Sprintf("%d", port.BuildTime) + " days left)\r\n")
+			}
+		}
+	}
+}
+
+// handleShowPort handles the "Show port details as last seen" menu option
+func (tmm *TerminalMenuManager) handleShowPort(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleShowPort: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	// Check if database is available and open
+	if db, ok := dbInterface.(database.Database); ok {
+		if !db.GetDatabaseOpen() {
+			tmm.sendOutput(display.FormatErrorMessage("Error: Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		sectorCount := db.GetSectors()
+		tmm.sendOutput("\r\nEnter sector number to show port details (1-" + fmt.Sprintf("%d", sectorCount) + "):\r\n")
+		
+		// Start input collection for sector number
+		tmm.inputCollector.StartCollection("PORT_DISPLAY", "Sector number")
+		return nil
+	} else {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Invalid database interface"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+}
+
+// displayPortSummary displays a port summary line (like TWX DisplayPortSummary)
+func (tmm *TerminalMenuManager) displayPortSummary(output *strings.Builder, sectorIndex int, port database.TPort) {
+	// Format: sector number, class, buy/sell pattern, product amounts and percentages, update time
+	sectorStr := fmt.Sprintf("%6d", sectorIndex)
+	classStr := fmt.Sprintf("%5d", port.ClassIndex)
+	
+	// Build buy/sell pattern (BSS format)
+	pattern := ""
+	if port.BuyProduct[0] {
+		pattern += "B"
+	} else {
+		pattern += "S"
+	}
+	if port.BuyProduct[1] {
+		pattern += "B"
+	} else {
+		pattern += "S"
+	}
+	if port.BuyProduct[2] {
+		pattern += "B"
+	} else {
+		pattern += "S"
+	}
+	
+	// Format product amounts and percentages
+	fuelOreStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[0], port.ProductPercent[0])
+	organicsStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[1], port.ProductPercent[1])
+	equipmentStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[2], port.ProductPercent[2])
+	
+	// Format update time
+	updateStr := port.UpDate.Format("15:04")
+	
+	output.WriteString(fmt.Sprintf("%s %s %s %s %s %s %s\r\n",
+		sectorStr,
+		classStr,
+		pattern,
+		fuelOreStr,
+		organicsStr,
+		equipmentStr,
+		updateStr))
+}
+
+// handlePortDisplayInput handles input collection for port display
+func (tmm *TerminalMenuManager) handlePortDisplayInput(sectorStr string) error {
+	sectorStr = strings.TrimSpace(sectorStr)
+	
+	if sectorStr == "" {
+		tmm.sendOutput(display.FormatErrorMessage("No sector number provided"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	sectorNum := 0
+	if _, err := fmt.Sscanf(sectorStr, "%d", &sectorNum); err != nil {
+		tmm.sendOutput(display.FormatErrorMessage("Invalid sector number: " + sectorStr))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	if db, ok := dbInterface.(database.Database); ok {
+		if !db.GetDatabaseOpen() {
+			tmm.sendOutput(display.FormatErrorMessage("Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		sectorCount := db.GetSectors()
+		if sectorNum < 1 || sectorNum > sectorCount {
+			tmm.sendOutput(display.FormatErrorMessage("That is not a valid sector"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		// Load the port data for this sector
+		port, err := db.LoadPort(sectorNum)
+		if err != nil || port.Name == "" {
+			tmm.sendOutput(display.FormatErrorMessage("That port has not been recorded or does not exist"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		// Check if port has been updated (TWX checks S.SPort.Update = 0)
+		if port.UpDate.IsZero() {
+			tmm.sendOutput(display.FormatErrorMessage("That port has not been recorded"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+		
+		// Display the port information in TWX format
+		tmm.displayPortInTWXFormat(port, sectorNum)
+	} else {
+		tmm.sendOutput(display.FormatErrorMessage("Invalid database interface"))
+		tmm.displayCurrentMenu()
+	}
+	
+	return nil
+}
+
+// displayPortInTWXFormat displays a port in the TWX commerce report format
+func (tmm *TerminalMenuManager) displayPortInTWXFormat(port database.TPort, sectorIndex int) {
+	var output strings.Builder
+	
+	// Commerce report header (like TWX DisplayPort)
+	output.WriteString("\r\nCommerce report for " + port.Name + " (sector " + fmt.Sprintf("%d", sectorIndex) + ") : ")
+	output.WriteString(port.UpDate.Format("15:04:05 01/02/2006") + "\r\n\r\n")
+	
+	// Product table header
+	output.WriteString(" Items     Status  Trading % of max\r\n")
+	output.WriteString(" -----     ------  ------- --------\r\n")
+	
+	// Fuel Ore
+	output.WriteString("Fuel Ore   ")
+	if port.BuyProduct[0] {
+		output.WriteString("Buying   ")
+	} else {
+		output.WriteString("Selling  ")
+	}
+	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[0], port.ProductPercent[0]))
+	
+	// Organics
+	output.WriteString("Organics   ")
+	if port.BuyProduct[1] {
+		output.WriteString("Buying   ")
+	} else {
+		output.WriteString("Selling  ")
+	}
+	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[1], port.ProductPercent[1]))
+	
+	// Equipment
+	output.WriteString("Equipment  ")
+	if port.BuyProduct[2] {
+		output.WriteString("Buying   ")
+	} else {
+		output.WriteString("Selling  ")
+	}
+	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[2], port.ProductPercent[2]))
+	
+	output.WriteString("\r\n\r\n")
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+}
+
+// Placeholder handlers for Data Menu items (to be implemented later)
+func (tmm *TerminalMenuManager) handleShowFighters(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Show foreign fighters functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleShowMines(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Show mines functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleShowDensity(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Show density comparison functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleShowAnomaly(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Show anomaly functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleShowTraders(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Show traders functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handlePlotCourse(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("Plot course functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+// Placeholder handlers for Port Menu items (to be implemented later)
+func (tmm *TerminalMenuManager) handleShowSpecialPorts(item *TerminalMenuItem, params []string) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleShowSpecialPorts: %v", r)
+		}
+	}()
+
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	dbInterface := tmm.proxyInterface.GetDatabase()
+	if dbInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	if db, ok := dbInterface.(database.Database); ok {
+		if !db.GetDatabaseOpen() {
+			tmm.sendOutput(display.FormatErrorMessage("Error: Database not open"))
+			tmm.displayCurrentMenu()
+			return nil
+		}
+
+		tmm.sendOutput("\r\nShowing all sectors with class 0 or 9 ports...\r\n")
+
+		sectorCount := db.GetSectors()
+		foundPorts := 0
+
+		// Loop through all sectors looking for class 0 or 9 ports (like TWX)
+		for i := 1; i <= sectorCount; i++ {
+			// Load port for this sector
+			port, err := db.LoadPort(i)
+			if err == nil && port.Name != "" && (port.ClassIndex == 0 || port.ClassIndex == 9) {
+				// Load the sector and display it (like TWX DisplaySector)
+				sector, err := db.LoadSector(i)
+				if err == nil {
+					tmm.displaySectorInTWXFormat(sector, i)
+					foundPorts++
+				}
+			}
+		}
+
+		if foundPorts == 0 {
+			tmm.sendOutput("No class 0 or 9 ports found in database.\r\n")
+		}
+
+		tmm.sendOutput("\r\nCompleted.\r\n")
+	} else {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Invalid database interface"))
+	}
+
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+func (tmm *TerminalMenuManager) handleListUpgradedPorts(item *TerminalMenuItem, params []string) error {
+	tmm.sendOutput("List upgraded ports functionality not yet implemented.\r\n")
+	tmm.displayCurrentMenu()
+	return nil
+}
+
+
+// handleVariableDumpInput handles input collection for variable dump
+func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
+	if tmm.proxyInterface == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	scriptManager := tmm.proxyInterface.GetScriptManager()
+	if scriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+
+	pattern = strings.TrimSpace(pattern)
+	
+	var output strings.Builder
+	output.WriteString("\r\n")
+	output.WriteString(display.FormatMenuTitle("Variable Dump"))
+	
+	if pattern != "" {
+		output.WriteString("Searching for variables matching: '" + pattern + "'\r\n")
+	} else {
+		output.WriteString("Showing all variables:\r\n")
+	}
+	output.WriteString("\r\n")
+
+	// Get the VM engine and try to access its variables
+	engine := scriptManager.GetEngine()
+	variableCount := 0
+	
+	if engine != nil {
+		// Try to access the VM's variable manager using our new interface
+		if vm, ok := engine.(interface{ 
+			GetAllVariables() map[string]*types.Value 
+		}); ok {
+			variables := vm.GetAllVariables()
+			for name, value := range variables {
+				if pattern == "" || strings.Contains(strings.ToLower(name), strings.ToLower(pattern)) {
+					// Format the value based on its type
+					var valueStr string
+					switch value.Type {
+					case types.StringType:
+						valueStr = value.String
+					case types.NumberType:
+						valueStr = fmt.Sprintf("%.0f", value.Number)
+					case types.ArrayType:
+						// Show array size
+						valueStr = fmt.Sprintf("[Array with %d elements]", len(value.Array))
+					default:
+						valueStr = fmt.Sprintf("%v", value)
+					}
+					output.WriteString(fmt.Sprintf("%-20s = %s\r\n", name, valueStr))
+					variableCount++
+				}
+			}
+		} else {
+			// Fallback: script engine found but doesn't implement our interface
+			output.WriteString("Script engine found, but variable access interface not available.\r\n")
+			output.WriteString("Engine type: " + fmt.Sprintf("%T", engine) + "\r\n")
+		}
+	} else {
+		output.WriteString("No script engine available.\r\n")
+	}
+
+	if variableCount > 0 {
+		output.WriteString(fmt.Sprintf("\r\nFound %d matching variable(s).\r\n", variableCount))
+	} else if pattern != "" {
+		output.WriteString("\r\nNo variables found matching pattern '" + pattern + "'.\r\n")
+	} else {
+		output.WriteString("\r\nNo variables found in running scripts.\r\n")
+	}
+
+	// Show engine status for debugging
+	status := scriptManager.GetStatus()
+	output.WriteString("\r\nEngine Status:\r\n")
+	for key, value := range status {
+		output.WriteString(fmt.Sprintf("- %s: %v\r\n", key, value))
+	}
+	
+	output.WriteString("\r\nVariable Dump Complete.\r\n")
+	tmm.sendOutput(output.String())
+	tmm.displayCurrentMenu()
+	
+	return nil
 }
 
 // GetMenuManager returns the terminal menu manager for script integration

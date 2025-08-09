@@ -2,7 +2,9 @@ package components
 
 import (
 	"bytes"
+	"container/list"
 	"context"
+	"crypto/md5"
 	"fmt"
 	"image"
 	"image/color"
@@ -25,6 +27,72 @@ import (
 	xdraw "golang.org/x/image/draw"
 )
 
+// CachedGraphData represents cached image and sixel data keyed by content hash
+type CachedGraphData struct {
+	ImageData []byte
+	SixelData string
+	Width     int
+	Height    int
+}
+
+// lruCacheItem represents an item in the LRU cache
+type lruCacheItem struct {
+	key  string
+	data *CachedGraphData
+}
+
+// LRUCache implements a simple LRU cache with maximum size
+type LRUCache struct {
+	maxSize int
+	items   map[string]*list.Element
+	order   *list.List
+}
+
+// NewLRUCache creates a new LRU cache with the specified maximum size
+func NewLRUCache(maxSize int) *LRUCache {
+	return &LRUCache{
+		maxSize: maxSize,
+		items:   make(map[string]*list.Element),
+		order:   list.New(),
+	}
+}
+
+// Get retrieves a value from the cache, marking it as recently used
+func (c *LRUCache) Get(key string) (*CachedGraphData, bool) {
+	if element, exists := c.items[key]; exists {
+		// Move to front (most recently used)
+		c.order.MoveToFront(element)
+		return element.Value.(*lruCacheItem).data, true
+	}
+	return nil, false
+}
+
+// Put stores a value in the cache
+func (c *LRUCache) Put(key string, data *CachedGraphData) {
+	if element, exists := c.items[key]; exists {
+		// Update existing item and move to front
+		element.Value.(*lruCacheItem).data = data
+		c.order.MoveToFront(element)
+		return
+	}
+
+	// Add new item
+	item := &lruCacheItem{key: key, data: data}
+	element := c.order.PushFront(item)
+	c.items[key] = element
+
+	// Check if we need to evict the least recently used item
+	if c.order.Len() > c.maxSize {
+		// Remove least recently used (back of the list)
+		oldest := c.order.Back()
+		if oldest != nil {
+			c.order.Remove(oldest)
+			oldestItem := oldest.Value.(*lruCacheItem)
+			delete(c.items, oldestItem.key)
+		}
+	}
+}
+
 // GraphvizSectorMap manages the sector map visualization using graphviz and sixels
 type GraphvizSectorMap struct {
 	*tview.Box
@@ -32,10 +100,11 @@ type GraphvizSectorMap struct {
 	currentSector int
 	sectorData    map[int]api.SectorInfo
 	sectorLevels  map[int]int // Track which level each sector is at (0=current, 1-5=hop levels)
-	cachedImage   []byte
-	cachedSixel   string
-	cachedWidth   int
-	cachedHeight  int
+	
+	// Content-hash based LRU caching
+	graphCache    *LRUCache // LRU cache keyed by MD5 hash of DOT content
+	currentHashKey string   // Current hash key being displayed
+	
 	needsRedraw   bool
 	hasBorder     bool
 	sixelLayer    *SixelLayer
@@ -65,6 +134,7 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 		Box:          box,
 		sectorData:   make(map[int]api.SectorInfo),
 		sectorLevels: make(map[int]int),
+		graphCache:   NewLRUCache(100), // Initialize LRU cache with max size 100
 		needsRedraw:  true,
 		hasBorder:    false,  // No border, just background
 		sixelLayer:   sixelLayer,
@@ -78,7 +148,7 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	gsm.proxyAPI = proxyAPI
 	gsm.needsRedraw = true
-	gsm.cachedSixel = "" // Clear sixel cache
+	// LRU cache will handle eviction automatically
 }
 
 // Draw renders the graphviz sector map using the proven sixel technique
@@ -94,27 +164,10 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		return
 	}
 
-	// Check if dimensions changed and invalidate cache if needed
-	if gsm.cachedWidth != width || gsm.cachedHeight != height {
-		debug.Log("GraphvizSectorMap.Draw: Dimensions changed, invalidating cache")
-		gsm.cachedImage = nil
-		gsm.cachedSixel = ""
-		
-		// Clear the region thoroughly before updating dimensions
-		if gsm.sixelLayer != nil {
-			gsm.sixelLayer.ClearRegion(gsm.regionID)
-			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
-		}
-		
-		gsm.cachedWidth = width
-		gsm.cachedHeight = height
-		gsm.needsRedraw = true
-	}
-
 	// Generate map image and sixel if needed
-	needsGeneration := gsm.needsRedraw || gsm.cachedImage == nil || gsm.cachedSixel == ""
-	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, cachedImage==nil=%t, cachedSixel==\"\"=%t), isGenerating=%t", 
-		needsGeneration, gsm.needsRedraw, gsm.cachedImage == nil, gsm.cachedSixel == "", gsm.isGenerating)
+	needsGeneration := gsm.needsRedraw
+	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t), isGenerating=%t", 
+		needsGeneration, gsm.needsRedraw, gsm.isGenerating)
 	
 	
 	if needsGeneration {
@@ -132,11 +185,10 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 			g, err := gsm.buildSectorGraph()
 			if err == nil {
 				debug.Log("GraphvizSectorMap.Draw: Graph built successfully, generating image")
-				imageData, err := gsm.generateGraphvizImage(g, width, height)
+				_, err := gsm.generateGraphvizImage(g, width, height)
 				if err == nil {
 					debug.Log("GraphvizSectorMap.Draw: Image generated successfully")
-					gsm.cachedImage = imageData
-					gsm.cachedSixel = "" // Clear sixel cache when image changes
+					// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
 					gsm.needsRedraw = false
 					gsm.isGenerating = false  // Mark generation complete
 				} else {
@@ -154,12 +206,12 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	}
 
 	// Register sixel region with the layer if we have cached image
-	if gsm.cachedImage != nil && gsm.sixelLayer != nil {
+	if gsm.currentHashKey != "" && gsm.sixelLayer != nil {
 		debug.Log("GraphvizSectorMap.Draw: Registering sixel region")
 		gsm.registerSixelRegion(x, y, width, height)
 	} else {
-		debug.Log("GraphvizSectorMap.Draw: Showing status text - cachedImage==nil=%t, sixelLayer!=nil=%t", 
-			gsm.cachedImage == nil, gsm.sixelLayer != nil)
+		debug.Log("GraphvizSectorMap.Draw: Showing status text - currentHashKey=%s, sixelLayer!=nil=%t", 
+			gsm.currentHashKey, gsm.sixelLayer != nil)
 		
 		// Show status text
 		gsm.drawStatusText(screen, x, y, width, height, "Generating sector map...")
@@ -174,11 +226,19 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 
 // registerSixelRegion registers this component's sixel region with the layer
 func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
-	// Generate sixel data if not cached
-	if gsm.cachedSixel == "" {
+	// Get cached data from LRU cache
+	cached, found := gsm.graphCache.Get(gsm.currentHashKey)
+	if !found {
+		debug.Log("GraphvizSectorMap.registerSixelRegion: No cached data found for hash %s", gsm.currentHashKey)
+		return
+	}
+
+	// Generate sixel data if not already generated for this cached item
+	if cached.SixelData == "" {
 		// Decode the cached PNG image
-		img, err := png.Decode(bytes.NewReader(gsm.cachedImage))
+		img, err := png.Decode(bytes.NewReader(cached.ImageData))
 		if err != nil {
+			debug.Log("GraphvizSectorMap.registerSixelRegion: Failed to decode PNG: %v", err)
 			return
 		}
 
@@ -191,19 +251,22 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 		var buf bytes.Buffer
 		err = rasterm.SixelWriteImage(&buf, palettedImg)
 		if err != nil {
+			debug.Log("GraphvizSectorMap.registerSixelRegion: Failed to encode sixel: %v", err)
 			return
 		}
 
-		gsm.cachedSixel = buf.String()
+		// Update the cached data with sixel
+		cached.SixelData = buf.String()
+		gsm.graphCache.Put(gsm.currentHashKey, cached) // Update cache with sixel data
 	}
 
-	// Register with the sixel layer instead of direct TTY writing
+	// Register with the sixel layer
 	region := &SixelRegion{
 		X:         x,
 		Y:         y + 1, // Minimal offset to avoid title overlap
 		Width:     width,
 		Height:    height - 1, // Minimal height adjustment
-		SixelData: gsm.cachedSixel,
+		SixelData: cached.SixelData,
 		Visible:   true,
 	}
 
@@ -280,8 +343,8 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 	if gsm.currentSector != sectorNumber {
 		gsm.currentSector = sectorNumber
 		gsm.needsRedraw = true
-		gsm.cachedSixel = "" // Clear sixel cache
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
+		// Note: Don't clear sectorData or graphCache - let hash-based caching handle it
 
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
@@ -295,7 +358,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 	if gsm.currentSector != sectorInfo.Number {
 		gsm.currentSector = sectorInfo.Number
 		gsm.needsRedraw = true
-		gsm.cachedSixel = "" // Clear sixel cache
+		gsm.currentHashKey = "" // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
 		// Hide the region while regenerating to prevent overlap
@@ -324,7 +387,7 @@ func (gsm *GraphvizSectorMap) LoadRealMapData() {
 	if gsm.currentSector != playerInfo.CurrentSector {
 		gsm.currentSector = playerInfo.CurrentSector
 		gsm.needsRedraw = true
-		gsm.cachedSixel = "" // Clear sixel cache
+		gsm.currentHashKey = "" // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 	}
 }
@@ -755,13 +818,31 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	} else {
 	}
 
-	// Save DOT file for debugging
+	// Generate DOT content and create MD5 hash for caching
 	var dotBuf bytes.Buffer
 	err = gv.Render(ctx, gvGraph, "dot", &dotBuf)
-	if err == nil {
-		if err := os.WriteFile("/tmp/sector_map.dot", dotBuf.Bytes(), 0644); err != nil {
-		} else {
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate DOT content: %w", err)
+	}
+
+	// Create MD5 hash of DOT content for cache key
+	dotContent := dotBuf.Bytes()
+	hash := md5.Sum(dotContent)
+	hashKey := fmt.Sprintf("%x", hash)
+
+	// Check if we have cached data for this hash
+	if cached, found := gsm.graphCache.Get(hashKey); found {
+		debug.Log("GraphvizSectorMap: Using cached image for hash %s", hashKey)
+		gsm.currentHashKey = hashKey
+		return cached.ImageData, nil
+	}
+
+	debug.Log("GraphvizSectorMap: Generating new image for hash %s", hashKey)
+	gsm.currentHashKey = hashKey
+
+	// Save DOT file for debugging
+	if err := os.WriteFile("/tmp/sector_map.dot", dotContent, 0644); err != nil {
+	} else {
 	}
 
 	// Use command line graphviz as the primary approach since it renders borders properly
@@ -959,7 +1040,19 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		return nil, fmt.Errorf("failed to encode final panel PNG: %w", err)
 	}
 
-	return panelBuf.Bytes(), nil
+	finalImageData := panelBuf.Bytes()
+
+	// Cache the result with the hash key
+	cachedData := &CachedGraphData{
+		ImageData: finalImageData,
+		SixelData: "", // Sixel will be generated later when needed
+		Width:     panelPixelWidth,
+		Height:    panelPixelHeight,
+	}
+	gsm.graphCache.Put(hashKey, cachedData)
+
+	debug.Log("GraphvizSectorMap: Cached new image with hash %s", hashKey)
+	return finalImageData, nil
 }
 
 // findContentBounds finds the bounding box of non-black pixels in an image

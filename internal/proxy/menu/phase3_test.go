@@ -95,7 +95,7 @@ func TestTWXMainMenuHandlers(t *testing.T) {
 		{"T", "Error: No proxy interface available", "Terminate Script from main menu (no proxy)"},
 		{"S", "TWX Script Menu", "Navigate to Script submenu"},
 		{"V", "TWX Data Menu", "Navigate to Data submenu"},
-		{"P", "Port menu functionality not yet implemented", "Port Menu (not implemented)"},
+		{"P", "TWX Port Menu", "Port Menu"},
 	}
 	
 	for _, tc := range testCases {

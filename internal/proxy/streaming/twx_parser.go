@@ -1134,10 +1134,11 @@ func (p *TWXParser) processCIMLine(line string) {
 }
 
 // processWarpCIMLine processes warp CIM data (sector warp connections)
-// Format: "1234 5678 9012 3456 7890 1234" (sector and its 6 warp destinations)
+// Format can be: "1234 5678 9012 3456 7890 1234" (sector and its 6 warp destinations)
+// Or: "1234 5678 9012" (sector with fewer warps)
 func (p *TWXParser) processWarpCIMLine(line string) {
 	parts := strings.Fields(line)
-	if len(parts) < 7 { // Need sector + 6 warps
+	if len(parts) < 2 { // Need at least sector + 1 warp
 		p.currentDisplay = DisplayNone
 		return
 	}
@@ -1149,17 +1150,19 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 	}
 	
 	
-	// Parse the 6 warp destinations
+	// Parse available warp destinations (up to 6 max)
 	var warps [6]int
-	for i := 0; i < 6; i++ {
+	maxWarps := len(parts) - 1 // Number of warp destinations available
+	if maxWarps > 6 {
+		maxWarps = 6 // Cap at 6 warps maximum
+	}
+	
+	for i := 0; i < maxWarps; i++ {
 		warpSector := p.parseIntSafe(parts[i+1])
-		if warpSector < 0 { // Allow 0 for no warp
-			p.currentDisplay = DisplayNone
-			return
+		if warpSector < 0 { // Invalid warp sector
+			break // Stop parsing at first invalid warp
 		}
 		warps[i] = warpSector
-		if warpSector > 0 {
-		}
 	}
 	
 	// Store warp data to database (mirrors Pascal TWXDatabase.SaveSector)
@@ -1173,6 +1176,13 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 	for i := 0; i < 6; i++ {
 		sector.Warp[i] = warps[i]
 	}
+	
+	// Mark sector as calculated from CIM data (mirrors Pascal logic)
+	if sector.Explored == database.EtNo {
+		sector.Explored = database.EtCalc
+		sector.Constellation = "???" + " (CIM data only)"
+	}
+	
 	sector.UpDate = time.Now()
 	
 	// Save updated sector
@@ -1369,9 +1379,10 @@ func (p *TWXParser) processDensityLine(line string) {
 		}
 	}
 	
-	// Extract warps count (look for "Warps:" keyword)
+	// Extract warps count (look for "Warps:" keyword) - for TWX compatibility
 	for i, field := range fields {
 		if (field == "Warps:" || strings.HasPrefix(field, "Warps")) && i+1 < len(fields) {
+			// Store warp count from density scan (TWX compatibility)
 			sector.Warps = p.parseIntSafe(fields[i+1])
 			break
 		}

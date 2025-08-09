@@ -24,14 +24,13 @@ func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 	// Basic sector info
 	dbSector.Warp = parserSector.Warps
 	
-	// Count valid warps for the Warps field
-	validWarps := 0
+	// Calculate computed Warps field from warp array
+	dbSector.Warps = 0
 	for _, warp := range parserSector.Warps {
 		if warp > 0 {
-			validWarps++
+			dbSector.Warps++
 		}
 	}
-	dbSector.Warps = validWarps
 	
 	dbSector.Constellation = parserSector.Constellation
 	dbSector.Beacon = parserSector.Beacon

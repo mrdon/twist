@@ -787,7 +787,6 @@ func createTestSector() database.TSector {
 		Beacon:        "Test Beacon",
 		Constellation: "Test Constellation",
 		Explored:      database.EtDensity, // 2 = DENSITY
-		Warps:         3,
 	}
 }
 
@@ -800,7 +799,6 @@ func createTestSectorWithData(density int, hasPort bool, portClass int) database
 		Beacon:        "Test Beacon",
 		Constellation: "Test Constellation", 
 		Explored:      database.EtDensity,
-		Warps:         3,
 	}
 
 	// If hasPort is true, the port will be saved separately using SavePort()

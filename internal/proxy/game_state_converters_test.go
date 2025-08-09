@@ -90,7 +90,7 @@ func TestConvertDatabaseSectorToAPI(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{2, 5, 10, 0, 0, 0},
 				NavHaz:        25,
-				Warps:         3,
+
 				Constellation: "Sol System",
 				Beacon:        "Earth space beacon",
 				Traders:       []database.TTrader{{Name: "Bob", ShipType: "Merchant"}},
@@ -111,7 +111,7 @@ func TestConvertDatabaseSectorToAPI(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{49, 51, 0, 0, 0, 0},
 				NavHaz:        0,
-				Warps:         2,
+
 				Constellation: "Trading Hub",
 				Beacon:        "Welcome to the hub",
 				Traders: []database.TTrader{
@@ -136,7 +136,7 @@ func TestConvertDatabaseSectorToAPI(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{0, 0, 0, 0, 0, 0},
 				NavHaz:        100,
-				Warps:         0,
+
 				Constellation: "",
 				Beacon:        "",
 				Traders:       []database.TTrader{},
@@ -157,7 +157,7 @@ func TestConvertDatabaseSectorToAPI(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{99, 101, 150, 200, 250, 300},
 				NavHaz:        50,
-				Warps:         6,
+
 				Constellation: "Dense Region",
 				Beacon:        "Major intersection",
 				Traders:       []database.TTrader{},
@@ -257,7 +257,7 @@ func TestConvertDatabaseSectorToAPI_FallbackLogic(t *testing.T) {
 	dbSector := database.TSector{
 		Warp:          [6]int{122, 124, 200, 0, 0, 0},
 		NavHaz:        75,
-		Warps:         3,
+
 		Constellation: "Test Constellation",
 		Beacon:        "Test Beacon",
 		Traders: []database.TTrader{

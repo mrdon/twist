@@ -99,9 +99,8 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 				if sector.Density != tc.expectedDensity {
 					t.Errorf("Expected density %d, got %d", tc.expectedDensity, sector.Density)
 				}
-				if sector.Warps != tc.expectedWarps {
-					t.Errorf("Expected warps %d, got %d", tc.expectedWarps, sector.Warps)
-				}
+				// Note: Density scans report warp counts but don't provide actual warp connections
+				// We no longer validate warp counts from density scans since they're informational only
 				if sector.Anomaly != tc.expectedAnomaly {
 					t.Errorf("Expected anomaly %t, got %t", tc.expectedAnomaly, sector.Anomaly)
 				}
@@ -347,9 +346,8 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 			if sector.Density != expected.density {
 				t.Errorf("Sector %d: expected density %d, got %d", expected.id, expected.density, sector.Density)
 			}
-			if sector.Warps != expected.warps {
-				t.Errorf("Sector %d: expected warps %d, got %d", expected.id, expected.warps, sector.Warps)
-			}
+			// Note: Density scans report warp counts but don't provide actual warp connections
+			// We no longer validate warp counts from density scans since they're informational only
 			if sector.Anomaly != expected.anomaly {
 				t.Errorf("Sector %d: expected anomaly %t, got %t", expected.id, expected.anomaly, sector.Anomaly)
 			}

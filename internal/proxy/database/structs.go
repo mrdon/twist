@@ -68,7 +68,7 @@ type TSector struct {
 	UpDate        time.Time            `json:"update"`
 	Anomaly       bool                 `json:"anomaly"`
 	Density       int                  `json:"density"`       // LongInt in TWX
-	Warps         int                  `json:"warps"`         // Byte in TWX (number of valid warps)
+	Warps         int                  `json:"warps"`         // Computed field, not stored in DB
 	Explored      TSectorExploredType  `json:"explored"`
 	
 	// In TWX these are LongInt pointers to linked lists, we'll handle differently
@@ -77,6 +77,7 @@ type TSector struct {
 	Planets  []TPlanet  `json:"planets"`
 	Vars     []TSectorVar `json:"vars"`     // Sector variables
 }
+
 
 // TTrader matches TWX TTrader record
 type TTrader struct {
@@ -182,7 +183,7 @@ func NULLSector() TSector {
 		UpDate:        time.Time{},
 		Anomaly:       false,
 		Density:       -1, // TWX default for unexplored sectors
-		Warps:         0,
+		Warps:         0,  // Will be calculated when sector is loaded/used
 		Explored:      EtNo,
 		Ships:         []TShip{},
 		Traders:       []TTrader{},

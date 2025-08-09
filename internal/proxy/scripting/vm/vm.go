@@ -395,6 +395,28 @@ func (vm *VirtualMachine) registerCommand(name string, minParams, maxParams int,
 	}
 }
 
+// Variable access methods for menu system
+func (vm *VirtualMachine) GetAllVariables() map[string]*types.Value {
+	if vm.variables == nil {
+		return make(map[string]*types.Value)
+	}
+	return vm.variables.GetAll()
+}
+
+func (vm *VirtualMachine) GetVariableNames() []string {
+	if vm.variables == nil {
+		return []string{}
+	}
+	return vm.variables.GetNames()
+}
+
+func (vm *VirtualMachine) GetVariableCount() int {
+	if vm.variables == nil {
+		return 0
+	}
+	return vm.variables.Count()
+}
+
 // Call stack persistence methods for TWX compatibility
 func (vm *VirtualMachine) saveCallStack(scriptID string) error {
 	if vm.gameInterface == nil {

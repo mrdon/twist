@@ -21,7 +21,7 @@ func TestConvertTSectorToSectorInfo(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{2, 5, 0, 0, 0, 0},
 				NavHaz:        25,
-				Warps:         2,
+
 				Constellation: "Sol",
 				Beacon:        "Welcome to Earth space",
 				Traders:       []database.TTrader{{Name: "Bob", ShipType: "Merchant"}},
@@ -43,7 +43,7 @@ func TestConvertTSectorToSectorInfo(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{99, 101, 150, 200, 300, 400},
 				NavHaz:        0,
-				Warps:         6,
+
 				Constellation: "Alpha Centauri",
 				Beacon:        "Major hub sector",
 				Traders:       []database.TTrader{},
@@ -65,7 +65,7 @@ func TestConvertTSectorToSectorInfo(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{0, 0, 0, 0, 0, 0},
 				NavHaz:        100,
-				Warps:         0,
+
 				Constellation: "Unknown",
 				Beacon:        "",
 				Traders:       []database.TTrader{},
@@ -87,7 +87,7 @@ func TestConvertTSectorToSectorInfo(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{49, 51, 75, 0, 0, 0},
 				NavHaz:        50,
-				Warps:         3,
+
 				Constellation: "Beta Sector",
 				Beacon:        "Trade route intersection",
 				Traders: []database.TTrader{
@@ -113,7 +113,7 @@ func TestConvertTSectorToSectorInfo(t *testing.T) {
 			dbSector: database.TSector{
 				Warp:          [6]int{24, 26, -1, 0, 999999, 0}, // Test negative and large values
 				NavHaz:        15,
-				Warps:         5, // Claims 5 warps but only first 2 are valid
+ // Claims 5 warps but only first 2 are valid
 				Constellation: "Test Sector",
 				Beacon:        "Test beacon",
 				Traders:       []database.TTrader{},

@@ -565,6 +565,34 @@ func (e *Engine) GetRunningScriptCount() int {
 	return count
 }
 
+// GetAllVariables returns all variables from all running scripts
+func (e *Engine) GetAllVariables() map[string]*types.Value {
+	e.mutex.RLock()
+	defer e.mutex.RUnlock()
+	
+	allVariables := make(map[string]*types.Value)
+	
+	for _, script := range e.scripts {
+		if script.Running && script.VM != nil {
+			// Get variables from this script's VM
+			scriptVars := script.VM.GetAllVariables()
+			
+			// Prefix variable names with script name to avoid conflicts
+			for varName, varValue := range scriptVars {
+				prefixedName := fmt.Sprintf("%s.%s", script.Name, varName)
+				allVariables[prefixedName] = varValue
+			}
+			
+			// Also add without prefix for convenience (latest script wins in case of conflicts)
+			for varName, varValue := range scriptVars {
+				allVariables[varName] = varValue
+			}
+		}
+	}
+	
+	return allVariables
+}
+
 // onScriptTerminated handles cleanup when a script terminates
 func (e *Engine) onScriptTerminated(scriptID string) {
 	defer func() {

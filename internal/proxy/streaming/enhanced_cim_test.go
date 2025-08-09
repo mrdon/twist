@@ -205,10 +205,10 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 		lines := []string{
 			"", // Empty line
 			"12", // Too short
-			"1234", // Port CIM without enough parameters
-			"1234 5000", // Port CIM incomplete
+			"0", // Invalid sector number (zero)
+			"invalid", // Invalid sector number (non-numeric)
 			"invalid 5000 60% 3000 80% 2000 90%", // Invalid sector number
-			"1234 5000 150% 3000 80% 2000 90%", // Invalid percentage
+			"1234 5000 150% 3000 80% 2000 90%", // Invalid percentage (port CIM)
 		}
 		
 		for _, invalidLine := range lines {
