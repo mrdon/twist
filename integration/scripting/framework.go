@@ -285,6 +285,9 @@ type TestTelnetServer struct {
 	mutex        sync.Mutex
 	t            *testing.T
 	port         int
+	
+	// Dynamic data sending
+	dynamicData  chan string
 }
 
 // NewTestTelnetServer creates a new telnet server for testing
@@ -295,6 +298,7 @@ func NewTestTelnetServer(t *testing.T) *TestTelnetServer {
 		inputs:      make([]string, 0),
 		currentStep: 0,
 		t:           t,
+		dynamicData: make(chan string, 100),
 	}
 }
 
@@ -334,11 +338,24 @@ func (ts *TestTelnetServer) GetInputs() []string {
 	return append([]string(nil), ts.inputs...)
 }
 
+// SendDynamicData sends data to all connected clients immediately
+func (ts *TestTelnetServer) SendDynamicData(data string) {
+	select {
+	case ts.dynamicData <- data:
+		ts.t.Logf("Queued dynamic data: %q", data)
+	default:
+		ts.t.Errorf("Dynamic data channel full, dropping: %q", data)
+	}
+}
+
 // Stop stops the telnet server
 func (ts *TestTelnetServer) Stop() {
 	if ts.listener != nil {
 		ts.listener.Close()
 	}
+	
+	// Close dynamic data channel
+	close(ts.dynamicData)
 	
 	ts.mutex.Lock()
 	for _, conn := range ts.connections {
@@ -372,6 +389,14 @@ func (ts *TestTelnetServer) handleConnection(conn net.Conn) {
 	
 	// Send initial game prompt to simulate TWX game server
 	ts.sendResponse(conn, "Trade Wars 2002\r\nEnter your login name: ")
+	
+	// Start goroutine to handle dynamic data
+	go func() {
+		for data := range ts.dynamicData {
+			ts.t.Logf("Sending dynamic data to client: %q", data)
+			ts.sendResponse(conn, data)
+		}
+	}()
 	
 	scanner := bufio.NewScanner(conn)
 	for scanner.Scan() {

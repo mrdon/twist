@@ -192,6 +192,53 @@ func NewWithScript(tuiAPI api.TuiAPI, initialScript string) *Proxy {
 	return p
 }
 
+// NewWithDatabase creates a new proxy with a pre-configured database (for testing)
+func NewWithDatabase(tuiAPI api.TuiAPI, db database.Database) *Proxy {
+	p := &Proxy{
+		outputChan:    make(chan string, 100),
+		inputChan:     make(chan string, 100),
+		errorChan:     make(chan error, 100),
+		connected:     false,
+		db:            db,  // Use the provided database
+		tuiAPI:        tuiAPI,
+		pipeline:      nil,
+		gameDetector:  nil,
+	}
+	
+	// Initialize terminal menu manager
+	p.terminalMenuManager = menu.NewTerminalMenuManager()
+	
+	// Set up menu data injection function
+	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	
+	// Set up proxy interface for menu system
+	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
+	
+	// Initialize script input collector
+	p.scriptInputCollector = input.NewInputCollector(func(output string) {
+		if p.tuiAPI != nil {
+			p.tuiAPI.OnData([]byte(output))
+		}
+	})
+	
+	// Create script manager that can request database dynamically
+	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
+	
+	// Setup script manager connections immediately
+	p.scriptManager.SetupConnections(p, nil)
+	
+	// Setup menu manager for script menu commands
+	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
+	
+	// Start input handler immediately
+	p.mu.Lock()
+	p.inputHandlerStarted = true
+	p.mu.Unlock()
+	go p.handleInput()
+	
+	return p
+}
+
 // escapeANSI converts ANSI escape sequences to readable text
 func escapeANSI(data []byte) string {
 	str := string(data)

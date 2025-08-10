@@ -2,17 +2,30 @@ package scripting
 
 import (
 	"testing"
+	"time"
 )
 
 // TestMultipleConsecutiveGetInput verifies that multiple getinput commands work correctly
 // This replicates the Port Pair Trading script issue where script restarts after each input
+// Now using the dual expect system for black-box testing
 func TestMultipleConsecutiveGetInput_RealIntegration(t *testing.T) {
-	tester := NewIntegrationScriptTester(t)
-	
-	// Simulate the Port Pair Trading script pattern:
-	// getinput $sector2 "Enter sector to trade to" 0
-	// getinput $timesLeft "Enter times to execute script" 0  
-	// getinput $percent "Enter markup/markdown percentage" 5
+	bridge := NewExpectTelnetBridge(t).
+		SetupDatabase().
+		SetupTelnetServer()
+
+	// Minimal server script - just provides basic game server simulation
+	serverScript := `
+log "Minimal server starting"
+timeout "1s"
+
+# Basic game server greeting
+send "Trade Wars 2002\r\nConnected.\r\n"
+send "Welcome to the game!\r\n"
+
+log "Minimal server completed"
+`
+
+	// The TWX script that has the multiple getinput commands
 	script := `
 		getinput $sector2 "Enter sector to trade to" 0
 		getinput $timesLeft "Enter times to execute script" 0
@@ -23,154 +36,51 @@ func TestMultipleConsecutiveGetInput_RealIntegration(t *testing.T) {
 		echo "Times: " $timesLeft  
 		echo "Percentage: " $percent
 	`
-	
-	// Start script execution
-	result := tester.ExecuteScript(script)
-	
-	// Script should pause at first getinput, not complete or error
-	if result.Error != nil {
-		t.Fatalf("Script execution failed unexpectedly: %v", result.Error)
-	}
-	
-	// First prompt should be displayed
-	expectedFirstOutput := "\r\nEnter sector to trade to [0]\r\n"
-	if len(result.Output) < 1 || result.Output[0] != expectedFirstOutput {
-		t.Errorf("Expected first prompt %q, got outputs: %v", expectedFirstOutput, result.Output)
-	}
-	
-	// Script should be paused waiting for first input
-	if !tester.IsScriptWaitingForInput() {
-		t.Fatal("Script should be paused waiting for first input")
-	}
-	
-	// Now test both the ideal behavior (direct VM input) and the real-world behavior
-	// by attempting to simulate script restart conditions
-	
-	// Store the original script VM state
-	originalVM := tester.currentScript.VM
-	originalPosition := originalVM.GetCurrentPosition()
-	t.Logf("Script position before first input: %d", originalPosition)
-	
-	// Provide first input using direct VM method (current working approach)
-	err := tester.ProvideInput("2157")
+
+	bridge.SetServerScript(serverScript).
+		SetupProxy().
+		SetupExpectEngine().
+		LoadScript(script)
+
+	time.Sleep(300 * time.Millisecond)
+
+	// Client-side expect script that tests the real user experience
+	// Now that the bug is fixed, script properly progresses through all getinput commands
+	clientScript := `
+log "Multiple getinput client starting"
+timeout "1s"
+
+# Wait for first prompt and respond
+expect "Enter sector to trade to"
+send "2157*"
+
+# Wait for second prompt and respond
+expect "Enter times to execute script"
+send "5*"
+
+# Wait for third prompt and use default (just press Enter)
+expect "Enter markup/markdown percentage"
+send "*"
+
+# Verify the script echoed the results correctly
+expect "Sector: 2157"
+expect "Times: 5"
+expect "Percentage: 5"
+
+log "Multiple getinput test completed successfully!"
+`
+
+	err := bridge.RunExpectScript(clientScript)
 	if err != nil {
-		t.Fatalf("Failed to provide first input: %v", err)
+		t.Fatalf("Multiple getinput client script failed: %v", err)
 	}
-	
-	// Continue execution normally
-	result = tester.ContinueExecution()
-	if result.Error != nil {
-		t.Fatalf("Script failed after first input: %v", result.Error)
-	}
-	
-	// Log the current position to see if script advanced
-	newPosition := tester.currentScript.VM.GetCurrentPosition()
-	t.Logf("Script position after first input: %d", newPosition)
-	
-	// Check if we're progressing or restarting
-	if newPosition <= originalPosition {
-		t.Errorf("SCRIPT RESTART DETECTED: Position went from %d to %d after first input", originalPosition, newPosition)
-	}
-	
-	// Second prompt should be displayed
-	expectedSecondOutput := "\r\nEnter times to execute script [0]\r\n"
-	foundSecond := false
-	for _, output := range result.Output {
-		if output == expectedSecondOutput {
-			foundSecond = true
-			break
-		}
-	}
-	if !foundSecond {
-		t.Errorf("Expected second prompt %q not found in outputs: %v", expectedSecondOutput, result.Output)
-		// This is likely the bug - script restarted instead of continuing to second getinput
-		return
-	}
-	
-	// Script should be paused waiting for second input
-	if !tester.IsScriptWaitingForInput() {
-		t.Fatal("Script should be paused waiting for second input")
-	}
-	
-	// Store position before second input
-	secondPosition := tester.currentScript.VM.GetCurrentPosition()
-	t.Logf("Script position before second input: %d", secondPosition)
-	
-	// Provide second input
-	err = tester.ProvideInput("5")
+
+	err = bridge.WaitForServerScript(1 * time.Second)
 	if err != nil {
-		t.Fatalf("Failed to provide second input: %v", err)
+		t.Fatalf("Multiple getinput server script failed: %v", err)
 	}
-	
-	// Script should continue and pause at third getinput
-	result = tester.ContinueExecution()
-	if result.Error != nil {
-		t.Fatalf("Script failed after second input: %v", result.Error)
-	}
-	
-	// Check position progression again
-	thirdPosition := tester.currentScript.VM.GetCurrentPosition()
-	t.Logf("Script position after second input: %d", thirdPosition)
-	
-	if thirdPosition <= secondPosition {
-		t.Errorf("SCRIPT RESTART DETECTED: Position went from %d to %d after second input", secondPosition, thirdPosition)
-	}
-	
-	// Third prompt should be displayed
-	expectedThirdOutput := "\r\nEnter markup/markdown percentage [5]\r\n"
-	foundThird := false
-	for _, output := range result.Output {
-		if output == expectedThirdOutput {
-			foundThird = true
-			break
-		}
-	}
-	if !foundThird {
-		t.Errorf("Expected third prompt %q not found in outputs: %v", expectedThirdOutput, result.Output)
-		return
-	}
-	
-	// Script should be paused waiting for third input
-	if !tester.IsScriptWaitingForInput() {
-		t.Fatal("Script should be paused waiting for third input")
-	}
-	
-	// Provide third input (use default by providing empty string)
-	err = tester.ProvideInput("")
-	if err != nil {
-		t.Fatalf("Failed to provide third input: %v", err)
-	}
-	
-	// Script should now complete and echo the collected values
-	result = tester.ContinueExecution()
-	if result.Error != nil {
-		t.Fatalf("Script failed after third input: %v", result.Error)
-	}
-	
-	// Verify all variables were stored correctly
-	expectedFinalOutputs := []string{
-		"Sector: 2157",
-		"Times: 5", 
-		"Percentage: 5", // Should use default value since we provided empty input
-	}
-	
-	for _, expected := range expectedFinalOutputs {
-		found := false
-		for _, output := range result.Output {
-			if output == expected {
-				found = true
-				break
-			}
-		}
-		if !found {
-			t.Errorf("Expected final output %q not found in outputs: %v", expected, result.Output)
-		}
-	}
-	
-	// Script should no longer be waiting for input
-	if tester.IsScriptWaitingForInput() {
-		t.Error("Script should not be waiting for input after completion")
-	}
+
+	t.Log("Multiple consecutive getinput test passed - all three inputs processed correctly!")
 }
 
 // TestGetInputWithDefaults verifies default value handling in getinput commands

@@ -852,6 +852,7 @@ func (p *TWXParser) handlePortCR(line string) {
 }
 
 func (p *TWXParser) handleDensityStart(line string) {
+	fmt.Printf("DENSITY MODE ACTIVATED!\n")
 	p.currentDisplay = DisplayDensity
 }
 
@@ -1444,43 +1445,31 @@ func (p *TWXParser) processDensityLine(line string) {
 		sector = database.NULLSector()
 	}
 	
-	// Use keyword-based parsing instead of fixed positions for robustness
-	fields := strings.Fields(cleanLine)
+	// Use exact TWX parameter extraction (mirrors Pascal Process.pas lines 1351-1365)
+	// Pascal: S := GetParameter(X, 4); Sect.Density := StrToIntSafe(S);
+	densityStr := p.getParameter(cleanLine, 4)
+	p.stripChar(&densityStr, ',') // Pascal: StripChar(S, ',');
+	sector.Density = p.parseIntSafe(densityStr)
 	
-	// Extract density value (look for "Density:" keyword)
-	for i, field := range fields {
-		if (field == "Density:" || strings.HasPrefix(field, "Density")) && i+1 < len(fields) {
-			sector.Density = p.parseIntSafe(fields[i+1])
-			break
-		}
-	}
+	// Pascal: Sect.Warps := StrToIntSafe(GetParameter(X, 7));
+	sector.Warps = p.parseIntSafe(p.getParameter(cleanLine, 7))
 	
-	// Extract warps count (look for "Warps:" keyword) - for TWX compatibility
-	for i, field := range fields {
-		if (field == "Warps:" || strings.HasPrefix(field, "Warps")) && i+1 < len(fields) {
-			// Store warp count from density scan (TWX compatibility)
-			sector.Warps = p.parseIntSafe(fields[i+1])
-			break
-		}
-	}
+	// Pascal: if (GetParameter(X, 13) = 'Yes') then Sect.Anomaly := TRUE else Sect.Anomaly := FALSE;
+	anomalyStr := p.getParameter(cleanLine, 13)
+	sector.Anomaly = (anomalyStr == "Yes")
 	
-	// Extract anomaly status (look for "Anomaly:" keyword - must be exact to avoid constellation conflicts)
-	for i, field := range fields {
-		if field == "Anomaly:" && i+1 < len(fields) {
-			sector.Anomaly = (fields[i+1] == "Yes")
-			break
-		}
-	}
+	// Always update the timestamp when density data is processed
+	sector.UpDate = time.Now()
 	
 	// Pascal: if (Sect.Explored in [etNo, etCalc]) then
 	if sector.Explored == database.EtNo || sector.Explored == database.EtCalc {
-		// Sector hasn't been scanned or seen before
+		// Sector hasn't been scanned or seen before - set exploration status and constellation
 		sector.Constellation = "??? (Density only)"
 		sector.Explored = database.EtDensity
-		sector.UpDate = time.Now()
 	}
+	// For EtHolo and EtDensity sectors, preserve exploration status but update density data
 	
-	// Save sector to database
+	// Save sector to database (always save to update density/warps/anomaly data)
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return
 	}

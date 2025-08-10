@@ -93,11 +93,31 @@ func (ic *InputCollector) HandleInput(input string) error {
 	}
 
 	debug.Log("HandleInput received: %q (len=%d)", input, len(input))
-
-	// Check for Enter key - complete collection
-	// Note: Empty string often indicates Enter key in terminal applications
-	if input == "\r" || input == "\n" || input == "\r\n" || input == "" {
-		result := ic.buffer
+	
+	// Check if input ends with Enter key and extract the value
+	var actualValue string
+	var hasEnter bool
+	
+	if strings.HasSuffix(input, "\r") {
+		actualValue = strings.TrimSuffix(input, "\r")
+		hasEnter = true
+	} else if strings.HasSuffix(input, "\n") {
+		actualValue = strings.TrimSuffix(input, "\n")
+		hasEnter = true
+	} else if strings.HasSuffix(input, "\r\n") {
+		actualValue = strings.TrimSuffix(input, "\r\n")
+		hasEnter = true
+	} else if input == "" {
+		actualValue = ""
+		hasEnter = true
+	} else {
+		actualValue = input
+		hasEnter = false
+	}
+	
+	if hasEnter {
+		// Complete collection with the value (add to existing buffer first)
+		result := ic.buffer + actualValue
 		ic.buffer = ""
 		debug.Log("Enter pressed, completing input collection with: '%s'", result)
 		return ic.completeCollection(result)
@@ -159,12 +179,12 @@ func (ic *InputCollector) completeCollection(value string) error {
 	}()
 
 	menuName := ic.menuName
+	debug.Log("completeCollection: menuName=%s, value=%q", menuName, value)
 	ic.exitCollection()
 	
 	if handler, exists := ic.completionHandlers[menuName]; exists {
 		return handler(menuName, value)
 	}
-	
 	// Default behavior - show success message  
 	if value != "" {
 		ic.sendOutput("Value set: " + value + "\r\n")
