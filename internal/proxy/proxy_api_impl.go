@@ -2,6 +2,8 @@ package proxy
 
 import (
 	"errors"
+	"fmt"
+	"os"
 	"time"
 	"twist/internal/api"
 	"twist/internal/proxy/converter"
@@ -10,6 +12,7 @@ import (
 func init() {
 	// Register the Connect implementation with the API package
 	api.SetConnectImpl(connect)
+	api.SetConnectWithScriptImpl(connectWithScript)
 }
 
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
@@ -35,6 +38,62 @@ func connect(address string, tuiAPI api.TuiAPI) api.ProxyAPI {
 	
 	// Create proxy instance with TuiAPI directly - no adapter needed
 	proxyInstance := New(tuiAPI)
+	impl.proxy = proxyInstance
+	
+	// Notify TUI that connection is starting
+	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnecting, address)
+	
+	// Attempt connection asynchronously to avoid blocking with 5-second timeout
+	go func() {
+		// Create a channel for the connection result
+		resultChan := make(chan error, 1)
+		
+		// Start connection attempt in another goroutine
+		go func() {
+			err := proxyInstance.Connect(address)
+			resultChan <- err
+		}()
+		
+		// Wait for either connection result or timeout
+		select {
+		case err := <-resultChan:
+			if err != nil {
+				// Connection failure -> call TuiAPI error callback
+				tuiAPI.OnConnectionError(err)
+				return
+			}
+			
+			// Success -> call TuiAPI success callback
+			tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
+			
+			// Start monitoring for network disconnections
+			go impl.monitorConnection()
+			
+		case <-time.After(5 * time.Second):
+			// Timeout -> call TuiAPI error callback
+			tuiAPI.OnConnectionError(errors.New("connection timeout after 5 seconds"))
+		}
+	}()
+	
+	// Return connected ProxyAPI instance immediately
+	return impl
+}
+
+// connectWithScript creates a new proxy instance with initial script and returns a connected ProxyAPI
+func connectWithScript(address string, tuiAPI api.TuiAPI, scriptName string) api.ProxyAPI {
+	// Never return errors - all failures go via callbacks
+	if tuiAPI == nil {
+		// This is a programming error, but handle gracefully
+		return &ProxyApiImpl{} // Will fail safely when used
+	}
+	
+	// Create ProxyAPI wrapper first
+	impl := &ProxyApiImpl{
+		tuiAPI: tuiAPI,
+	}
+	
+	// Create proxy instance with TuiAPI directly - no adapter needed
+	proxyInstance := NewWithScript(tuiAPI, scriptName)
 	impl.proxy = proxyInstance
 	
 	// Notify TUI that connection is starting
@@ -105,6 +164,26 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 	if p.proxy == nil {
 		return errors.New("not connected")
 	}
+	
+	// Log what the TUI is sending to the proxy - append to raw.log
+	if f, err := os.OpenFile("raw.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
+		fmt.Fprintf(f, "SEND TO PROXY (%d bytes):\n", len(data))
+		// Show each byte in hex and as printable character
+		for _, b := range data {
+			if b >= 32 && b <= 126 {
+				fmt.Fprintf(f, "%c", b)
+			} else if b == 13 {
+				fmt.Fprintf(f, "\\r")
+			} else if b == 10 {
+				fmt.Fprintf(f, "\\n")
+			} else {
+				fmt.Fprintf(f, "\\x%02x", b)
+			}
+		}
+		fmt.Fprintf(f, "\n")
+		f.Close()
+	}
+	
 	p.proxy.SendInput(string(data))
 	return nil
 }

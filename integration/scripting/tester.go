@@ -84,8 +84,11 @@ func (ts *TestScript) Stop() error {
 
 // IntegrationScriptTester provides real integration testing for TWX scripts
 type IntegrationScriptTester struct {
-	setupData *setup.IntegrationTestSetup
-	t         *testing.T
+	setupData        *setup.IntegrationTestSetup
+	t                *testing.T
+	currentScript    *scripting.Script
+	capturedOutput   []string
+	capturedCommands []string
 }
 
 // NewIntegrationScriptTester creates a new integration script tester with real components
@@ -136,42 +139,48 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 		}
 	}
 	
-	// Capture output and commands
-	var output []string
-	var commands []string
+	// Initialize captured data
+	tester.capturedOutput = []string{}
+	tester.capturedCommands = []string{}
 	
-	// Set up output handlers
+	// Set up output handlers to use instance fields
 	tester.setupData.VM.SetOutputHandler(func(text string) error {
-		output = append(output, text)
+		tester.capturedOutput = append(tester.capturedOutput, text)
 		return nil
 	})
 	
 	tester.setupData.VM.SetEchoHandler(func(text string) error {
-		output = append(output, text)
+		tester.capturedOutput = append(tester.capturedOutput, text)
 		return nil
 	})
 	
 	tester.setupData.VM.SetSendHandler(func(text string) error {
-		commands = append(commands, text)
+		tester.capturedCommands = append(tester.capturedCommands, text)
 		return nil
 	})
 	
 	// Create a test script instance for call stack persistence
 	testScript := NewTestScript("integration_test", tester.setupData.DB)
+	tester.currentScript = &scripting.Script{
+		ID:       "integration_test",
+		Filename: "test.ts",
+		AST:      ast,
+		VM:       tester.setupData.VM,
+	}
 	
 	// Load and execute the script
 	if err := tester.setupData.VM.LoadScript(ast, testScript); err != nil {
 		return &IntegrationTestResult{
-			Output:   output,
-			Commands: commands,
+			Output:   append([]string{}, tester.capturedOutput...),
+			Commands: append([]string{}, tester.capturedCommands...),
 			Error:    err,
 		}
 	}
 	
 	if err := tester.setupData.VM.Execute(); err != nil {
 		return &IntegrationTestResult{
-			Output:   output,
-			Commands: commands,
+			Output:   append([]string{}, tester.capturedOutput...),
+			Commands: append([]string{}, tester.capturedCommands...),
 			Error:    err,
 		}
 	}
@@ -179,8 +188,8 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 	// For WAITFOR tests, we need to keep the handlers active
 	// The result should be returned by the goroutine only when the script truly completes
 	return &IntegrationTestResult{
-		Output:   output,
-		Commands: commands,
+		Output:   append([]string{}, tester.capturedOutput...),
+		Commands: append([]string{}, tester.capturedCommands...),
 		Error:    nil,
 	}
 }
@@ -246,6 +255,49 @@ func (tester *IntegrationScriptTester) AssertCommands(result *IntegrationTestRes
 		if result.Commands[i] != expected {
 			tester.t.Errorf("Command %d mismatch: got %q, expected %q", i, result.Commands[i], expected)
 		}
+	}
+}
+
+// IsScriptWaitingForInput checks if the script is currently paused waiting for user input
+func (tester *IntegrationScriptTester) IsScriptWaitingForInput() bool {
+	if tester.currentScript == nil || tester.currentScript.VM == nil {
+		return false
+	}
+	return tester.currentScript.VM.IsWaitingForInput()
+}
+
+// ProvideInput provides input to a script that is waiting for user input
+func (tester *IntegrationScriptTester) ProvideInput(input string) error {
+	if tester.currentScript == nil || tester.currentScript.VM == nil {
+		return fmt.Errorf("no active script")
+	}
+	
+	if !tester.currentScript.VM.IsWaitingForInput() {
+		return fmt.Errorf("script is not waiting for input")
+	}
+	
+	return tester.currentScript.VM.ResumeWithInput(input)
+}
+
+// ContinueExecution continues script execution after providing input or other pause
+func (tester *IntegrationScriptTester) ContinueExecution() *IntegrationTestResult {
+	if tester.currentScript == nil || tester.currentScript.VM == nil {
+		return &IntegrationTestResult{
+			Error: fmt.Errorf("no active script"),
+		}
+	}
+	
+	// Clear previous outputs and commands for this continuation
+	tester.capturedOutput = []string{}
+	tester.capturedCommands = []string{}
+	
+	// Continue execution
+	err := tester.currentScript.VM.Execute()
+	
+	return &IntegrationTestResult{
+		Output:   append([]string{}, tester.capturedOutput...),
+		Commands: append([]string{}, tester.capturedCommands...),
+		Error:    err,
 	}
 }
 

@@ -58,6 +58,8 @@ func cmdEcho(vm types.VMInterface, params []*types.CommandParam) error {
 			echoText += param.Value.ToString()
 		}
 	}
+	// Convert carriage returns to CRLF for proper display (matches TWX ScriptCmd.pas:452)
+	echoText = strings.ReplaceAll(echoText, "\r", "\r\n")
 	return vm.Echo(echoText)
 }
 

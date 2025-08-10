@@ -51,6 +51,9 @@ type TwistApp struct {
 
 	// Update channel
 	terminalUpdateChan chan struct{}
+
+	// Initial script to load on connection
+	initialScript string
 }
 
 // NewApplication creates and configures the tview application
@@ -365,6 +368,11 @@ func (ta *TwistApp) registerMenuShortcuts() {
 	// TODO: Register shortcuts for other menus (Edit, View, Terminal, Help) as they get shortcuts
 }
 
+// SetInitialScript sets the script to load on connection
+func (ta *TwistApp) SetInitialScript(scriptName string) {
+	ta.initialScript = scriptName
+}
+
 // Run starts the TUI application
 func (ta *TwistApp) Run() error {
 	return ta.app.Run()
@@ -379,7 +387,7 @@ func (ta *TwistApp) connect(address string) {
 	
 	// Use API layer exclusively - connection should be non-blocking
 	// Proxy will call HandleConnecting, then HandleConnectionEstablished/HandleConnectionError
-	if err := ta.proxyClient.Connect(address, ta.tuiAPI); err != nil {
+	if err := ta.proxyClient.ConnectWithScript(address, ta.tuiAPI, ta.initialScript); err != nil {
 		// Handle immediate validation errors
 		ta.connected = false
 		ta.serverAddress = ""

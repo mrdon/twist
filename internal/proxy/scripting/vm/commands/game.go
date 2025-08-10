@@ -2,7 +2,7 @@ package commands
 
 import (
 	"fmt"
-	"strings"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -20,7 +20,7 @@ func RegisterGameCommands(vm CommandRegistry) {
 	vm.RegisterCommand("GETTIMER", 1, 1, []types.ParameterType{types.ParamVar}, cmdGetTimer)
 	
 	// Input commands
-	vm.RegisterCommand("GETINPUT", 3, 3, []types.ParameterType{types.ParamVar, types.ParamValue, types.ParamValue}, cmdGetInput)
+	vm.RegisterCommand("GETINPUT", 2, 3, []types.ParameterType{types.ParamVar, types.ParamValue, types.ParamValue}, cmdGetInput)
 	vm.RegisterCommand("GETCONSOLEINPUT", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdGetConsoleInput)
 	
 	// Text processing commands
@@ -37,6 +37,7 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 		if param.Type == types.ParamVar {
 			// Get variable value
 			value := vm.GetVariable(param.VarName)
+			debug.Log("SEND command (line %d): variable %s resolves to %q", vm.GetCurrentLine(), param.VarName, value.ToString())
 			message += value.ToString()
 		} else {
 			// Use literal value
@@ -44,12 +45,13 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 		}
 	}
 	
-	// TWX compatibility: convert '*' suffix to carriage return
-	if strings.HasSuffix(message, "*") {
-		message = strings.TrimSuffix(message, "*") + "\r"
-	} else {
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
 	}
+	debug.Log("SEND command [%s] (line %d): sending message %q", scriptName, vm.GetCurrentLine(), message)
 	
+	// Send message as-is (carriage returns from lexer are preserved)
 	return vm.Send(message)
 }
 
@@ -59,6 +61,11 @@ func cmdWaitFor(vm types.VMInterface, params []*types.CommandParam) error {
 	}
 
 	pattern := GetParamString(vm, params[0])
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Log("WAITFOR command [%s] (line %d): waiting for pattern %q", scriptName, vm.GetCurrentLine(), pattern)
 	return vm.WaitFor(pattern)
 }
 
@@ -97,13 +104,70 @@ func cmdGetTimer(vm types.VMInterface, params []*types.CommandParam) error {
 
 
 func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
-	// Get user input - for testing, return empty string
-	result := &types.Value{
-		Type:   types.StringType,
-		String: "",
+	// Extract prompt text (2nd parameter)
+	prompt := ""
+	if len(params) > 1 {
+		prompt = GetParamString(vm, params[1])
 	}
-	vm.SetVariable(params[0].VarName, result)
-	return nil
+	
+	// Extract default value (3rd parameter, optional)
+	defaultValue := ""
+	if len(params) > 2 {
+		defaultValue = GetParamString(vm, params[2])
+	}
+	
+	// Debug logging
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Log("GETINPUT [%s] (line %d): prompt=%q, default=%q", scriptName, vm.GetCurrentLine(), prompt, defaultValue)
+	debug.Log("GETINPUT [%s]: pendingResult=%q, waitingForInput=%v, pendingPrompt=%q", 
+		scriptName, vm.GetPendingInputResult(), vm.IsWaitingForInput(), vm.GetPendingInputPrompt())
+	
+	// Check if there's a pending input result (we're resuming from input)
+	if vm.GetPendingInputResult() != "" || (!vm.IsWaitingForInput() && vm.GetPendingInputPrompt() != "") {
+		// We're resuming - get the input result and store it
+		debug.Log("GETINPUT [%s]: RESUMING from input, processing stored result", scriptName)
+		input := vm.GetPendingInputResult()
+		
+		// Use default value if input is empty
+		if input == "" && defaultValue != "" {
+			input = defaultValue
+		}
+		
+		debug.Log("GETINPUT [%s]: setting variable %s = %q", scriptName, params[0].VarName, input)
+		
+		// Store result in the variable
+		result := &types.Value{
+			Type:   types.StringType,
+			String: input,
+		}
+		vm.SetVariable(params[0].VarName, result)
+		
+		// Clear the pending input state since we've processed it
+		vm.ClearPendingInput()
+		
+		return nil // This will allow the execution to advance to the next command
+	}
+	
+	// First time executing this command - initiate input collection
+	debug.Log("GETINPUT [%s]: FIRST TIME - initiating input collection", scriptName)
+	// Format the prompt like TWX does
+	fullPrompt := prompt
+	if defaultValue != "" {
+		fullPrompt = prompt + " [" + defaultValue + "]"
+	}
+	
+	// Initiate input collection and pause script execution
+	// GetInput will handle displaying the prompt
+	_, err := vm.GetInput(fullPrompt)
+	if err != nil {
+		return err
+	}
+	
+	// Return a pause error to stop execution until input is provided
+	return types.ErrScriptPaused
 }
 
 func cmdGetConsoleInput(vm types.VMInterface, params []*types.CommandParam) error {

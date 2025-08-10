@@ -7,10 +7,12 @@ import (
 	"strings"
 	"sync"
 
+	"twist/internal/debug"
 	"twist/internal/proxy/streaming"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 	"twist/internal/proxy/menu"
+	"twist/internal/proxy/input"
 	"twist/internal/api"
 )
 
@@ -33,6 +35,10 @@ func (pa *proxyAdapter) SendInput(input string) {
 
 func (pa *proxyAdapter) SendDirectToServer(input string) {
 	pa.proxy.SendDirectToServer(input)
+}
+
+func (pa *proxyAdapter) SendOutput(output string) {
+	pa.proxy.SendOutput(output)
 }
 
 type Proxy struct {
@@ -58,6 +64,9 @@ type Proxy struct {
 	// Direct TuiAPI reference
 	tuiAPI api.TuiAPI
 	
+	// Script input collector - reuses menu input collector for consistency
+	scriptInputCollector *input.InputCollector
+	
 	// Game detection
 	gameDetector  *GameDetector
 	
@@ -72,6 +81,10 @@ type Proxy struct {
 	
 	// Input handler state
 	inputHandlerStarted bool
+	
+	// Input buffering for script input collection
+	scriptInputBuffer strings.Builder
+	scriptWaitingForInput bool
 }
 
 func New(tuiAPI api.TuiAPI) *Proxy {
@@ -98,6 +111,14 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	// Set up proxy interface for menu system
 	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
 	
+	// Initialize script input collector - reuses same logic as menu input
+	p.scriptInputCollector = input.NewInputCollector(func(output string) {
+		// Echo script input to screen via TuiAPI
+		if p.tuiAPI != nil {
+			p.tuiAPI.OnData([]byte(output))
+		}
+	})
+	
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
 	
@@ -112,6 +133,61 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	p.inputHandlerStarted = true
 	p.mu.Unlock()
 	go p.handleInput()
+	
+	return p
+}
+
+func NewWithScript(tuiAPI api.TuiAPI, initialScript string) *Proxy {
+	// Initialize with no database initially - will be loaded when game is detected
+	var db database.Database = nil
+	
+	p := &Proxy{
+		outputChan:    make(chan string, 100),
+		inputChan:     make(chan string, 100),
+		errorChan:     make(chan error, 100),
+		connected:     false,
+		db:            db,
+		tuiAPI:        tuiAPI,  // Store TuiAPI reference
+		pipeline:      nil,     // Pipeline created only after connection
+		gameDetector:  nil,     // Will be created when connection is established
+	}
+	
+	// Initialize terminal menu manager
+	p.terminalMenuManager = menu.NewTerminalMenuManager()
+	
+	// Set up menu data injection function
+	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	
+	// Set up proxy interface for menu system
+	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
+	
+	// Initialize script input collector - reuses same logic as menu input
+	p.scriptInputCollector = input.NewInputCollector(func(output string) {
+		// Echo script input to screen via TuiAPI
+		if p.tuiAPI != nil {
+			p.tuiAPI.OnData([]byte(output))
+		}
+	})
+	
+	// Create script manager that can request database dynamically
+	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
+	
+	// Setup script manager connections immediately so sendHandler is available
+	p.scriptManager.SetupConnections(p, nil)
+	
+	// Setup menu manager for script menu commands
+	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
+	
+	// Start input handler immediately so menu system works even when not connected
+	p.mu.Lock()
+	p.inputHandlerStarted = true
+	p.mu.Unlock()
+	go p.handleInput()
+	
+	// Store initial script to load on connection
+	if initialScript != "" {
+		p.scriptManager.SetInitialScript(initialScript)
+	}
 	
 	return p
 }
@@ -215,13 +291,11 @@ func (p *Proxy) Connect(address string) error {
 		return fmt.Errorf("telnet negotiation failed: %w", err)
 	}
 
-	// Load and run login script automatically on connection
+	// Load and run initial script automatically on connection (if configured)
 	if p.scriptManager != nil {
-		loginScriptPath := "login.ts"
-		if err := p.scriptManager.LoadAndRunScript(loginScriptPath); err != nil {
-		} else {
+		if err := p.scriptManager.LoadInitialScript(); err != nil {
+			// Script loading error - log but don't fail connection
 		}
-	} else {
 	}
 
 	// Start goroutines for handling I/O
@@ -283,6 +357,22 @@ func (p *Proxy) SendInput(input string) {
 	default:
 		// Channel full, drop input
 	}
+}
+
+func (p *Proxy) SendOutput(output string) {
+	p.mu.RLock()
+	pipeline := p.pipeline
+	connected := p.connected
+	p.mu.RUnlock()
+	
+	if !connected || pipeline == nil {
+		return
+	}
+	
+	// Send output to TUI only (for script echo commands)
+	// This displays in the terminal but doesn't send to server
+	data := []byte(output + "\r\n")
+	pipeline.InjectTUIData(data)
 }
 
 func (p *Proxy) SendDirectToServer(input string) {
@@ -354,8 +444,81 @@ func (p *Proxy) handleInput() {
 			continue
 		}
 
+		// SCRIPT INPUT SYSTEM: Check if any script is waiting for input - works even when disconnected
+		if p.scriptManager != nil {
+			if p.handleScriptInput(input) {
+				// Input was consumed by script - don't send to server
+				continue
+			}
+		}
+
 		if !connected {
 			continue
+		}
+
+		// OLD SCRIPT INPUT CODE MOVED TO handleScriptInput method
+		// Check if any script is waiting for input - if so, buffer input until complete line
+		if false && p.scriptManager != nil { // DISABLED - moved to handleScriptInput
+			runningScripts := p.scriptManager.GetEngine().GetRunningScripts()
+			debug.Log("PROXY INPUT: checking %d running scripts for input waiting", len(runningScripts))
+			for _, script := range runningScripts {
+				debug.Log("PROXY INPUT: checking script %s", script.GetID())
+				// Check if this script is waiting for input (need to cast to get internal methods)
+				if scriptEngine := p.scriptManager.GetEngine(); scriptEngine != nil {
+					if internalEngine, ok := scriptEngine.(*scripting.Engine); ok {
+						if internalScript, err := internalEngine.GetScript(script.GetID()); err == nil {
+							isWaiting := internalScript.VM.IsWaitingForInput()
+							debug.Log("PROXY INPUT: script %s IsWaitingForInput=%v", script.GetID(), isWaiting)
+							if isWaiting {
+								// Script is waiting for input - start buffering
+								debug.Log("SCRIPT INPUT DEBUG: received input %q (len=%d), current buffer: %q", input, len(input), p.scriptInputBuffer.String())
+								
+								// Check if this is ENTER (carriage return, newline, or CRLF)
+								isEnterPressed := (input == "\r" || input == "\n" || input == "\r\n")
+								
+								if isEnterPressed {
+									// ENTER pressed - use any buffered input (the current input is just the ENTER key)
+									finalInput := p.scriptInputBuffer.String()
+									
+									// Clear buffer and send input to script
+									p.scriptInputBuffer.Reset()
+									debug.Log("SCRIPT INPUT DEBUG: sending final input %q to script %s", finalInput, script.GetID())
+									
+									err := internalEngine.ResumeScriptWithInput(script.GetID(), finalInput)
+									if err != nil {
+										p.errorChan <- fmt.Errorf("failed to resume script with input: %w", err)
+									}
+								} else {
+									// Regular character(s) - add to buffer
+									p.scriptInputBuffer.WriteString(input)
+								}
+								
+								// Input was consumed by script - don't send to server
+								continue
+							}
+						}
+					}
+				}
+			}
+			
+			// If no scripts are waiting for input, clear any stale buffer
+			stillWaitingForInput := false
+			for _, script := range runningScripts {
+				if scriptEngine := p.scriptManager.GetEngine(); scriptEngine != nil {
+					if internalEngine, ok := scriptEngine.(*scripting.Engine); ok {
+						if internalScript, err := internalEngine.GetScript(script.GetID()); err == nil {
+							if internalScript.VM.IsWaitingForInput() {
+								stillWaitingForInput = true
+								break
+							}
+						}
+					}
+				}
+			}
+			
+			if !stillWaitingForInput {
+				p.scriptInputBuffer.Reset()
+			}
 		}
 
 		// Process outgoing text through script manager
@@ -610,5 +773,54 @@ func (p *Proxy) LoadGameDatabase(gameName string) error {
 	// This method is now handled by the game detector
 	// Keep for backward compatibility but functionality moved to game detector
 	return fmt.Errorf("database loading is now handled automatically by game detection")
+}
+
+// handleScriptInput handles input for scripts when menu system is not active
+// Returns true if input was consumed by a script, false otherwise
+func (p *Proxy) handleScriptInput(input string) bool {
+	runningScripts := p.scriptManager.GetEngine().GetRunningScripts()
+	debug.Log("PROXY INPUT: checking %d running scripts for input waiting", len(runningScripts))
+	
+	for _, script := range runningScripts {
+		debug.Log("PROXY INPUT: checking script %s", script.GetID())
+		// Check if this script is waiting for input (need to cast to get internal methods)
+		if scriptEngine := p.scriptManager.GetEngine(); scriptEngine != nil {
+			if internalEngine, ok := scriptEngine.(*scripting.Engine); ok {
+				if internalScript, err := internalEngine.GetScript(script.GetID()); err == nil {
+					isWaiting := internalScript.VM.IsWaitingForInput()
+					debug.Log("PROXY INPUT: script %s IsWaitingForInput=%v", script.GetID(), isWaiting)
+					if isWaiting {
+						// Script is waiting - start input collection if not already collecting
+						if !p.scriptInputCollector.IsCollecting() {
+							// Start collecting input for this script
+							prompt := "SCRIPT_INPUT_" + script.GetID()
+							p.scriptInputCollector.RegisterCompletionHandler(prompt, func(menuName, value string) error {
+								// Send completed input to script
+								debug.Log("SCRIPT INPUT DEBUG: sending final input %q to script %s", value, script.GetID())
+								err := internalEngine.ResumeScriptWithInput(script.GetID(), value)
+								if err != nil {
+									p.errorChan <- fmt.Errorf("failed to resume script with input: %w", err)
+								}
+								return nil
+							})
+							p.scriptInputCollector.StartCollection(prompt, "")
+						}
+						
+						// Use shared input collector - handles buffering, echoing, backspace, etc.
+						err := p.scriptInputCollector.HandleInput(input)
+						if err != nil {
+							debug.Log("Script input collection error: %v", err)
+						}
+						
+						// Input was consumed by script
+						return true
+					}
+				}
+			}
+		}
+	}
+	
+	// Input was not consumed by any script
+	return false
 }
 

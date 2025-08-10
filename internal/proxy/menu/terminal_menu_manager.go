@@ -2,13 +2,15 @@ package menu
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"sync/atomic"
 
 	"twist/internal/debug"
 	"twist/internal/proxy/database"
+	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/menu/display"
-	"twist/internal/proxy/menu/input"
+	"twist/internal/proxy/input"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -65,7 +67,9 @@ type ScriptManagerInterface interface {
 	LoadAndRunScript(filename string) error
 	Stop() error
 	GetStatus() map[string]interface{}
-	GetEngine() interface{}
+	GetEngine() interfaces.ScriptEngine
+	HasScriptWaitingForInput() (string, string)
+	ResumeScriptWithInput(scriptID, input string) error
 }
 
 func NewTerminalMenuManager() *TerminalMenuManager {
@@ -167,9 +171,32 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	// Debug logging to see what's happening
 	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollector.IsCollecting())
 	
+	// DISABLED: Script input handling is done at the proxy level for proper character buffering
+	// The proxy.go handles script input with proper buffering, menu system handles menu operations
+	/* DISABLED - conflicts with proxy script input handling
+	// PRIORITY CHECK: If any script is waiting for input, route to script input handling
+	// This prevents script input from being misrouted to menu input collectors
+	if tmm.proxyInterface != nil {
+		scriptManager := tmm.proxyInterface.GetScriptManager()
+		if scriptManager != nil {
+			scriptID, scriptName := scriptManager.HasScriptWaitingForInput()
+			if scriptID != "" {
+				debug.Log("SCRIPT INPUT DETECTED: Routing input '%s' to script %s", input, scriptName)
+				// Route directly to script input system, bypassing menu input collector
+				err := scriptManager.ResumeScriptWithInput(scriptID, input)
+				if err != nil {
+					debug.Log("Error resuming script with input: %v", err)
+				}
+				return nil
+			}
+		}
+	}
+	*/
+	
 	// Handle two-stage input collection mode using the input collector
+	// This only handles MENU input collection (like script loading, menu operations)
 	if tmm.inputCollector.IsCollecting() {
-		debug.Log("Handling input collection for: '%s'", input)
+		debug.Log("Handling menu input collection for: '%s'", input)
 		return tmm.inputCollector.HandleInput(input)
 	}
 	
@@ -311,7 +338,6 @@ func (tmm *TerminalMenuManager) closeCurrentMenu() {
 		// Exit menu system
 		atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 		tmm.currentMenu = nil
-		tmm.sendOutput("\r\nExiting menu system.\r\n")
 	}
 }
 
@@ -706,10 +732,8 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 	// Show current running scripts
 	engine := scriptManager.GetEngine()
 	if engine != nil {
-		if scriptEngine, ok := engine.(interface{ GetRunningScripts() []interface{} }); ok {
-			scripts := scriptEngine.GetRunningScripts()
-			output.WriteString("Currently running scripts: " + fmt.Sprintf("%d", len(scripts)) + "\r\n")
-		}
+		scripts := engine.GetRunningScripts()
+		output.WriteString("Currently running scripts: " + fmt.Sprintf("%d", len(scripts)) + "\r\n")
 	}
 	
 	output.WriteString("\r\nEnter script filename to load:\r\n")
@@ -802,6 +826,44 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle("Script Debug Information"))
 	
+	// First show all loaded scripts with their statuses
+	engine := scriptManager.GetEngine()
+	if engine != nil {
+		allScripts := engine.GetAllScripts()
+		runningScripts := engine.GetRunningScripts()
+		output.WriteString(fmt.Sprintf("Currently running scripts: %d\r\n", len(runningScripts)))
+		
+		if len(allScripts) > 0 {
+			output.WriteString("\r\nLoaded Scripts:\r\n")
+			output.WriteString("---------------\r\n")
+			for i, script := range allScripts {
+				status := "Stopped"
+				if script.IsRunning() {
+					status = "Running"
+				}
+				output.WriteString(fmt.Sprintf("%d. %s (%s)\r\n", i+1, script.GetName(), status))
+			}
+		} else {
+			output.WriteString("No scripts loaded.\r\n")
+		}
+		
+		output.WriteString("\r\nRunning Scripts:\r\n")
+		output.WriteString("----------------\r\n")
+		if len(runningScripts) > 0 {
+			for i, script := range runningScripts {
+				output.WriteString(fmt.Sprintf("%d. %s (Running)\r\n", i+1, script.GetName()))
+			}
+		} else {
+			output.WriteString("No scripts currently running.\r\n")
+		}
+		output.WriteString("\r\n")
+	} else {
+		output.WriteString("No script engine available.\r\n")
+	}
+	
+	// Then show general status information
+	output.WriteString("Engine Status:\r\n")
+	output.WriteString("-------------\r\n")
 	for key, value := range status {
 		output.WriteString(key + ": " + fmt.Sprintf("%v", value) + "\r\n")
 	}
@@ -1083,7 +1145,6 @@ func (tmm *TerminalMenuManager) CloseScriptMenu(menuName string) error {
 		} else {
 			atomic.StoreInt32(&tmm.isActive, 0)
 			tmm.currentMenu = nil
-			tmm.sendOutput("\r\nExiting menu system.\r\n")
 		}
 	}
 
@@ -1216,25 +1277,47 @@ func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, par
 
 // handleScriptLoadInput handles the actual script loading after input collection
 func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
-	if strings.TrimSpace(filename) == "" {
+	filename = strings.TrimSpace(filename)
+	if filename == "" {
 		tmm.sendOutput(display.FormatErrorMessage("No filename provided"))
+		tmm.displayCurrentMenu()
 		return nil
 	}
 
 	scriptManager := tmm.proxyInterface.GetScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
+		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	tmm.sendOutput("Loading script: " + filename + "...\r\n")
+	// Validate script file exists
+	tmm.sendOutput("\r\nValidating script: " + filename + "...\r\n")
 	
+	// Check if file exists
+	if _, err := os.Stat(filename); os.IsNotExist(err) {
+		tmm.sendOutput(display.FormatErrorMessage("Script file not found: " + filename))
+		tmm.displayCurrentMenu()
+		return nil
+	}
+	
+	// CRITICAL: Exit menu system completely - script input now handled by proxy
+	// This ensures clean separation between menu operations and script input
+	tmm.sendOutput("Script validated. Exiting menu system...\r\n")
+	
+	// Completely deactivate menu system - proxy will handle script input directly
+	atomic.StoreInt32(&tmm.isActive, 0) // Deactivate menu system  
+	tmm.currentMenu = nil               // Clear current menu
+	
+	tmm.sendOutput("Loading and starting script: " + filename + "...\r\n")
+	
+	// Now load and run the script - any getinput calls will be handled by proxy
 	err := scriptManager.LoadAndRunScript(filename)
 	if err != nil {
 		tmm.sendOutput(display.FormatErrorMessage("Failed to load script: " + err.Error()))
-	} else {
-		tmm.sendOutput(display.FormatSuccessMessage("Script loaded and started: " + filename))
+		// On error, user can manually return to menu with '$'
 	}
+	// Note: No success message - script output speaks for itself
 	
 	return nil
 }
@@ -1270,6 +1353,8 @@ func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) er
 		}
 	}
 	
+	// Return to the current menu
+	tmm.displayCurrentMenu()
 	return nil
 }
 
@@ -1321,7 +1406,6 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 		// Exit menu system after sending burst command so user input goes to game
 		atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 		tmm.currentMenu = nil
-		tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
 	} else {
 		tmm.sendOutput(display.FormatErrorMessage("Unable to send burst - no connection"))
 		tmm.displayCurrentMenu()
@@ -1375,7 +1459,6 @@ func (tmm *TerminalMenuManager) handleBurstSendInput(burstText string) error {
 	// Exit menu system after sending burst command so user input goes to game
 	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 	tmm.currentMenu = nil
-	tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
 	return nil
 }
 
@@ -1400,7 +1483,6 @@ func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
 	// Exit menu system after sending burst command so user input goes to game
 	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 	tmm.currentMenu = nil
-	tmm.sendOutput("\r\nExiting menu system to allow game interaction.\r\n")
 	return nil
 }
 
@@ -2037,4 +2119,26 @@ func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
 // GetMenuManager returns the terminal menu manager for script integration
 func (tmm *TerminalMenuManager) GetMenuManager() *TerminalMenuManager {
 	return tmm
+}
+
+// StartScriptInputCollection starts input collection for script getinput commands
+// This matches TWX's BeginScriptInput() functionality
+func (tmm *TerminalMenuManager) StartScriptInputCollection(prompt string, callback func(string)) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in StartScriptInputCollection: %v", r)
+		}
+	}()
+
+	// Register completion handler for script input
+	tmm.inputCollector.RegisterCompletionHandler("SCRIPT_INPUT", func(menuName, value string) error {
+		// Call the callback with the collected input
+		callback(value)
+		return nil
+	})
+	
+	// Start input collection with script prompt
+	tmm.inputCollector.StartCollection("SCRIPT_INPUT", prompt)
+	
+	return nil
 }

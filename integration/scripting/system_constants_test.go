@@ -38,7 +38,7 @@ func TestSystemConstants_RealIntegration(t *testing.T) {
 		"VERSION constant: 3.09",
 		"GAME constant: TradeWars 2002",
 		"CURRENTSECTOR: 1",
-		"CURRENTLINE: ",  // Should be empty initially (with space)
+		"CURRENTLINE: Command [TL=00:00:00]:",  // Should contain command prompt
 	}
 
 	for i, expected := range expectedOutputs {

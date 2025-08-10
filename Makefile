@@ -19,12 +19,12 @@ build:
 # Build and run the application
 run: build
 	@echo "Running $(BINARY_NAME)..."
-	@./$(BUILD_DIR)/$(BINARY_NAME)
+	@./$(BUILD_DIR)/$(BINARY_NAME) login.ts
 
 # Run without building (useful during development)
 dev:
 	@echo "Running $(BINARY_NAME) in development mode..."
-	@go run $(MAIN_PACKAGE)
+	@go run $(MAIN_PACKAGE) login.ts
 
 # Install dependencies
 deps:

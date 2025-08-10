@@ -431,8 +431,11 @@ func TestWaitForCommand_WithTriggerInteraction_RealIntegration(t *testing.T) {
 		t.Fatalf("Failed to start async script execution: %v", err)
 	}
 	
-	// Give script time to set up trigger and reach WAITFOR
-	time.Sleep(1 * time.Millisecond)
+	// Wait for script to set up trigger and reach WAITFOR
+	timeout := time.Now().Add(100 * time.Millisecond)
+	for !tester.IsWaiting() && time.Now().Before(timeout) {
+		time.Sleep(1 * time.Millisecond)
+	}
 	
 	// Verify the script is waiting
 	if !tester.IsWaiting() {
@@ -446,7 +449,7 @@ func TestWaitForCommand_WithTriggerInteraction_RealIntegration(t *testing.T) {
 	}
 	
 	// Give trigger time to fire
-	time.Sleep(1 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	
 	// Script should still be waiting since "test trigger" doesn't contain "continue"
 	if !tester.IsWaiting() {

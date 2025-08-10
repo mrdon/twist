@@ -58,6 +58,10 @@ type VMInterface interface {
 	
 	// Input
 	GetInput(prompt string) (string, error)
+	IsWaitingForInput() bool
+	GetPendingInputResult() string
+	GetPendingInputPrompt() string
+	ClearPendingInput()
 	WaitFor(text string) error
 	
 	// Network
@@ -68,6 +72,7 @@ type VMInterface interface {
 	
 	// Script management
 	GetCurrentScript() ScriptInterface
+	GetCurrentLine() int
 	LoadAdditionalScript(filename string) (ScriptInterface, error)
 	StopScript(scriptID string) error
 	GetScriptManager() interface{} // Returns the script manager for advanced operations

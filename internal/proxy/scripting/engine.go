@@ -6,9 +6,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"twist/internal/ansi"
 	"twist/internal/debug"
+	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/scripting/include"
 	"twist/internal/proxy/scripting/parser"
 	"twist/internal/proxy/scripting/triggers"
@@ -37,15 +39,16 @@ func (s *Script) GetFilename() string {
 	return s.Filename
 }
 
+// IsRunning implements interfaces.ScriptInfo
+func (s *Script) IsRunning() bool {
+	return s.Running
+}
+
 // GetName implements ScriptInterface
 func (s *Script) GetName() string {
 	return s.Name
 }
 
-// IsRunning implements ScriptInterface
-func (s *Script) IsRunning() bool {
-	return s.Running
-}
 
 // IsSystem implements ScriptInterface
 func (s *Script) IsSystem() bool {
@@ -63,11 +66,11 @@ func (s *Script) Stop() error {
 
 // Engine is the main scripting engine
 type Engine struct {
-	scripts        map[string]*Script
+	scriptsRef     atomic.Pointer[map[string]*Script]
 	gameInterface  types.GameInterface
 	triggerManager *triggers.Manager
-	mutex          sync.RWMutex
-	nextScriptID   int
+	mutex          sync.Mutex  // Only needed for writes now
+	nextScriptID   atomic.Int32
 	
 	// ANSI stripper for streaming text processing
 	ansiStripper   *ansi.StreamingStripper
@@ -81,17 +84,40 @@ type Engine struct {
 // NewEngine creates a new scripting engine
 func NewEngine(gameInterface types.GameInterface) *Engine {
 	engine := &Engine{
-		scripts:        make(map[string]*Script),
 		gameInterface:  gameInterface,
-		nextScriptID:   1,
 		ansiStripper:   ansi.NewStreamingStripper(),
 	}
+	engine.nextScriptID.Store(1)
+	
+	// Initialize empty scripts map
+	initialScripts := make(map[string]*Script)
+	engine.scriptsRef.Store(&initialScripts)
 	
 	// Create a dummy VM for the trigger manager
 	dummyVM := vm.NewVirtualMachine(gameInterface)
 	engine.triggerManager = triggers.NewManager(dummyVM)
 	
 	return engine
+}
+
+// getScripts returns a copy of the current scripts map for read operations
+func (e *Engine) getScripts() map[string]*Script {
+	return *e.scriptsRef.Load()
+}
+
+// updateScripts performs a copy-on-write update to the scripts map
+func (e *Engine) updateScripts(updateFn func(map[string]*Script) map[string]*Script) {
+	e.mutex.Lock()
+	defer e.mutex.Unlock()
+	
+	// Load current scripts
+	currentScripts := *e.scriptsRef.Load()
+	
+	// Create a copy and apply update
+	newScripts := updateFn(currentScripts)
+	
+	// Store the new map
+	e.scriptsRef.Store(&newScripts)
 }
 
 // SetOutputHandler sets the handler for output messages
@@ -107,12 +133,12 @@ func (e *Engine) SetEchoHandler(handler func(string) error) {
 // SetSendHandler sets the handler for send messages
 func (e *Engine) SetSendHandler(handler func(string) error) {
 	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	
 	e.sendHandler = handler
+	e.mutex.Unlock()
 	
-	// Update all existing script VMs with the new sendHandler
-	for _, script := range e.scripts {
+	// Update all existing script VMs with the new sendHandler (lockless read)
+	scripts := e.getScripts()
+	for _, script := range scripts {
 		if script.VM != nil {
 			script.VM.SetSendHandler(handler)
 		}
@@ -121,9 +147,6 @@ func (e *Engine) SetSendHandler(handler func(string) error) {
 
 // LoadScript loads a script from a file
 func (e *Engine) LoadScript(filename string) (*Script, error) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	
 	// Read script file
 	content, err := os.ReadFile(filename)
 	if err != nil {
@@ -141,73 +164,87 @@ func (e *Engine) LoadScript(filename string) (*Script, error) {
 		return nil, fmt.Errorf("failed to parse script %s: %v", filename, err)
 	}
 	
-	// Create script object
-	scriptID := e.generateScriptID()
-	scriptName := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-	
-	script := &Script{
-		ID:       scriptID,
-		Filename: filename,
-		Name:     scriptName,
-		AST:      ast,
-		Running:  false,
-		System:   false,
-	}
-	
-	// Create VM for this script
-	scriptVM := vm.NewVirtualMachine(e.gameInterface)
-	scriptVM.SetOutputHandler(e.outputHandler)
-	scriptVM.SetEchoHandler(e.echoHandler)
-	scriptVM.SetSendHandler(e.sendHandler)
-	script.VM = scriptVM
-	
-	// Store script
-	e.scripts[scriptID] = script
+	var script *Script
+	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+		// Create script object
+		scriptID := e.generateScriptID()
+		scriptName := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
+		
+		script = &Script{
+			ID:       scriptID,
+			Filename: filename,
+			Name:     scriptName,
+			AST:      ast,
+			Running:  false,
+			System:   false,
+		}
+		
+		// Create VM for this script
+		scriptVM := vm.NewVirtualMachine(e.gameInterface)
+		scriptVM.SetOutputHandler(e.outputHandler)
+		scriptVM.SetEchoHandler(e.echoHandler)
+		scriptVM.SetSendHandler(e.sendHandler)
+		script.VM = scriptVM
+		
+		// Copy current scripts and add new one
+		newScripts := make(map[string]*Script, len(currentScripts)+1)
+		for k, v := range currentScripts {
+			newScripts[k] = v
+		}
+		newScripts[scriptID] = script
+		
+		return newScripts
+	})
 	
 	return script, nil
 }
 
 // LoadScriptFromString loads a script from a string
 func (e *Engine) LoadScriptFromString(content, name string) (*Script, error) {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
-	
 	// Parse script
 	ast, err := e.parseScript(content)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse script %s: %v", name, err)
 	}
 	
-	// Create script object
-	scriptID := e.generateScriptID()
-	
-	script := &Script{
-		ID:       scriptID,
-		Filename: "",
-		Name:     name,
-		AST:      ast,
-		Running:  false,
-		System:   false,
-	}
-	
-	// Create VM for this script
-	scriptVM := vm.NewVirtualMachine(e.gameInterface)
-	scriptVM.SetOutputHandler(e.outputHandler)
-	scriptVM.SetEchoHandler(e.echoHandler)
-	scriptVM.SetSendHandler(e.sendHandler)
-	script.VM = scriptVM
-	
-	// Store script
-	e.scripts[scriptID] = script
+	var script *Script
+	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+		// Create script object
+		scriptID := e.generateScriptID()
+		
+		script = &Script{
+			ID:       scriptID,
+			Filename: "",
+			Name:     name,
+			AST:      ast,
+			Running:  false,
+			System:   false,
+		}
+		
+		// Create VM for this script
+		scriptVM := vm.NewVirtualMachine(e.gameInterface)
+		scriptVM.SetOutputHandler(e.outputHandler)
+		scriptVM.SetEchoHandler(e.echoHandler)
+		scriptVM.SetSendHandler(e.sendHandler)
+		script.VM = scriptVM
+		
+		// Copy current scripts and add new one
+		newScripts := make(map[string]*Script, len(currentScripts)+1)
+		for k, v := range currentScripts {
+			newScripts[k] = v
+		}
+		newScripts[scriptID] = script
+		
+		return newScripts
+	})
 	
 	return script, nil
 }
 
 // RunScript starts executing a script
 func (e *Engine) RunScript(scriptID string) error {
-	e.mutex.RLock()
-	script, exists := e.scripts[scriptID]
-	e.mutex.RUnlock()
+	scripts := e.getScripts()
+	script, exists := scripts[scriptID]
 	
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
@@ -222,36 +259,118 @@ func (e *Engine) RunScript(scriptID string) error {
 		return fmt.Errorf("failed to load script into VM: %v", err)
 	}
 	
-	script.Running = true
-	
-	// Execute script in a goroutine
-	go func() {
-		defer func() {
-			// Only mark as not running if the script truly finished or errored
-			// Don't mark as not running if it's just waiting for input
-			if !script.VM.IsWaiting() {
-				script.Running = false
-			} else {
-			}
-		}()
-		
-		if err := script.VM.Execute(); err != nil {
-			// Handle script error
-			script.Running = false
-			if e.outputHandler != nil {
-				e.outputHandler(fmt.Sprintf("Script error in %s: %v", script.Name, err))
-			}
+	// Update script state in copy-on-write manner
+	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+		// Copy the map
+		newScripts := make(map[string]*Script, len(currentScripts))
+		for k, v := range currentScripts {
+			newScripts[k] = v
 		}
-	}()
+		// Update the running state
+		newScripts[scriptID].Running = true
+		return newScripts
+	})
+	
+	// Execute script once - TWX style single execution
+	// Script will pause on waitfor commands and resume when text matches
+	err := script.VM.Execute()
+	if err != nil {
+		// Mark script as not running on error
+		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+			newScripts := make(map[string]*Script, len(currentScripts))
+			for k, v := range currentScripts {
+				newScripts[k] = v
+			}
+			if _, exists := newScripts[scriptID]; exists {
+				newScripts[scriptID].Running = false
+			}
+			return newScripts
+		})
+		if e.outputHandler != nil {
+			e.outputHandler(fmt.Sprintf("Script error in %s: %v", script.Name, err))
+		}
+		return err
+	}
+	
+	// Check if script completed (halted)
+	state := script.VM.GetState()
+	if state.IsHalted() {
+		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+			newScripts := make(map[string]*Script, len(currentScripts))
+			for k, v := range currentScripts {
+				newScripts[k] = v
+			}
+			if _, exists := newScripts[scriptID]; exists {
+				newScripts[scriptID].Running = false
+			}
+			return newScripts
+		})
+	}
+	
+	return nil
+}
+
+// ResumeScriptWithInput resumes a paused script with input
+func (e *Engine) ResumeScriptWithInput(scriptID string, input string) error {
+	scripts := e.getScripts()
+	script, exists := scripts[scriptID]
+	
+	if !exists {
+		return fmt.Errorf("script not found: %s", scriptID)
+	}
+	
+	if !script.VM.IsWaitingForInput() {
+		return fmt.Errorf("script %s is not waiting for input", scriptID)
+	}
+	
+	// Resume the VM with the input
+	if err := script.VM.ResumeWithInput(input); err != nil {
+		return err
+	}
+	
+	// Continue script execution - TWX style single execution  
+	// Script will execute until next waitfor, getinput, or completion
+	err := script.VM.Execute()
+	if err != nil {
+		// Mark script as not running on error
+		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+			newScripts := make(map[string]*Script, len(currentScripts))
+			for k, v := range currentScripts {
+				newScripts[k] = v
+			}
+			if _, exists := newScripts[scriptID]; exists {
+				newScripts[scriptID].Running = false
+			}
+			return newScripts
+		})
+		if e.outputHandler != nil {
+			e.outputHandler(fmt.Sprintf("Script error in %s: %v", script.Name, err))
+		}
+		return err
+	}
+	
+	// Check if script completed (halted)
+	state := script.VM.GetState()
+	if state.IsHalted() {
+		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+			newScripts := make(map[string]*Script, len(currentScripts))
+			for k, v := range currentScripts {
+				newScripts[k] = v
+			}
+			if _, exists := newScripts[scriptID]; exists {
+				newScripts[scriptID].Running = false
+			}
+			return newScripts
+		})
+	}
 	
 	return nil
 }
 
 // RunScriptSync executes a script synchronously and returns any execution error
 func (e *Engine) RunScriptSync(scriptID string) error {
-	e.mutex.RLock()
-	script, exists := e.scripts[scriptID]
-	e.mutex.RUnlock()
+	scripts := e.getScripts()
+	script, exists := scripts[scriptID]
 	
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
@@ -266,9 +385,27 @@ func (e *Engine) RunScriptSync(scriptID string) error {
 		return fmt.Errorf("failed to load script into VM: %v", err)
 	}
 	
-	script.Running = true
+	// Update script state in copy-on-write manner
+	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+		newScripts := make(map[string]*Script, len(currentScripts))
+		for k, v := range currentScripts {
+			newScripts[k] = v
+		}
+		newScripts[scriptID].Running = true
+		return newScripts
+	})
+	
 	defer func() {
-		script.Running = false
+		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+			newScripts := make(map[string]*Script, len(currentScripts))
+			for k, v := range currentScripts {
+				newScripts[k] = v
+			}
+			if _, exists := newScripts[scriptID]; exists {
+				newScripts[scriptID].Running = false
+			}
+			return newScripts
+		})
 	}()
 	
 	// Execute script synchronously
@@ -277,9 +414,8 @@ func (e *Engine) RunScriptSync(scriptID string) error {
 
 // StopScript stops a running script
 func (e *Engine) StopScript(scriptID string) error {
-	e.mutex.RLock()
-	script, exists := e.scripts[scriptID]
-	e.mutex.RUnlock()
+	scripts := e.getScripts()
+	script, exists := scripts[scriptID]
 	
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
@@ -296,14 +432,13 @@ func (e *Engine) StopScript(scriptID string) error {
 
 // StopAllScripts stops all running scripts
 func (e *Engine) StopAllScripts() error {
-	e.mutex.RLock()
-	scripts := make([]*Script, 0, len(e.scripts))
-	for _, script := range e.scripts {
+	scriptsMap := e.getScripts()
+	scripts := make([]*Script, 0, len(scriptsMap))
+	for _, script := range scriptsMap {
 		if script.Running {
 			scripts = append(scripts, script)
 		}
 	}
-	e.mutex.RUnlock()
 	
 	for _, script := range scripts {
 		if err := script.Stop(); err != nil {
@@ -318,11 +453,30 @@ func (e *Engine) StopAllScripts() error {
 
 // UnloadScript removes a script from memory
 func (e *Engine) UnloadScript(scriptID string) error {
-	e.mutex.Lock()
-	defer e.mutex.Unlock()
+	var script *Script
+	var scriptExists bool
 	
-	script, exists := e.scripts[scriptID]
-	if !exists {
+	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
+		var exists bool
+		script, exists = currentScripts[scriptID]
+		scriptExists = exists
+		
+		if !exists {
+			return currentScripts // No change
+		}
+		
+		// Copy current scripts excluding the one to remove
+		newScripts := make(map[string]*Script, len(currentScripts)-1)
+		for k, v := range currentScripts {
+			if k != scriptID {
+				newScripts[k] = v
+			}
+		}
+		
+		return newScripts
+	})
+	
+	if !scriptExists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
 	
@@ -332,16 +486,13 @@ func (e *Engine) UnloadScript(scriptID string) error {
 		}
 	}
 	
-	delete(e.scripts, scriptID)
 	return nil
 }
 
 // GetScript returns a script by ID
 func (e *Engine) GetScript(scriptID string) (*Script, error) {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
-	script, exists := e.scripts[scriptID]
+	scripts := e.getScripts()
+	script, exists := scripts[scriptID]
 	if !exists {
 		return nil, fmt.Errorf("script not found: %s", scriptID)
 	}
@@ -351,23 +502,41 @@ func (e *Engine) GetScript(scriptID string) (*Script, error) {
 
 // ListScripts returns all loaded scripts
 func (e *Engine) ListScripts() map[string]*Script {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
+	scripts := e.getScripts()
 	result := make(map[string]*Script)
-	for k, v := range e.scripts {
+	for k, v := range scripts {
 		result[k] = v
 	}
 	return result
 }
 
-// GetRunningScripts returns all running scripts
-func (e *Engine) GetRunningScripts() []*Script {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
+// GetRunningScripts returns all running scripts (implements interfaces.ScriptEngine)
+func (e *Engine) GetRunningScripts() []interfaces.ScriptInfo {
+	scripts := e.getScripts()
+	result := make([]interfaces.ScriptInfo, 0)
+	for _, script := range scripts {
+		if script.Running {
+			result = append(result, script)
+		}
+	}
+	return result
+}
+
+// GetAllScripts returns all loaded scripts regardless of running state (implements interfaces.ScriptEngine)
+func (e *Engine) GetAllScripts() []interfaces.ScriptInfo {
+	scripts := e.getScripts()
+	result := make([]interfaces.ScriptInfo, 0)
+	for _, script := range scripts {
+		result = append(result, script)
+	}
+	return result
+}
+
+// GetRunningScriptsInternal returns all running scripts as concrete types for internal use
+func (e *Engine) GetRunningScriptsInternal() []*Script {
+	scripts := e.getScripts()
 	result := make([]*Script, 0)
-	for _, script := range e.scripts {
+	for _, script := range scripts {
 		if script.Running {
 			result = append(result, script)
 		}
@@ -387,10 +556,10 @@ func (e *Engine) ProcessText(text string) error {
 	// This ensures waitfor triggers match properly against clean text
 	strippedText := e.ansiStripper.StripChunk(text)
 	
-	// Forward stripped text to all running script VMs for waitfor processing
-	e.mutex.RLock()
+	// Forward stripped text to all running script VMs for waitfor processing (lockless!)
+	scripts := e.getScripts()
 	scriptCount := 0
-	for _, script := range e.scripts {
+	for _, script := range scripts {
 		if script.Running && script.VM != nil {
 			scriptCount++
 			if err := script.VM.ProcessIncomingText(strippedText); err != nil {
@@ -398,7 +567,6 @@ func (e *Engine) ProcessText(text string) error {
 			}
 		}
 	}
-	e.mutex.RUnlock()
 	
 	return nil
 }
@@ -491,9 +659,8 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 
 // generateScriptID generates a unique script ID
 func (e *Engine) generateScriptID() string {
-	id := fmt.Sprintf("script_%d", e.nextScriptID)
-	e.nextScriptID++
-	return id
+	id := e.nextScriptID.Add(1)
+	return fmt.Sprintf("script_%d", id)
 }
 
 // ExecuteScriptString executes a script string directly
@@ -522,10 +689,8 @@ func (e *Engine) ExecuteScriptFile(filename string) error {
 
 // GetScriptByName returns a script by name
 func (e *Engine) GetScriptByName(name string) (*Script, error) {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
-	for _, script := range e.scripts {
+	scripts := e.getScripts()
+	for _, script := range scripts {
 		if script.Name == name {
 			return script, nil
 		}
@@ -545,19 +710,15 @@ func (e *Engine) IsScriptRunning(name string) bool {
 
 // GetScriptCount returns the number of loaded scripts
 func (e *Engine) GetScriptCount() int {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
-	return len(e.scripts)
+	scripts := e.getScripts()
+	return len(scripts)
 }
 
 // GetRunningScriptCount returns the number of running scripts
 func (e *Engine) GetRunningScriptCount() int {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
+	scripts := e.getScripts()
 	count := 0
-	for _, script := range e.scripts {
+	for _, script := range scripts {
 		if script.Running {
 			count++
 		}
@@ -565,14 +726,34 @@ func (e *Engine) GetRunningScriptCount() int {
 	return count
 }
 
+// GetStatus implements interfaces.ScriptEngine
+func (e *Engine) GetStatus() map[string]interface{} {
+	scripts := e.getScripts()
+	status := make(map[string]interface{})
+	status["total_scripts"] = len(scripts)
+	
+	runningCount := 0
+	for _, script := range scripts {
+		if script.Running {
+			runningCount++
+		}
+	}
+	status["running_scripts"] = runningCount
+	
+	if e.triggerManager != nil {
+		status["trigger_count"] = e.triggerManager.GetTriggerCount()
+	} else {
+		status["trigger_count"] = 0
+	}
+	return status
+}
+
 // GetAllVariables returns all variables from all running scripts
 func (e *Engine) GetAllVariables() map[string]*types.Value {
-	e.mutex.RLock()
-	defer e.mutex.RUnlock()
-	
+	scripts := e.getScripts()
 	allVariables := make(map[string]*types.Value)
 	
-	for _, script := range e.scripts {
+	for _, script := range scripts {
 		if script.Running && script.VM != nil {
 			// Get variables from this script's VM
 			scriptVars := script.VM.GetAllVariables()

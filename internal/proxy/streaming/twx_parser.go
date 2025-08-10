@@ -657,10 +657,11 @@ func (p *TWXParser) handleSectorStart(line string) {
 				p.sectorCompleted()
 			}
 			
-			// Only reset sectorSaved if this is a different sector
-			if p.currentSectorIndex != sectorNum {
-				p.sectorSaved = false
-			}
+			// Always reset sector data when processing a sector visit
+			// This ensures that data from previous visits doesn't carry over
+			// (including port data that might persist from previous visits)
+			p.sectorSaved = false  // Reset for any sector visit
+			p.resetCurrentSector()
 			p.currentSectorIndex = sectorNum
 			
 			p.currentDisplay = DisplaySector
@@ -1177,10 +1178,13 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 		sector.Warp[i] = warps[i]
 	}
 	
-	// Mark sector as calculated from CIM data (mirrors Pascal logic)
+	// Mark root sector as calculated since it appears in CIM sector report
+	// CIM data marks sectors as calculated, not fully explored (matches TWX behavior)
 	if sector.Explored == database.EtNo {
-		sector.Explored = database.EtCalc
-		sector.Constellation = "???" + " (CIM data only)"
+		sector.Explored = database.EtCalc  // Mark as calculated (not fully explored)
+		if sector.Constellation == "" {
+			sector.Constellation = "??? (warp calc only)"
+		}
 	}
 	
 	sector.UpDate = time.Now()
@@ -1316,6 +1320,78 @@ func (p *TWXParser) ensureSectorExistsAndSavePort(port database.TPort, sectorNum
 	return nil
 }
 
+// ensureSectorExistsAndSavePortWithVisited marks CIM root sector as visited and saves port data
+func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort, sectorNum int) error {
+	if p.database == nil {
+		return fmt.Errorf("database not available")
+	}
+	
+	// Always ensure sector exists first (required for foreign key constraint)
+	sector, err := p.database.LoadSector(sectorNum)
+	if err != nil {
+		// Create minimal sector entry
+		sector = database.NULLSector()
+		sector.UpDate = time.Now()
+	}
+	
+	// Mark root sector as calculated since it appears in CIM port report
+	// CIM data marks sectors as calculated, not fully explored (matches TWX behavior)
+	if sector.Explored == database.EtNo {
+		sector.Explored = database.EtCalc  // Mark as calculated (not fully explored)
+		if sector.Constellation == "" {
+			sector.Constellation = "??? (port data/calc only)"
+		}
+	}
+	sector.UpDate = time.Now()
+	
+	// Always save/update sector to ensure it exists in current transaction context
+	if err := p.database.SaveSector(sector, sectorNum); err != nil {
+		return fmt.Errorf("failed to save sector %d: %w", sectorNum, err)
+	}
+	
+	// Save port data
+	if err := p.database.SavePort(port, sectorNum); err != nil {
+		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
+	}
+	
+	// Fire any necessary events (consistent with other database operations)
+	// This ensures proper notification flow like other database saves
+	return nil
+}
+
+// clearPortData removes port data from the database for a sector that has no port
+// This is called when we visit a sector and confirm it has no port
+func (p *TWXParser) clearPortData(sectorIndex int) error {
+	if p.database == nil {
+		return fmt.Errorf("database not available")
+	}
+	
+	// Delete port data from the ports table
+	if err := p.database.DeletePort(sectorIndex); err != nil {
+		return fmt.Errorf("failed to delete port data for sector %d: %w", sectorIndex, err)
+	}
+	
+	return nil
+}
+
+// resetCurrentSector clears sector parsing data when starting a new sector visit
+// This preserves important persistent data while clearing temporary parsing state
+func (p *TWXParser) resetCurrentSector() {
+	// Only reset parsing-specific data, not persistent sector information
+	p.currentSector.Port = PortData{}      // Clear port data (this was the main fix needed)
+	p.currentSector.Beacon = ""            // Clear beacon (will be set if present)
+	p.currentSector.Constellation = ""     // Clear constellation (will be set if present)
+	// Note: We intentionally do NOT reset Index or NavHaz as those are set elsewhere
+	
+	p.currentShips = nil
+	p.currentTraders = nil
+	p.currentPlanets = nil
+	p.currentMines = nil
+	p.currentProducts = nil
+	p.currentSectorWarps = [6]int{0, 0, 0, 0, 0, 0}
+	p.sectorPosition = SectorPosNormal
+}
+
 // storePortCIMData stores complete port CIM data to database
 func (p *TWXParser) storePortCIMData(sectorNum, oreAmount, orePercent int, buyOre bool,
 	orgAmount, orgPercent int, buyOrg bool, equipAmount, equipPercent int, buyEquip bool, portClass int) {
@@ -1332,8 +1408,8 @@ func (p *TWXParser) storePortCIMData(sectorNum, oreAmount, orePercent int, buyOr
 		UpDate:         time.Now(),
 	}
 	
-	// Use common function to ensure sector exists and save port data
-	if err := p.ensureSectorExistsAndSavePort(port, sectorNum); err != nil {
+	// Mark sector as visited and save port data (CIM port reports are from visited sectors)
+	if err := p.ensureSectorExistsAndSavePortWithVisited(port, sectorNum); err != nil {
 		// Log error but don't panic - this is often called in parsing context
 		return
 	}

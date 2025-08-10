@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/manager"
 	"twist/internal/proxy/scripting/parser"
@@ -38,6 +39,11 @@ type VirtualMachine struct {
 	
 	// Error tracking
 	lastError error
+	
+	// Input collection state
+	waitingForInput     bool
+	pendingInputPrompt  string
+	pendingInputResult  string
 }
 
 // NewVirtualMachine creates a new virtual machine
@@ -94,20 +100,39 @@ func (vm *VirtualMachine) LoadScript(ast *parser.ASTNode, script types.ScriptInt
 
 // Execute runs the script execution loop
 func (vm *VirtualMachine) Execute() error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	debug.Log("VM.Execute [%s]: starting execution loop", scriptName)
+	
 	for vm.state.IsRunning() && !vm.state.IsWaiting() {
+		debug.Log("VM.Execute [%s]: executing step at position %d", scriptName, vm.state.Position)
+		
 		if err := vm.execution.ExecuteStep(); err != nil {
+			debug.Log("VM.Execute [%s]: ExecuteStep returned error: %v", scriptName, err)
 			vm.lastError = err
 			return err
 		}
 		
-		// Handle pause state - in test mode, continue execution automatically
-		// In real mode, this would return control to caller
+		// Handle pause state
 		if vm.state.IsPaused() {
-			// For testing, treat pause as a no-op and continue
+			debug.Log("VM.Execute [%s]: detected PAUSED state, waitingForInput=%v", scriptName, vm.waitingForInput)
+			// If paused waiting for input, return control to caller
+			// The script manager will handle input collection and resume
+			if vm.waitingForInput {
+				debug.Log("VM.Execute [%s]: RETURNING from Execute() - waiting for input", scriptName)
+				return nil
+			}
+			
+			debug.Log("VM.Execute [%s]: continuing execution after pause (not waiting for input)", scriptName)
+			// For other pause types (like regular pause command), continue automatically
+			// This maintains backwards compatibility with existing test behavior
 			vm.state.SetRunning()
 		}
 		
 	}
+	debug.Log("VM.Execute [%s]: execution loop finished", scriptName)
 	return nil
 }
 
@@ -208,6 +233,7 @@ func (vm *VirtualMachine) ClientMessage(message string) error {
 }
 
 func (vm *VirtualMachine) Send(data string) error {
+	debug.Log("VM.Send: sending data %q", data)
 	if vm.sendHandler != nil {
 		return vm.sendHandler(data)
 	} else {
@@ -216,14 +242,101 @@ func (vm *VirtualMachine) Send(data string) error {
 }
 
 func (vm *VirtualMachine) WaitFor(text string) error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	debug.Log("VM.WaitFor [%s]: waiting for trigger %q", scriptName, text)
 	vm.state.SetWaiting(text)
 	return nil
 }
 
 // Input handling
 func (vm *VirtualMachine) GetInput(prompt string) (string, error) {
-	// This would integrate with the game interface for input
-	return "", nil
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	debug.Log("VM.GetInput [%s]: initiating input for prompt %q", scriptName, prompt)
+	
+	// Display the prompt (matching TWX behavior)
+	if err := vm.Echo("\r\n" + prompt + "\r\n"); err != nil {
+		return "", err
+	}
+	
+	// Set up script input collection state
+	vm.pendingInputPrompt = prompt
+	vm.pendingInputResult = ""
+	vm.waitingForInput = true
+	
+	debug.Log("VM.GetInput [%s]: set waitingForInput=true, pendingInputPrompt=%q", scriptName, prompt)
+	
+	// Pause script execution - this will cause the Run loop to exit
+	// and return control to the caller (matching TWX caPause behavior)
+	vm.state.SetPaused()
+	
+	debug.Log("VM.GetInput [%s]: set state to PAUSED", scriptName)
+	
+	// The script manager should detect this paused state and initiate
+	// input collection via the menu system's InputCollector
+	// This matches TWX's BeginScriptInput() integration
+	
+	// This returns immediately with empty result - the actual input
+	// will be provided later via ResumeWithInput()
+	return vm.pendingInputResult, nil
+}
+
+// IsWaitingForInput returns true if the VM is paused waiting for user input
+func (vm *VirtualMachine) IsWaitingForInput() bool {
+	return vm.waitingForInput && vm.state.IsPaused()
+}
+
+// GetPendingInputPrompt returns the prompt for pending input
+func (vm *VirtualMachine) GetPendingInputPrompt() string {
+	return vm.pendingInputPrompt
+}
+
+// GetPendingInputResult returns the result of pending input
+func (vm *VirtualMachine) GetPendingInputResult() string {
+	return vm.pendingInputResult
+}
+
+// ResumeWithInput provides the input value and resumes script execution
+func (vm *VirtualMachine) ResumeWithInput(input string) error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	
+	if !vm.waitingForInput {
+		debug.Log("VM.ResumeWithInput [%s]: ERROR - not waiting for input!", scriptName)
+		return fmt.Errorf("VM is not waiting for input")
+	}
+	
+	debug.Log("VM.ResumeWithInput [%s]: resuming with input %q", scriptName, input)
+	
+	vm.pendingInputResult = input
+	vm.waitingForInput = false
+	// Don't clear pendingInputPrompt yet - cmdGetInput needs it to detect resume state
+	
+	// Resume script execution
+	vm.state.SetRunning()
+	
+	debug.Log("VM.ResumeWithInput [%s]: set state to RUNNING", scriptName)
+	
+	return nil
+}
+
+// ClearPendingInput clears the pending input state after processing
+func (vm *VirtualMachine) ClearPendingInput() {
+	vm.pendingInputResult = ""
+	vm.pendingInputPrompt = ""
+	vm.waitingForInput = false
+}
+
+// GetState returns the VM's execution state
+func (vm *VirtualMachine) GetState() *VMState {
+	return vm.state
 }
 
 // Interface implementations
@@ -233,6 +346,11 @@ func (vm *VirtualMachine) GetGameInterface() types.GameInterface {
 
 func (vm *VirtualMachine) GetCurrentScript() types.ScriptInterface {
 	return vm.script
+}
+
+func (vm *VirtualMachine) GetCurrentLine() int {
+	// TODO: Implement proper line number tracking
+	return 0
 }
 
 func (vm *VirtualMachine) GetScriptManager() interface{} {
@@ -320,12 +438,19 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 	
 	// Check if we're waiting for specific text (like TWX WaitFor)
 	if vm.state.IsWaiting() && vm.state.WaitText != "" {
+		scriptName := "unknown"
+		if vm.script != nil {
+			scriptName = vm.script.GetName()
+		}
+		debug.Log("VM.ProcessIncomingText [%s]: checking if text %q contains waitfor trigger %q", scriptName, text, vm.state.WaitText)
 		// Use substring matching like TWX does with Pos(FWaitText, Text) > 0
 		if strings.Contains(text, vm.state.WaitText) {
+			debug.Log("VM.ProcessIncomingText [%s]: TRIGGER MATCHED! Continuing script execution", scriptName)
 			vm.state.ClearWait()
 			// Resume execution - the position was already advanced by ExecuteStep
 			return vm.Execute()
 		} else {
+			debug.Log("VM.ProcessIncomingText [%s]: trigger not found, still waiting", scriptName)
 		}
 	}
 	
@@ -355,6 +480,11 @@ func (vm *VirtualMachine) ProcessOutput(filter string) error {
 	// In a real implementation, this would set up output processing filters
 	// For now, just return success for compatibility with tests
 	return nil
+}
+
+// GetCurrentPosition returns the current execution position for debugging
+func (vm *VirtualMachine) GetCurrentPosition() int {
+	return vm.state.Position
 }
 
 // EvaluateExpression evaluates a string expression and returns its value

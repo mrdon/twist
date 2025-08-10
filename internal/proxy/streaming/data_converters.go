@@ -40,7 +40,7 @@ func (c *SectorConverter) ToDatabase(parserSector SectorData) database.TSector {
 	
 	// Convert boolean explored to enum type
 	if parserSector.Explored {
-		dbSector.Explored = database.EtDensity // Assume density scan if explored
+		dbSector.Explored = database.EtHolo // Visited/fully explored sector
 	} else {
 		dbSector.Explored = database.EtNo
 	}

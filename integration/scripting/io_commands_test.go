@@ -3,6 +3,7 @@
 package scripting
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -42,7 +43,7 @@ func TestClientMessage_RealIntegration(t *testing.T) {
 	}
 }
 
-// TestGetInput tests getInput command (returns empty for testing)
+// TestGetInput tests getInput command (pauses execution like TWX)
 func TestGetInput_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
@@ -58,19 +59,18 @@ func TestGetInput_RealIntegration(t *testing.T) {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
 
-	// In test mode, getInput returns empty strings
-	expectedOutputs := []string{
-		"Input received: ''",
-		"Number received: ''",
-	}
-
-	if len(result.Output) != len(expectedOutputs) {
-		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
-	}
-
-	for i, expected := range expectedOutputs {
-		if i < len(result.Output) && result.Output[i] != expected {
-			t.Errorf("Output line %d: got %q, want %q", i, result.Output[i], expected)
+	// Script should pause at first getInput command and display prompt
+	// This is correct TWX behavior - script waits for user input
+	expectedPrompt := "Enter your name [0]"
+	found := false
+	for _, output := range result.Output {
+		if strings.Contains(output, expectedPrompt) {
+			found = true
+			break
 		}
+	}
+
+	if !found {
+		t.Errorf("Expected prompt containing %q, got outputs: %v", expectedPrompt, result.Output)
 	}
 }

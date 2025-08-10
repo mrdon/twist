@@ -2,7 +2,9 @@ package scripting
 
 import (
 	"fmt"
+	"strings"
 	"twist/internal/proxy/database"
+	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/scripting/constants"
 	"twist/internal/proxy/scripting/types"
 	"twist/internal/proxy/scripting/vm"
@@ -11,6 +13,7 @@ import (
 // ProxyInterface defines methods for sending commands to the game server
 type ProxyInterface interface {
 	SendInput(input string)
+	SendOutput(output string) // Send output directly to terminal without routing through input
 }
 
 // TerminalInterface defines methods for getting terminal output
@@ -45,7 +48,7 @@ func (g *GameAdapter) SetTerminal(terminal TerminalInterface) {
 	g.terminal = terminal
 }
 
-// SetMenuManager sets the terminal menu manager for script menu commands
+// SetMenuManager sets the menu manager for script input collection
 func (g *GameAdapter) SetMenuManager(menuManager interface{}) {
 	g.menuManager = menuManager
 }
@@ -190,6 +193,15 @@ func (g *GameAdapter) SendCommand(cmd string) error {
 	return nil
 }
 
+// SendDirectOutput sends output directly to terminal without routing through input system
+func (g *GameAdapter) SendDirectOutput(text string) error {
+	if g.proxy == nil {
+		return fmt.Errorf("proxy not available")
+	}
+	g.proxy.SendOutput(text)
+	return nil
+}
+
 // GetLastOutput implements GameInterface
 func (g *GameAdapter) GetLastOutput() string {
 	if g.terminal == nil {
@@ -291,6 +303,7 @@ type ScriptManager struct {
 	db             database.Database
 	gameAdapter    *GameAdapter
 	dbProvider     DatabaseProvider // For getting current database when needed
+	initialScript  string           // Script to load automatically on connection
 }
 
 // NewScriptManager creates a new script manager
@@ -356,15 +369,20 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 	
 	// Set up output handler (scripts can output to terminal)
 	sm.engine.SetOutputHandler(func(text string) error {
-		// For now, scripts output via the same proxy input mechanism
-		// This could be enhanced to have a separate output channel
+		// Script error messages should not be routed through the input system
+		// as they would be interpreted as user input by the menu system
+		if strings.HasPrefix(text, "Script error") {
+			// Send script errors directly to terminal output
+			return sm.gameAdapter.SendDirectOutput(text)
+		}
+		// Regular script output (like ECHO commands) can still go through SendCommand
 		return sm.gameAdapter.SendCommand(text)
 	})
 	
 	// Set up echo handler (local echo for script commands)
 	sm.engine.SetEchoHandler(func(text string) error {
-		// Echo is typically for local display, for now we'll send it as output
-		return sm.gameAdapter.SendCommand(text)
+		// Echo should display locally only, not send to server
+		return sm.gameAdapter.SendDirectOutput(text)
 	})
 }
 
@@ -373,9 +391,26 @@ func (sm *ScriptManager) SetupMenuManager(menuManager interface{}) {
 	sm.gameAdapter.SetMenuManager(menuManager)
 }
 
-// GetEngine returns the scripting engine as interface{} to avoid import cycles
-func (sm *ScriptManager) GetEngine() interface{} {
+// GetEngine returns the scripting engine with proper typing
+func (sm *ScriptManager) GetEngine() interfaces.ScriptEngine {
 	return sm.engine
+}
+
+// HasScriptWaitingForInput checks if any script is currently waiting for input
+// Returns the script ID and name if found, empty strings if none
+func (sm *ScriptManager) HasScriptWaitingForInput() (string, string) {
+	runningScripts := sm.engine.GetRunningScriptsInternal()
+	for _, script := range runningScripts {
+		if script.VM.IsWaitingForInput() {
+			return script.ID, script.Name
+		}
+	}
+	return "", ""
+}
+
+// ResumeScriptWithInput resumes a script with user input
+func (sm *ScriptManager) ResumeScriptWithInput(scriptID, input string) error {
+	return sm.engine.ResumeScriptWithInput(scriptID, input)
 }
 
 // LoadAndRunScript loads and runs a script file
@@ -410,6 +445,17 @@ func (sm *ScriptManager) ProcessGameLine(line string) error {
 
 // ProcessOutgoingText processes outgoing text through triggers
 func (sm *ScriptManager) ProcessOutgoingText(text string) error {
+	// Check for ESC key (ASCII 27) to stop running scripts - TWX compatibility
+	if len(text) > 0 && text[0] == 27 { // ESC key
+		// Stop all running scripts like TWX does
+		err := sm.engine.StopAllScripts()
+		if err != nil {
+			return err
+		}
+		// Don't process the ESC key further - it was consumed for script termination
+		return nil
+	}
+	
 	return sm.engine.ProcessTextOut(text)
 }
 
@@ -433,7 +479,7 @@ func (sm *ScriptManager) ProcessAutoText(text string) error {
 		if trigger.Matches(text) {
 			// Auto text triggers need a VM context to execute
 			// We'll use the first running script's VM, or create a temporary one
-			runningScripts := sm.engine.GetRunningScripts()
+			runningScripts := sm.engine.GetRunningScriptsInternal()
 			var vmInterface types.VMInterface
 			if len(runningScripts) > 0 {
 				vmInterface = runningScripts[0].VM
@@ -463,4 +509,66 @@ func (sm *ScriptManager) GetStatus() map[string]interface{} {
 		"running_scripts": sm.engine.GetRunningScriptCount(),
 		"trigger_count":   sm.engine.GetTriggerManager().GetTriggerCount(),
 	}
+}
+
+// CollectScriptInput handles script input collection via the menu system
+// This matches TWX's BeginScriptInput() functionality  
+func (sm *ScriptManager) CollectScriptInput(prompt string) (string, error) {
+	// Get the menu manager from the game adapter
+	menuManager := sm.gameAdapter.GetMenuManager()
+	if menuManager == nil {
+		return "", fmt.Errorf("menu manager not available for script input collection")
+	}
+	
+	// Try to use the menu manager's input collector
+	if inputCollector, ok := menuManager.(interface {
+		StartScriptInputCollection(prompt string, callback func(string)) error
+	}); ok {
+		// Find the script that's waiting for input
+		runningScripts := sm.engine.GetRunningScriptsInternal()
+		var waitingScript *Script
+		for _, script := range runningScripts {
+			if script.VM.IsWaitingForInput() {
+				waitingScript = script
+				break
+			}
+		}
+		
+		if waitingScript == nil {
+			return "", fmt.Errorf("no script found waiting for input")
+		}
+		
+		// Start input collection with callback that resumes the script
+		err := inputCollector.StartScriptInputCollection(prompt, func(input string) {
+			// Resume the script with the collected input
+			sm.engine.ResumeScriptWithInput(waitingScript.ID, input)
+		})
+		if err != nil {
+			return "", err
+		}
+		
+		// Return immediately - the script will be resumed asynchronously
+		// This matches TWX's behavior where getinput pauses execution
+		return "", nil
+	}
+	
+	return "", fmt.Errorf("menu manager does not support script input collection")
+}
+
+// SetInitialScript sets the script to load automatically on connection
+func (sm *ScriptManager) SetInitialScript(scriptName string) {
+	sm.initialScript = scriptName
+}
+
+// GetInitialScript returns the initial script name, if any
+func (sm *ScriptManager) GetInitialScript() string {
+	return sm.initialScript
+}
+
+// LoadInitialScript loads the initial script if one is configured
+func (sm *ScriptManager) LoadInitialScript() error {
+	if sm.initialScript == "" {
+		return nil // No initial script configured
+	}
+	return sm.LoadAndRunScript(sm.initialScript)
 }

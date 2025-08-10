@@ -49,7 +49,7 @@ divide $quotient 4
 echo "Math results:"
 echo "10 + 20 = " $sum
 echo "50 - 15 = " $diff
-echo "6 * 7 = " $product
+echo "6 multiply 7 = " $product
 echo "100 / 4 = " $quotient
 
 echo "Comprehensive test completed!"
@@ -67,7 +67,7 @@ echo "Comprehensive test completed!"
 		"Math results:",
 		"10 + 20 = 30",
 		"50 - 15 = 35",
-		"6 * 7 = 42",
+		"6 multiply 7 = 42",
 		"100 / 4 = 25",
 		"Comprehensive test completed!",
 	}

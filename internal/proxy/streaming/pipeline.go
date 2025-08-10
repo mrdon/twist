@@ -9,6 +9,7 @@ import (
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/telnet"
 	"twist/internal/proxy/database"
+	"twist/internal/proxy/interfaces"
 	"twist/internal/api"
 )
 
@@ -44,7 +45,7 @@ func (a *scriptEngineAdapter) ProcessAutoText(text string) error {
 // ScriptManager interface for script processing
 type ScriptManager interface {
 	ProcessGameLine(line string) error
-	GetEngine() interface{}  // Return generic interface to avoid import cycles
+	GetEngine() interfaces.ScriptEngine  // Return properly typed interface
 }
 
 // StateManager interface for game state updates (avoids circular import with proxy)
@@ -349,6 +350,19 @@ func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {
 // GetParser returns the TWX parser instance
 func (p *Pipeline) GetParser() *TWXParser {
 	return p.twxParser
+}
+
+// InjectTUIData sends data directly to the TUI without processing through the pipeline
+// This is used for script echo output that should display in the terminal but not go to the server
+func (p *Pipeline) InjectTUIData(data []byte) {
+	if p.tuiAPI != nil {
+		// Apply the same character encoding conversion as the normal pipeline
+		decoded, err := p.decoder.Bytes(data)
+		if err != nil {
+			decoded = data
+		}
+		p.tuiAPI.OnData(decoded)
+	}
 }
 
 // escapeANSI converts ANSI escape sequences to readable text

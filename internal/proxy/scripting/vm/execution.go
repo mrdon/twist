@@ -1,6 +1,7 @@
 package vm
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -43,6 +44,13 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 
 	node := ee.ast.Children[ee.vm.state.Position]
 	err := ee.executeNode(node)
+	
+	// Handle script pause (like TWX caPause) - don't advance position for input pauses
+	if err != nil && errors.Is(err, types.ErrScriptPaused) {
+		ee.vm.state.SetPaused()
+		// Don't advance position - we need to re-execute this command when resumed
+		return nil // Don't treat pause as an error
+	}
 	
 	if err != nil {
 		ee.vm.state.SetError(err.Error())
@@ -120,7 +128,9 @@ func (ee *ExecutionEngine) executeCommand(node *parser.ASTNode) error {
 	}
 
 	// Execute the command
-	return cmdDef.Handler(ee.vm, params)
+	err = cmdDef.Handler(ee.vm, params)
+	
+	return err
 }
 
 // executeGoto executes a goto statement

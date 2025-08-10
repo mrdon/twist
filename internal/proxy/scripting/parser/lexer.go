@@ -183,7 +183,10 @@ func (l *Lexer) readString() string {
 		l.nextChar() // skip closing quote
 	}
 	
-	return result.String()
+	// Convert * to carriage returns like TWX (matches ScriptCmp.pas line 782)
+	resultStr := result.String()
+	resultStr = strings.ReplaceAll(resultStr, "*", "\r")
+	return resultStr
 }
 
 // readIdentifier reads an identifier or keyword

@@ -157,7 +157,7 @@ func TestArithmetic_EdgeCases_RealIntegration(t *testing.T) {
 		subtract $result3 $zero
 		
 		echo "0 + 5 = " $result1
-		echo "0 * 5 = " $result2
+		echo "0 multiply 5 = " $result2
 		echo "5 - 0 = " $result3
 		
 		# Test negative numbers
@@ -171,7 +171,7 @@ func TestArithmetic_EdgeCases_RealIntegration(t *testing.T) {
 		multiply $result5 $positive
 		
 		echo "-10 + 3 = " $result4
-		echo "-10 * 3 = " $result5
+		echo "-10 multiply 3 = " $result5
 	`
 
 	result := tester.ExecuteScript(script)
@@ -181,10 +181,10 @@ func TestArithmetic_EdgeCases_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"0 + 5 = 5",
-		"0 * 5 = 0",
+		"0 multiply 5 = 0",
 		"5 - 0 = 5",
 		"-10 + 3 = -7",
-		"-10 * 3 = -30",
+		"-10 multiply 3 = -30",
 	}
 
 	if len(result.Output) != 5 {

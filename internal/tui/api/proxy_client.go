@@ -27,6 +27,15 @@ func (pc *ProxyClient) Connect(address string, tuiAPI coreapi.TuiAPI) error {
 	return nil
 }
 
+func (pc *ProxyClient) ConnectWithScript(address string, tuiAPI coreapi.TuiAPI, scriptName string) error {
+	// Use static ConnectWithScript function to create new ProxyAPI instance with initial script
+	proxyAPI := coreapi.ConnectWithScript(address, tuiAPI, scriptName)
+
+	// Store the connected API instance
+	pc.currentAPI = proxyAPI
+	return nil
+}
+
 func (pc *ProxyClient) Disconnect() error {
 	if pc.currentAPI == nil {
 		return nil

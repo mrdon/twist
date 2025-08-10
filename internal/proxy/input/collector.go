@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	"twist/internal/debug"
-	"twist/internal/proxy/menu/display"
 )
 
 // InputCollector handles two-stage input collection for menu operations
@@ -62,11 +61,9 @@ func (ic *InputCollector) StartCollection(menuName, prompt string) {
 	ic.prompt = prompt
 	ic.buffer = "" // Clear any previous input
 	
-	// Display the input prompt
-	if prompt != "" {
-		ic.sendOutput("\r\n" + display.FormatInputPrompt(prompt))
-	} else {
-		ic.sendOutput("\r\n" + display.FormatInputPrompt("Enter value"))
+	// Display the input prompt (scripts handle their own prompting)
+	if prompt != "" && !strings.HasPrefix(menuName, "SCRIPT_INPUT_") {
+		ic.sendOutput("\r\n" + prompt + "\r\n")
 	}
 	
 	// Show help for input collection
@@ -95,45 +92,50 @@ func (ic *InputCollector) HandleInput(input string) error {
 		return nil
 	}
 
-	// Check for special keys first (before trimming)
+	debug.Log("HandleInput received: %q (len=%d)", input, len(input))
+
+	// Check for Enter key - complete collection
+	// Note: Empty string often indicates Enter key in terminal applications
 	if input == "\r" || input == "\n" || input == "\r\n" || input == "" {
-		// Enter pressed - complete collection with current buffer
 		result := ic.buffer
 		ic.buffer = ""
 		debug.Log("Enter pressed, completing input collection with: '%s'", result)
 		return ic.completeCollection(result)
 	}
 
-	// Handle special control sequences
+	// Handle backspace/delete keys
+	if input == "\b" || input == "\x7f" || input == "\x08" {
+		if len(ic.buffer) > 0 {
+			ic.buffer = ic.buffer[:len(ic.buffer)-1]
+			debug.Log("Backspace pressed, buffer now: '%s'", ic.buffer)
+			// Send backspace sequence to terminal to visually remove character
+			ic.sendOutput("\b \b")
+		}
+		return nil
+	}
+
+	// Handle escape sequences and special commands
 	trimmedInput := strings.TrimSpace(input)
-	switch trimmedInput {
-	case "\\", "\\quit":
-		// Escape input collection (only backslash commands)
+	if trimmedInput == "\\" || trimmedInput == "\\quit" {
+		// Escape input collection
 		ic.sendOutput("Input cancelled.\r\n")
 		ic.buffer = ""
 		ic.cancelCollection()
 		return nil
-	case "?":
+	}
+
+	if trimmedInput == "?" {
 		// Show help for input collection mode
 		ic.showCollectionHelp()
 		return nil
 	}
 
-	// Handle backspace (remove last character from buffer)
-	if input == "\b" || input == "\x7f" {
-		if len(ic.buffer) > 0 {
-			ic.buffer = ic.buffer[:len(ic.buffer)-1]
-			debug.Log("Backspace pressed, buffer now: '%s'", ic.buffer)
-		}
-		return nil
-	}
-
-	// Accumulate printable characters in the buffer and echo them
-	if len(trimmedInput) > 0 {
-		ic.buffer += trimmedInput
-		debug.Log("Added '%s' to buffer, buffer now: '%s'", trimmedInput, ic.buffer)
-		// Echo the character to provide visual feedback
-		ic.sendOutput(trimmedInput)
+	// Only process printable characters (ignore empty input and control chars)
+	if len(input) > 0 && input[0] >= 32 && input[0] < 127 {
+		ic.buffer += input
+		debug.Log("Added '%s' to buffer, buffer now: '%s'", input, ic.buffer)
+		// Echo the character back for visual feedback
+		ic.sendOutput(input)
 	}
 
 	return nil
@@ -163,11 +165,11 @@ func (ic *InputCollector) completeCollection(value string) error {
 		return handler(menuName, value)
 	}
 	
-	// Default behavior - show success message
+	// Default behavior - show success message  
 	if value != "" {
-		ic.sendOutput(display.FormatSuccessMessage("Value set: " + value))
+		ic.sendOutput("Value set: " + value + "\r\n")
 	} else {
-		ic.sendOutput(display.FormatSuccessMessage("Value cleared"))
+		ic.sendOutput("Value cleared\r\n")
 	}
 	
 	return nil

@@ -18,8 +18,15 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Get script name from command line arguments (default to empty string)
+	var scriptName string
+	if len(os.Args) > 1 {
+		scriptName = os.Args[1]
+	}
+
 	// Initialize and run the tview application
 	app := tui.NewApplication()
+	app.SetInitialScript(scriptName)
 	if err := app.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)
 		os.Exit(1)

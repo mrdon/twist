@@ -215,6 +215,21 @@ func (sc *SystemConstants) updateDynamicConstant(name string) {
 			currentSector := sc.gameInterface.GetCurrentSector()
 			sc.constants["CURRENTSECTOR"] = types.NewNumberValue(float64(currentSector))
 		}
+	case "CURRENTLINE", "CURRENTANSILINE":
+		// Update CURRENTLINE from game interface
+		if sc.gameInterface != nil {
+			// First try to get the last output
+			lastOutput := sc.gameInterface.GetLastOutput()
+			if lastOutput != "" {
+				sc.constants["CURRENTLINE"] = types.NewStringValue(lastOutput)
+				sc.constants["CURRENTANSILINE"] = types.NewStringValue(lastOutput)
+			} else {
+				// Fall back to current prompt if no output available
+				currentPrompt := sc.gameInterface.GetCurrentPrompt()
+				sc.constants["CURRENTLINE"] = types.NewStringValue(currentPrompt)
+				sc.constants["CURRENTANSILINE"] = types.NewStringValue(currentPrompt)
+			}
+		}
 	case "SECTOR.WARPS", "SECTOR.WARPCOUNT", "SECTOR.DENSITY", "SECTOR.NAVHAZ", 
 		 "SECTOR.EXPLORED", "SECTOR.ANOMALY", "SECTOR.BEACON", "SECTOR.CONSTELLATION":
 		sc.updateSectorConstants()

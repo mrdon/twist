@@ -75,6 +75,12 @@ func (p *TWXParser) saveSectorToDatabase() error {
 		if err := p.ensureSectorExistsAndSavePort(dbPort, p.currentSectorIndex); err != nil {
 			return fmt.Errorf("failed to save port data: %w", err)
 		}
+	} else {
+		// No port detected in this sector visit - clear any existing port data
+		// This ensures database is updated when visiting sectors that no longer have ports
+		if err := p.clearPortData(p.currentSectorIndex); err != nil {
+			return fmt.Errorf("failed to clear port data: %w", err)
+		}
 	}
 	
 	
