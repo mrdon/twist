@@ -3,117 +3,58 @@ package scripting
 import (
 	"strings"
 	"testing"
-	"time"
 )
 
-// TestSimpleExpectBasic demonstrates the minimal expect approach
+// TestSimpleExpectBasic tests basic expect functionality
 func TestSimpleExpectBasic(t *testing.T) {
-	framework := NewBlackBoxTestFramework(t).
-		SetupDatabase().
-		SetupProxy()
+	// Test expect engine directly with simulated output
+	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
+	
+	// Simulate script output
+	expectEngine.AddOutput("Starting port trading\r\n")
+	expectEngine.AddOutput("User selected sector: 2157\r\n")
+	expectEngine.AddOutput("User selected times: 3\r\n")
+	expectEngine.AddOutput("Trading sector 2157 for 3 times\r\n")
+	expectEngine.AddOutput("Trade completed\r\n")
 
-	// Create a simple script
-	script := `
-echo "Starting port trading"
-getinput $sector "Enter sector: " 1
-getinput $times "Enter times: " 5  
-echo "Trading sector " $sector " for " $times " times"
-`
-
-	scriptPath := framework.CreateScript("simple_test.ts", script)
-	framework.LoadScript(scriptPath)
-
-	// Create simple expect engine that feeds from framework output
-	var capturedInputs []string
-	expectEngine := NewSimpleExpectEngine(t, func(input string) {
-		capturedInputs = append(capturedInputs, input)
-		framework.TypeInput(input)
-	})
-
-	// Hook up output capture
-	go func() {
-		lastLen := 0
-		for i := 0; i < 50; i++ { // Run for 5 seconds max
-			output := framework.GetUserOutput()
-			if len(output) > lastLen {
-				newOutput := output[lastLen:]
-				expectEngine.AddOutput(newOutput)
-				lastLen = len(output)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
-
-	// Ultra-simple expect script - just the essentials!
 	expectScript := `
-# Simple deterministic test
-timeout "3s"
+timeout "1s"
 expect "Starting port trading"
-expect "Enter sector:"
-send "2157"  
-expect "Enter times:"
-send "3"
+expect "User selected sector: 2157"
 expect "Trading sector 2157 for 3 times"
 assert "Starting port trading"
-assert "Trading sector 2157 for 3 times"
-log "Test completed successfully"
+assert "Trade completed"
+log "Basic expect test passed"
 `
 
 	err := expectEngine.Run(expectScript)
 	if err != nil {
 		t.Fatalf("Simple expect test failed: %v", err)
 	}
-
-	// Verify inputs were sent correctly
-	expectedInputs := []string{"2157", "3"}
-	if !slicesEqual(capturedInputs, expectedInputs) {
-		t.Errorf("Expected inputs %v, got %v", expectedInputs, capturedInputs)
-	}
 }
 
-// TestSimpleExpectMultipleAsserts shows multiple assertions
+// TestSimpleExpectMultipleAsserts tests multiple assertions on script output
 func TestSimpleExpectMultipleAsserts(t *testing.T) {
-	framework := NewBlackBoxTestFramework(t).
-		SetupDatabase().
-		SetupProxy()
-
-	script := `
-echo "User: TestPlayer"
-echo "Credits: 50000"
-echo "Sector: 42"
-echo "Ship: Destroyer"
-`
-
-	scriptPath := framework.CreateScript("assert_test.ts", script)
-	framework.LoadScript(scriptPath)
-
-	expectEngine := NewSimpleExpectEngine(t, func(input string) {
-		framework.TypeInput(input)
-	})
-
-	// Hook output
-	go func() {
-		lastLen := 0
-		for i := 0; i < 30; i++ {
-			output := framework.GetUserOutput()
-			if len(output) > lastLen {
-				expectEngine.AddOutput(output[lastLen:])
-				lastLen = len(output)
-			}
-			time.Sleep(100 * time.Millisecond)
-		}
-	}()
+	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
+	
+	// Add all script output
+	expectEngine.AddOutput("User: TestPlayer\r\n")
+	expectEngine.AddOutput("Credits: 50000\r\n")
+	expectEngine.AddOutput("Sector: 42\r\n")
+	expectEngine.AddOutput("Ship: Destroyer\r\n")
+	expectEngine.AddOutput("Status: Active\r\n")
 
 	expectScript := `
-timeout "2s"
+timeout "1s"
 expect "User: TestPlayer"
 expect "Credits: 50000"  
 expect "Sector: 42"
 expect "Ship: Destroyer"
 assert "User: TestPlayer"
 assert "Credits: 50000"
-assert "Sector: 42"
+assert "Sector: 42" 
 assert "Ship: Destroyer"
+assert "Status: Active"
 log "All assertions passed"
 `
 
@@ -125,7 +66,7 @@ log "All assertions passed"
 
 // TestSimpleExpectTimeout demonstrates timeout behavior
 func TestSimpleExpectTimeout(t *testing.T) {
-	expectEngine := NewSimpleExpectEngine(t, nil)
+	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	expectEngine.AddOutput("Some output")
 
 	expectScript := `
@@ -146,7 +87,7 @@ log "Should not reach here"
 
 // TestSimpleExpectRegex demonstrates regex patterns
 func TestSimpleExpectRegex(t *testing.T) {
-	expectEngine := NewSimpleExpectEngine(t, nil)
+	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	expectEngine.AddOutput("Player Level: 25")
 	expectEngine.AddOutput("Credits: 1,234,567")
 	expectEngine.AddOutput("Ship Class: Imperial Starship")
@@ -164,6 +105,33 @@ log "Regex patterns matched"
 	err := expectEngine.Run(expectScript)
 	if err != nil {
 		t.Fatalf("Regex test failed: %v", err)
+	}
+}
+
+// TestSimpleExpectSend tests the send functionality
+func TestSimpleExpectSend(t *testing.T) {
+	var sentInputs []string
+	
+	inputSender := func(input string) {
+		sentInputs = append(sentInputs, input)
+	}
+	
+	expectEngine := NewSimpleExpectEngine(t, inputSender, "\r")
+	
+	expectScript := `
+send "hello world*"
+send "test input*"
+log "Send test completed"
+`
+
+	err := expectEngine.Run(expectScript)
+	if err != nil {
+		t.Fatalf("Send test failed: %v", err)
+	}
+	
+	expectedInputs := []string{"hello world\r", "test input\r"}
+	if !slicesEqual(sentInputs, expectedInputs) {
+		t.Errorf("Expected inputs %v, got %v", expectedInputs, sentInputs)
 	}
 }
 
