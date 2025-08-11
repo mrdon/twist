@@ -594,8 +594,6 @@ func (p *TWXParser) checkPatterns(line string) {
 // Handler implementations (core TWX parsing logic)
 
 func (p *TWXParser) handleCommandPrompt(line string) {
-	debug.Log("PROMPT: handleCommandPrompt called with line: %q, lastWarp=%d", line, p.lastWarp)
-	
 	// Save current sector if not done already
 	if !p.sectorSaved {
 		p.sectorCompleted()
@@ -607,42 +605,30 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 	// Check for square brackets pattern: [sector_number]
 	openBracket := strings.Index(line, "]:[")
 	if openBracket > 0 {
-		debug.Log("PROMPT: Found square bracket pattern at pos %d", openBracket)
 		// Look for closing bracket after the sector number
 		startPos := openBracket + 3 // Skip "]:[" 
 		closeBracket := strings.Index(line[startPos:], "]")
 		if closeBracket > 0 {
 			sectorStr := strings.TrimSpace(line[startPos : startPos+closeBracket])
-			debug.Log("PROMPT: Extracted sector string: %q", sectorStr)
 			if sectorNum := p.parseIntSafe(sectorStr); sectorNum > 0 {
-				debug.Log("PROMPT: Parsed sector number: %d, current lastWarp: %d", sectorNum, p.lastWarp)
 				p.currentSectorIndex = sectorNum
 				// Only set lastWarp if we don't already have one (avoid resetting during probe sequence)
 				if p.lastWarp == 0 {
 					p.lastWarp = sectorNum
-					debug.Log("PROMPT: Set lastWarp to %d", sectorNum)
-				} else {
-					debug.Log("PROMPT: Not setting lastWarp, already set to %d", p.lastWarp)
 				}
 			}
 		}
 	} else {
-		debug.Log("PROMPT: No square bracket pattern, trying parentheses")
 		// Fall back to parentheses pattern: (sector_number)
 		openParen := strings.Index(line, "(")
 		closeParen := strings.Index(line, ")")
 		if openParen > 0 && closeParen > openParen {
 			sectorStr := strings.TrimSpace(line[openParen+1 : closeParen])
-			debug.Log("PROMPT: Extracted sector string from parentheses: %q", sectorStr)
 			if sectorNum := p.parseIntSafe(sectorStr); sectorNum > 0 {
-				debug.Log("PROMPT: Parsed sector number: %d, current lastWarp: %d", sectorNum, p.lastWarp)
 				p.currentSectorIndex = sectorNum
 				// Only set lastWarp if we don't already have one (avoid resetting during probe sequence)
 				if p.lastWarp == 0 {
 					p.lastWarp = sectorNum
-					debug.Log("PROMPT: Set lastWarp to %d", sectorNum)
-				} else {
-					debug.Log("PROMPT: Not setting lastWarp, already set to %d", p.lastWarp)
 				}
 			}
 		}
@@ -669,29 +655,23 @@ func (p *TWXParser) handleComputerPrompt(line string) {
 }
 
 func (p *TWXParser) handleProbePrompt(line string) {
-	debug.Log("PROBE: handleProbePrompt called with line: %q, lastWarp=%d", line, p.lastWarp)
 	// Check if this is "Probe entering sector :" to extract target sector
 	if strings.Contains(line, "Probe entering sector :") {
 		// Handle concatenated lines - extract just the probe part
 		probeStart := strings.Index(line, "Probe entering sector :")
 		if probeStart >= 0 {
 			probeLine := line[probeStart:]
-			debug.Log("PROBE: probeLine: %q", probeLine)
 			
 			// Extract sector number from "Probe entering sector : 510"
 			parts := strings.Fields(probeLine)
-			debug.Log("PROBE: parts: %v", parts)
 			if len(parts) >= 5 {
 				if targetSector := p.parseIntSafe(parts[4]); targetSector > 0 {
-					debug.Log("PROBE: targetSector=%d, lastWarp=%d", targetSector, p.lastWarp)
 					// If we have a previous sector (lastWarp), create a one-way warp connection
 					if p.lastWarp > 0 && p.lastWarp != targetSector {
-						debug.Log("PROBE: Creating warp from %d to %d", p.lastWarp, targetSector)
 						p.addProbeWarp(p.lastWarp, targetSector)
 					}
 					// Update lastWarp to current target sector for next probe movement
 					p.lastWarp = targetSector
-					debug.Log("PROBE: Updated lastWarp to %d", targetSector)
 				}
 			}
 		}
@@ -712,8 +692,14 @@ func (p *TWXParser) handleStopPrompt(line string) {
 
 func (p *TWXParser) handleCIMPrompt(line string) {
 	// Pascal: else if (Copy(Line, 1, 2) = ': ') then
+	// Only trigger if line actually STARTS with ": " (not just contains it)
+	if !strings.HasPrefix(line, ": ") {
+		return // Don't trigger for lines like "Probe entering sector : 274"
+	}
+	
 	// Pascal: // begin CIM download
 	// Pascal: FCurrentDisplay := dCIM;
+	debug.Log("CIM: handleCIMPrompt called, resetting lastWarp from %d to 0", p.lastWarp)
 	p.currentDisplay = DisplayCIM
 	p.lastWarp = 0
 }
@@ -938,6 +924,7 @@ func (p *TWXParser) handleDensityStart(line string) {
 }
 
 func (p *TWXParser) handleWarpLaneStart(line string) {
+	debug.Log("WARP: handleWarpLaneStart called, resetting lastWarp from %d to 0", p.lastWarp)
 	p.currentDisplay = DisplayWarpLane
 	p.lastWarp = 0
 }
@@ -2325,25 +2312,19 @@ func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
 
 // addProbeWarp adds a one-way warp connection discovered by probe movement
 func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
-	debug.Log("PROBE: addProbeWarp %d -> %d", fromSector, toSector)
 	if p.database == nil {
-		debug.Log("PROBE: No database!")
 		return
 	}
 	
 	// Load the source sector
 	sector, err := p.database.LoadSector(fromSector)
 	if err != nil {
-		debug.Log("PROBE: Failed to load sector %d: %v", fromSector, err)
 		return
 	}
-	
-	debug.Log("PROBE: Loaded sector %d, existing warps: %v", fromSector, sector.Warp)
 	
 	// Check if warp already exists
 	for _, existingWarp := range sector.Warp {
 		if existingWarp == toSector {
-			debug.Log("PROBE: Warp %d->%d already exists", fromSector, toSector)
 			return // Already exists
 		}
 	}
@@ -2372,12 +2353,15 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 		sector.UpDate = time.Now()
 		
 		// Save the updated sector
-		debug.Log("PROBE: Saving sector %d with updated warps: %v", fromSector, sector.Warp)
 		err = p.database.SaveSector(sector, fromSector)
 		if err != nil {
-			debug.Log("PROBE: Failed to save sector %d: %v", fromSector, err)
-		} else {
-			debug.Log("PROBE: Successfully saved sector %d", fromSector)
+			return
+		}
+		
+		// CRITICAL: Also update in-memory warp state if this is the current sector
+		// This prevents sectorCompleted() from overwriting the probe warp with empty currentSectorWarps
+		if fromSector == p.currentSectorIndex {
+			copy(p.currentSectorWarps[:], sector.Warp[:])
 		}
 	}
 }

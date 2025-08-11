@@ -140,11 +140,14 @@ func TestConvertToExpectScripts(t *testing.T) {
 expect "e"
 send "Probe loaded: "
 expect "493"
-send "Probe Self Destructs"`,
+send "Probe Self Destructs"
+send "\x1b[0m<SYNC_COMPLETE>\x1b[0m"`,
 			expectedClient: `expect "\x1b[35mCommand? : "
 send "e"
 expect "e loaded: "
-send "493"`,
+send "493"
+expect " Destructs"
+expect "\x1b[0m<SYNC_COMPLETE>\x1b[0m"`,
 		},
 		{
 			name: "server only",
@@ -153,8 +156,10 @@ send "493"`,
 				{Direction: "<", Data: "Server message 2"},
 			},
 			expectedServer: `send "Server message 1"
-send "Server message 2"`,
-			expectedClient: ``,
+send "Server message 2"
+send "\x1b[0m<SYNC_COMPLETE>\x1b[0m"`,
+			expectedClient: `expect " message 2"
+expect "\x1b[0m<SYNC_COMPLETE>\x1b[0m"`,
 		},
 		{
 			name: "client only",

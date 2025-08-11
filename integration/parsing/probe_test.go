@@ -19,20 +19,6 @@ func TestProbeDataParsing(t *testing.T) {
 	result.Assert.AssertSectorExists(510) // Sector with Aachen port
 	result.Assert.AssertSectorExists(493) // Final sector where probe self-destructed
 	
-	// Debug: Check what sectors actually exist in the database
-	rows, err := result.Database.Query("SELECT sector_index, warp1, warp2, warp3 FROM sectors ORDER BY sector_index")
-	if err != nil {
-		t.Logf("Failed to query sectors: %v", err)
-	} else {
-		defer rows.Close()
-		t.Logf("=== SECTORS IN DATABASE ===")
-		for rows.Next() {
-			var sector, w1, w2, w3 int
-			rows.Scan(&sector, &w1, &w2, &w3)
-			t.Logf("Sector %d: warps=[%d, %d, %d, ...]", sector, w1, w2, w3)
-		}
-		t.Logf("=== END SECTORS ===")
-	}
 
 	// Verify sector constellations
 	result.Assert.AssertSectorConstellation(274, "uncharted space")

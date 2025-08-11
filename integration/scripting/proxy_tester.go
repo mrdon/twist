@@ -103,7 +103,7 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 				escapedPattern := escapeANSIForExpect(expectPattern)
 				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
 			} else if i == len(scriptLines)-1 {
-				// This is the last server message - add sync mechanism
+				// This is the last server message - always add sync mechanism
 				// Generate client expect for the last server message to ensure processing completes
 				expectPattern := generateExpectPattern(line.Data)
 				escapedPattern := escapeANSIForExpect(expectPattern)
@@ -128,6 +128,7 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 
 	return strings.Join(serverLines, "\n"), strings.Join(clientLines, "\n")
 }
+
 
 // generateExpectPattern extracts a unique expect pattern from server data
 // Takes last 10-20 characters and finds a good breaking point at ANSI sequences or control chars
