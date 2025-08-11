@@ -26,6 +26,7 @@ func ConvertTSectorToSectorInfo(sectorNum int, dbSector database.TSector) (api.S
 		Beacon:        dbSector.Beacon,
 		Warps:         warps,
 		HasPort:       false, // Will be set when port data is loaded separately
+		Visited:       dbSector.Explored == 3, // Only EtHolo (3) counts as truly visited
 	}
 	
 	return sectorInfo, nil

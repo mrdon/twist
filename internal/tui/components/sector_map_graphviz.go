@@ -650,8 +650,8 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		if sector == gsm.currentSector {
 			label = fmt.Sprintf("YOU\\n%d", sector)
 			fillColor = "yellow"
-		} else if exists && len(sectorInfo.Warps) > 0 {
-			// Explored sector - has warp data from database
+		} else if exists && sectorInfo.Visited {
+			// Truly visited sector - player has been here (EtHolo)
 			if sectorInfo.HasTraders > 0 {
 				var portType string
 				if sectorInfo.HasPort {

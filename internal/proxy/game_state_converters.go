@@ -30,6 +30,7 @@ func convertDatabaseSectorToAPI(sectorNum int, dbSector database.TSector) api.Se
 			Beacon:        dbSector.Beacon,
 			Warps:         warps,
 			HasPort:       false, // Will be determined separately
+			Visited:       dbSector.Explored == 3, // Only EtHolo (3) counts as truly visited
 		}
 	}
 	

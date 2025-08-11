@@ -200,6 +200,7 @@ type SectorInfo struct {
 	Beacon        string `json:"beacon"`         // Beacon text
 	Warps         []int  `json:"warps"`          // Warp connections to other sectors
 	HasPort       bool   `json:"has_port,omitempty"`       // True if sector has a port
+	Visited       bool   `json:"visited"`        // True only if sector has been actually visited (EtHolo)
 }
 
 // DatabaseStateInfo provides information about database loading/unloading
