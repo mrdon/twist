@@ -7,10 +7,10 @@ import (
 
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
-	"twist/internal/telnet"
+	"twist/internal/api"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/interfaces"
-	"twist/internal/api"
+	"twist/internal/telnet"
 )
 
 // External script engine interface from scripting package
@@ -45,7 +45,7 @@ func (a *scriptEngineAdapter) ProcessAutoText(text string) error {
 // ScriptManager interface for script processing
 type ScriptManager interface {
 	ProcessGameLine(line string) error
-	GetEngine() interfaces.ScriptEngine  // Return properly typed interface
+	GetEngine() interfaces.ScriptEngine // Return properly typed interface
 }
 
 // StateManager interface for game state updates (avoids circular import with proxy)
@@ -63,45 +63,44 @@ type GameDetector interface {
 type Pipeline struct {
 	// Input
 	rawDataChan chan []byte
-	
+
 	// Processing layers
-	telnetHandler  *telnet.Handler
-	tuiAPI         api.TuiAPI  // Direct TuiAPI reference
-	decoder        *encoding.Decoder
-	twxParser      *TWXParser
-	scriptManager  ScriptManager
-	stateManager   StateManager  // Game state updates
-	gameDetector   GameDetector  // Game detection
-	
+	telnetHandler *telnet.Handler
+	tuiAPI        api.TuiAPI // Direct TuiAPI reference
+	decoder       *encoding.Decoder
+	twxParser     *TWXParser
+	scriptManager ScriptManager
+	stateManager  StateManager // Game state updates
+	gameDetector  GameDetector // Game detection
+
 	// Batching
-	batchBuffer   []byte
-	batchMutex    sync.Mutex
-	batchTimer    *time.Timer
-	batchSize     int
-	batchTimeout  time.Duration
-	
+	batchBuffer  []byte
+	batchMutex   sync.Mutex
+	batchTimer   *time.Timer
+	batchSize    int
+	batchTimeout time.Duration
+
 	// State
-	running       bool
-	stopChan      chan struct{}
-	wg            sync.WaitGroup
-	
+	running  bool
+	stopChan chan struct{}
+	wg       sync.WaitGroup
+
 	// Metrics
-	bytesProcessed uint64
+	bytesProcessed   uint64
 	batchesProcessed uint64
 }
-
 
 // NewPipeline creates an optimized streaming pipeline
 func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
 	return &Pipeline{
-		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
-		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
-		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db, tuiAPI),
-		batchBuffer:   make([]byte, 0, 4096),
-		batchSize:     1,     // Process immediately - no batching
-		batchTimeout:  0,     // No timeout needed
-		stopChan:      make(chan struct{}),
+		rawDataChan:  make(chan []byte, 100), // Buffered for burst handling
+		tuiAPI:       tuiAPI,                 // Direct TuiAPI reference
+		decoder:      charmap.CodePage437.NewDecoder(),
+		twxParser:    NewTWXParser(db, tuiAPI),
+		batchBuffer:  make([]byte, 0, 4096),
+		batchSize:    1, // Process immediately - no batching
+		batchTimeout: 0, // No timeout needed
+		stopChan:     make(chan struct{}),
 	}
 }
 
@@ -109,19 +108,19 @@ func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
 func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager) *Pipeline {
 	p := &Pipeline{
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
-		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
+		tuiAPI:        tuiAPI,                 // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
 		twxParser:     NewTWXParser(db, tuiAPI),
 		scriptManager: scriptManager,
 		batchBuffer:   make([]byte, 0, 4096),
-		batchSize:     1,     // Process immediately - no batching
-		batchTimeout:  0,     // No timeout needed
+		batchSize:     1, // Process immediately - no batching
+		batchTimeout:  0, // No timeout needed
 		stopChan:      make(chan struct{}),
 	}
-	
+
 	// Initialize telnet handler with no writer - scripts don't need to write back to connection
 	p.telnetHandler = telnet.NewHandler(nil)
-	
+
 	return p
 }
 
@@ -129,21 +128,21 @@ func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scrip
 func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, stateManager StateManager, gameDetector GameDetector, writer func([]byte) error) *Pipeline {
 	p := &Pipeline{
 		rawDataChan:   make(chan []byte, 100), // Buffered for burst handling
-		tuiAPI:        tuiAPI,  // Direct TuiAPI reference
+		tuiAPI:        tuiAPI,                 // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
 		twxParser:     NewTWXParser(db, tuiAPI),
 		scriptManager: scriptManager,
 		stateManager:  stateManager,
 		gameDetector:  gameDetector,
 		batchBuffer:   make([]byte, 0, 4096),
-		batchSize:     1,     // Process immediately - no batching
-		batchTimeout:  0,     // No timeout needed
+		batchSize:     1, // Process immediately - no batching
+		batchTimeout:  0, // No timeout needed
 		stopChan:      make(chan struct{}),
 	}
-	
+
 	// Initialize telnet handler with proper writer for negotiation
 	p.telnetHandler = telnet.NewHandler(writer)
-	
+
 	// Connect script engine to TWX parser for script events
 	if scriptManager != nil {
 		engineInterface := scriptManager.GetEngine()
@@ -156,14 +155,14 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 			}
 		}
 	}
-	
+
 	return p
 }
 
 // Start begins the streaming pipeline
 func (p *Pipeline) Start() {
 	p.running = true
-	
+
 	// Start the processing goroutine
 	p.wg.Add(1)
 	go p.batchProcessor()
@@ -174,15 +173,15 @@ func (p *Pipeline) Stop() {
 	if !p.running {
 		return
 	}
-	
+
 	p.running = false
 	close(p.stopChan)
-	
+
 	// Stop batch timer if running
 	if p.batchTimer != nil {
 		p.batchTimer.Stop()
 	}
-	
+
 	p.wg.Wait()
 }
 
@@ -191,11 +190,11 @@ func (p *Pipeline) Write(data []byte) {
 	if !p.running {
 		return
 	}
-	
+
 	// Make a copy since the caller might reuse the buffer
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
-	
+
 	select {
 	case p.rawDataChan <- dataCopy:
 	default:
@@ -211,45 +210,45 @@ func (p *Pipeline) SendTelnetNegotiation() error {
 // batchProcessor processes raw data immediately (no batching)
 func (p *Pipeline) batchProcessor() {
 	defer p.wg.Done()
-	
+
 	for {
 		select {
 		case rawData := <-p.rawDataChan:
 			// Process telnet commands immediately
 			cleanData := p.telnetHandler.ProcessData(rawData)
-			
+
 			if len(cleanData) > 0 {
-				
+
 				// Process through script triggers EARLY with original ANSI codes intact
 				if p.scriptManager != nil {
 					if err := p.scriptManager.ProcessGameLine(string(cleanData)); err != nil {
 						// Ignore script processing errors
 					}
 				}
-				
+
 				// Use standard CP437 to UTF-8 conversion
 				decoded, err := p.decoder.Bytes(cleanData)
 				if err != nil {
 					decoded = cleanData
 				}
-				
+
 				// Process through game detector for game identification
 				if p.gameDetector != nil {
 					p.gameDetector.ProcessLine(string(decoded))
 				}
-				
+
 				// Parse the decoded text for sector information (only if parser available)
 				if p.twxParser != nil {
 					p.twxParser.ProcessChunk(decoded)
 				}
-				
+
 				if p.tuiAPI != nil {
 					p.tuiAPI.OnData(decoded)
 				}
 				p.bytesProcessed += uint64(len(rawData))
 				p.batchesProcessed++
 			}
-			
+
 		case <-p.stopChan:
 			return
 		}
@@ -260,18 +259,18 @@ func (p *Pipeline) batchProcessor() {
 func (p *Pipeline) addToBatch(data []byte, output chan<- []byte) {
 	p.batchMutex.Lock()
 	defer p.batchMutex.Unlock()
-	
+
 	p.batchBuffer = append(p.batchBuffer, data...)
 	p.bytesProcessed += uint64(len(data))
-	
+
 	// Check if we should flush the batch
 	shouldFlush := false
-	
+
 	// Size-based flush
 	if len(p.batchBuffer) >= p.batchSize {
 		shouldFlush = true
 	}
-	
+
 	// Time-based flush (start timer on first data)
 	if p.batchTimer == nil && len(p.batchBuffer) > 0 {
 		p.batchTimer = time.AfterFunc(p.batchTimeout, func() {
@@ -282,7 +281,7 @@ func (p *Pipeline) addToBatch(data []byte, output chan<- []byte) {
 			}
 		})
 	}
-	
+
 	if shouldFlush {
 		if p.batchTimer != nil {
 			p.batchTimer.Stop()
@@ -304,17 +303,17 @@ func (p *Pipeline) flushBatchLocked(output chan<- []byte) {
 	if len(p.batchBuffer) == 0 {
 		return
 	}
-	
+
 	// Process telnet commands
 	cleanData := p.telnetHandler.ProcessData(p.batchBuffer)
-	
+
 	if len(cleanData) > 0 {
 		// Decode character encoding
 		decoded, err := p.decoder.Bytes(cleanData)
 		if err != nil {
 			decoded = cleanData
 		}
-		
+
 		// Send to terminal processor
 		select {
 		case output <- decoded:
@@ -323,7 +322,7 @@ func (p *Pipeline) flushBatchLocked(output chan<- []byte) {
 			// Channel full
 		}
 	}
-	
+
 	// Reset batch buffer - reuse underlying array
 	p.batchBuffer = p.batchBuffer[:0]
 }
@@ -331,7 +330,7 @@ func (p *Pipeline) flushBatchLocked(output chan<- []byte) {
 // terminalProcessor handles terminal updates (placeholder for now)
 func (p *Pipeline) terminalProcessor() {
 	defer p.wg.Done()
-	
+
 	// This goroutine is now handled inside batchProcessor
 	// but we keep this method for future terminal-specific optimizations
 	select {
@@ -339,8 +338,6 @@ func (p *Pipeline) terminalProcessor() {
 		return
 	}
 }
-
-
 
 // GetMetrics returns pipeline performance metrics
 func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {
@@ -362,6 +359,8 @@ func (p *Pipeline) InjectTUIData(data []byte) {
 			decoded = data
 		}
 		p.tuiAPI.OnData(decoded)
+	} else {
+		panic("critical error: missing tui api")
 	}
 }
 
@@ -384,17 +383,17 @@ func extractContext(data []byte, target string) string {
 	if index == -1 {
 		return ""
 	}
-	
+
 	start := index - 10
 	if start < 0 {
 		start = 0
 	}
-	
+
 	end := index + len(target) + 10
 	if end > len(str) {
 		end = len(str)
 	}
-	
+
 	context := str[start:end]
 	return escapeANSI([]byte(context))
 }

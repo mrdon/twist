@@ -3,56 +3,44 @@ package parsing
 import (
 	"testing"
 	"twist/integration/scripting"
+	"twist/internal/api"
+	_ "github.com/mattn/go-sqlite3"
 )
 
 
 // TestExplorationStatusPreservation tests that visited sectors maintain EtHolo status
 // even when density scan information is processed afterward
 func TestExplorationStatusPreservation(t *testing.T) {
-	// Create expect-based test framework
-	bridge := scripting.NewExpectTelnetBridge(t).
-		SetupDatabase().
-		SetupTelnetServer().
-		SetupProxy().
-		SetupExpectEngine()
-
 	// Server script sends sector data and density scan
-	serverScript := `
-log "Server: Starting exploration status preservation test"
-timeout "10s"
-
-send "Trade Wars 2002*"
-send "Enter your login name: "
-expect "testuser"
-
-# Step 1: Send sector visit data (should set to EtHolo)
-send "Sector  : 2921 in uncharted space.*"
+	serverScript := `send "Sector  : 2921 in uncharted space.*"
 send "Warps to Sector(s) :  3212 - 7656*"
 send "*"
 send "Command [TL=00:00:00]:[2921] (?=Help)? : "
-
-# Step 2: Send density scan data for same sector
 send "                          Relative Density Scan*"
-send "Sector  2921  ==>           1500  Warps : 2    NavHaz :     0%    Anom : No*"
-`
+send "Sector  2921  ==>           1500  Warps : 2    NavHaz :     0%    Anom : No*"`
 
-	// Client script just sends username
-	clientScript := `
-log "Client: Starting client script"
-timeout "10s"
-send "testuser"
-`
+	// Client script expects sector data and density scan
+	clientScript := `expect "Sector  : 2921"
+expect "Warps to Sector"
+expect "Command"
+expect "Relative Density Scan"
+expect "Sector  2921  ==>"` 
 
-	// Run scripts with automatic synchronization and get opened database
-	db, err := bridge.RunSyncedScripts(serverScript, clientScript)
-	if err != nil {
-		t.Fatalf("Failed to run synced scripts: %v", err)
+	// Use ConnectOptions with database path to enable game context
+	dbPath := t.TempDir() + "/test.db"
+	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
+	
+	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
+
+	// Verify game context was created
+	if result.Database == nil {
+		t.Fatal("Expected database instance")
 	}
-	defer db.Close()
+	defer result.Database.Close()
 
 	// Query sector data
 	var explored, density, warps int
-	err = db.QueryRow("SELECT explored, density, warps FROM sectors WHERE sector_index = ?", 2921).Scan(&explored, &density, &warps)
+	err := result.Database.QueryRow("SELECT explored, density, warps FROM sectors WHERE sector_index = ?", 2921).Scan(&explored, &density, &warps)
 	if err != nil {
 		t.Fatalf("Failed to query sector 2921: %v", err)
 	}
@@ -62,62 +50,53 @@ send "testuser"
 		t.Errorf("After density scan, expected exploration status to remain EtHolo (3), but got %d", explored)
 	}
 
-	// Verify density information was processed
-	if density != 1500 {
-		t.Errorf("Expected density to be updated to 1500, got %d", density)
-	}
-
+	// Verify sector basic parsing worked (warps should be parsed from sector display)
 	if warps != 2 {
 		t.Errorf("Expected warps count to be updated to 2, got %d", warps)
+	}
+
+	// Verify density information was processed (fixed parsing to match Pascal TWX implementation)
+	if density != 1500 {
+		t.Errorf("Expected density to be updated to 1500, got %d", density)
 	}
 }
 
 // TestExplorationStatusTransitionFromNoToHolo tests that unvisited sectors
 // can still be properly upgraded from EtNo to EtHolo when visited
 func TestExplorationStatusTransitionFromNoToHolo(t *testing.T) {
-	bridge := scripting.NewExpectTelnetBridge(t).
-		SetupDatabase().
-		SetupTelnetServer().
-		SetupProxy().
-		SetupExpectEngine()
-
-	serverScript := `
-log "Server: Testing EtNo to EtHolo transition"
-timeout "10s"
-
-send "Trade Wars 2002*"
-send "Enter your login name: "
-expect "testuser"
-
-# Step 1: Process density scan first (should set to EtDensity)
-send "                          Relative Density Scan*"
+	// Server script processes density scan first, then visits sector, then another density scan
+	serverScript := `send "                          Relative Density Scan*"
 send "Sector  3212  ==>           2000  Warps : 4    NavHaz :     0%    Anom : No*"
-
-# Step 2: Visit the sector (should upgrade to EtHolo)
 send "Sector  : 3212 in uncharted space.*"
 send "Warps to Sector(s) :  2921 - 10870 - (16983) - (17563)*"
 send "*"
 send "Command [TL=00:00:00]:[3212] (?=Help)? : "
-
-# Step 3: Process another density scan (should NOT downgrade back to EtDensity)
 send "                          Relative Density Scan*"
-send "Sector  3212  ==>           2000  Warps : 4    NavHaz :     0%    Anom : No*"
-`
+send "Sector  3212  ==>           2000  Warps : 4    NavHaz :     0%    Anom : No*"`
 
-	clientScript := `
-log "Client: Starting transition test"
-timeout "10s"
-send "testuser"
-`
+	// Client script expects all the data
+	clientScript := `expect "Relative Density Scan"
+expect "Sector  3212  ==>"
+expect "Sector  : 3212"
+expect "Warps to Sector"
+expect "Command"
+expect "Relative Density Scan"
+expect "Sector  3212  ==>"` 
 
-	db, err := bridge.RunSyncedScripts(serverScript, clientScript)
-	if err != nil {
-		t.Fatalf("Failed to run synced scripts: %v", err)
+	// Use ConnectOptions with database path to enable game context
+	dbPath := t.TempDir() + "/test.db"
+	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
+	
+	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
+
+	// Verify game context was created
+	if result.Database == nil {
+		t.Fatal("Expected database instance")
 	}
-	defer db.Close()
+	defer result.Database.Close()
 
 	var explored int
-	err = db.QueryRow("SELECT explored FROM sectors WHERE sector_index = ?", 3212).Scan(&explored)
+	err := result.Database.QueryRow("SELECT explored FROM sectors WHERE sector_index = ?", 3212).Scan(&explored)
 	if err != nil {
 		t.Fatalf("Failed to query sector 3212: %v", err)
 	}
@@ -131,41 +110,30 @@ send "testuser"
 // TestExplorationStatusUnvisitedSectors tests that unvisited sectors are still
 // properly handled by density scans
 func TestExplorationStatusUnvisitedSectors(t *testing.T) {
-	bridge := scripting.NewExpectTelnetBridge(t).
-		SetupDatabase().
-		SetupTelnetServer().
-		SetupProxy().
-		SetupExpectEngine()
+	// Server script processes density scan for unvisited sector
+	serverScript := `send "                          Relative Density Scan*"
+send "Sector  7656  ==>            800  Warps : 3    NavHaz :     0%    Anom : Yes*"`
 
-	serverScript := `
-log "Server: Testing unvisited sector density scan"
-timeout "10s"
+	// Client script expects density scan
+	clientScript := `expect "Relative Density Scan"
+expect "Sector  7656  ==>"` 
 
-send "Trade Wars 2002*"
-send "Enter your login name: "
-expect "testuser"
+	// Use ConnectOptions with database path to enable game context
+	dbPath := t.TempDir() + "/test.db"
+	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
+	
+	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
 
-# Process density scan for unvisited sector (should set to EtDensity)
-send "                          Relative Density Scan*"
-send "Sector  7656  ==>            800  Warps : 3    NavHaz :     0%    Anom : Yes*"
-`
-
-	clientScript := `
-log "Client: Starting unvisited sector test"
-timeout "10s"
-send "testuser"
-`
-
-	db, err := bridge.RunSyncedScripts(serverScript, clientScript)
-	if err != nil {
-		t.Fatalf("Failed to run synced scripts: %v", err)
+	// Verify game context was created
+	if result.Database == nil {
+		t.Fatal("Expected database instance")
 	}
-	defer db.Close()
+	defer result.Database.Close()
 
 	var explored, density, warps int
 	var anomaly bool
 	var constellation string
-	err = db.QueryRow("SELECT explored, density, warps, anomaly, constellation FROM sectors WHERE sector_index = ?", 7656).Scan(&explored, &density, &warps, &anomaly, &constellation)
+	err := result.Database.QueryRow("SELECT explored, density, warps, anomaly, constellation FROM sectors WHERE sector_index = ?", 7656).Scan(&explored, &density, &warps, &anomaly, &constellation)
 	if err != nil {
 		t.Fatalf("Failed to query sector 7656: %v", err)
 	}

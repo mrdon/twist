@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	coreapi "twist/internal/api"
+	"twist/internal/api/factory"
 )
 
 // ProxyClient manages ProxyAPI connections for TUI
@@ -20,7 +21,7 @@ func NewProxyClient() *ProxyClient {
 func (pc *ProxyClient) Connect(address string, tuiAPI coreapi.TuiAPI) error {
 	// Use static Connect function to create new ProxyAPI instance
 	// Static function never returns errors - all failures go via callbacks
-	proxyAPI := coreapi.Connect(address, tuiAPI)
+	proxyAPI := factory.Connect(address, tuiAPI)
 
 	// Store the connected API instance
 	pc.currentAPI = proxyAPI
@@ -28,8 +29,9 @@ func (pc *ProxyClient) Connect(address string, tuiAPI coreapi.TuiAPI) error {
 }
 
 func (pc *ProxyClient) ConnectWithScript(address string, tuiAPI coreapi.TuiAPI, scriptName string) error {
-	// Use static ConnectWithScript function to create new ProxyAPI instance with initial script
-	proxyAPI := coreapi.ConnectWithScript(address, tuiAPI, scriptName)
+	// Use Connect function with ConnectOptions to load initial script
+	connectOpts := &coreapi.ConnectOptions{ScriptName: scriptName}
+	proxyAPI := factory.Connect(address, tuiAPI, connectOpts)
 
 	// Store the connected API instance
 	pc.currentAPI = proxyAPI

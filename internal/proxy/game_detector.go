@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 	"twist/internal/ansi"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 )
@@ -259,7 +260,7 @@ func (l *GameDetector) processCharacter(char rune) {
 	case StateGameMenuVisible:
 		// Look for game options from server output 
 		l.processGameOptionPattern(char)          // <X> Game Name format
-		// Also check for isolated letters from server output (could be echoed user input)
+		// Also check for isolated letters from server output (echoed user input)
 		l.processIsolatedLetter(char)
 		
 	case StateGameSelected:
@@ -478,16 +479,22 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 			// This helps avoid false positives from letters embedded in text
 			if l.isValidIsolatedLetterContext(currentPrevChar) {
 				l.emitIsolatedLetterToken(letterStr)
-			} else {
 			}
 		}
 	}
 }
 
+
 // isValidIsolatedLetterContext checks if the context is appropriate for isolated letter detection
 func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
 	// Strategy: Only accept isolated letters if we've recently detected a user prompt
 	// This covers both direct responses (after colon) and echoed input (after various chars)
+	
+	// First, reject letters that are clearly part of game option patterns
+	// Check if the previous character is '<' which indicates this is part of <X> pattern
+	if prevChar == '<' {
+		return false
+	}
 	
 	// Check if we recently saw a user prompt - this is the key gate
 	recentContext := l.recentContent
@@ -516,12 +523,26 @@ func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
 	}
 	
 	// If we have a recent prompt, accept letters in reasonable contexts:
-	// - After colons, spaces, newlines, start of input
-	// - This handles both direct input ("choice: A") and echoed input ("\n A" or " A")
-	acceptableChars := []rune{':', ' ', '\n', '\r', '\t', 0}
-	for _, acceptableChar := range acceptableChars {
-		if prevChar == acceptableChar {
-			return true
+	// - After colons (direct response: "choice: A")
+	// - After newlines (echoed input on new line: "\nA")  
+	// - At start of input
+	// - After spaces only if very recent prompt (within last 10 chars)
+	if prevChar == ':' || prevChar == '\n' || prevChar == '\r' || prevChar == 0 {
+		return true
+	}
+	
+	// For spaces, be more restrictive - only if prompt is very recent
+	if prevChar == ' ' || prevChar == '\t' {
+		// Check if we have a prompt in the last 10 characters (very recent)
+		recentContext := l.recentContent
+		if len(recentContext) > 10 {
+			recentContext = recentContext[len(recentContext)-10:]
+		}
+		
+		for _, indicator := range promptIndicators {
+			if strings.Contains(strings.ToLower(recentContext), indicator) {
+				return true
+			}
 		}
 	}
 	
@@ -770,6 +791,8 @@ func (l *GameDetector) loadGameDatabase() error {
 	
 	dbName := l.createDatabaseName(l.selectedGame)
 	
+	debug.Log("GAME DETECTOR: Loading database at %s for game %s", dbName, l.selectedGame)
+	
 	db := database.NewDatabase()
 	
 	if err := db.CreateDatabase(dbName); err != nil {
@@ -777,6 +800,8 @@ func (l *GameDetector) loadGameDatabase() error {
 			return fmt.Errorf("failed to load database %s: %w", dbName, err)
 		}
 	}
+	
+	debug.Log("GAME DETECTOR: Successfully loaded database at %s", dbName)
 	
 	scriptManager := scripting.NewScriptManager(db)
 	

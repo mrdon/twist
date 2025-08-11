@@ -87,9 +87,6 @@ func (b *ExpectTelnetBridge) SetupTelnetServer() *ExpectTelnetBridge {
 	
 	b.t.Logf("Test telnet server started on port %d", port)
 	
-	// Set up server to handle expect engine commands
-	go b.handleServerCommands()
-	
 	b.cleanupFuncs = append(b.cleanupFuncs, func() {
 		if b.telnetServer != nil {
 			b.telnetServer.Stop()
@@ -130,6 +127,40 @@ func (b *ExpectTelnetBridge) SetupProxy() *ExpectTelnetBridge {
 	return b
 }
 
+// SetupProxyWithServerScript sets server script before connecting (fixes timing issue)
+func (b *ExpectTelnetBridge) SetupProxyWithServerScript(serverScript string) *ExpectTelnetBridge {
+	if b.telnetServer == nil {
+		b.t.Fatal("Must call SetupTelnetServer() before SetupProxyWithServerScript()")
+	}
+	
+	// Set server script BEFORE connecting
+	b.SetServerScript(serverScript)
+	
+	// Create a TuiAPI that captures output for expect engine
+	tuiAPI := &ExpectTuiAPI{bridge: b}
+	
+	// Create real proxy with real TuiAPI and our test database
+	b.proxy = proxy.NewWithDatabase(tuiAPI, b.database)
+	
+	// Connect to our test telnet server
+	address := fmt.Sprintf("localhost:%d", b.telnetServer.port)
+	err := b.proxy.Connect(address)
+	if err != nil {
+		b.t.Fatalf("Failed to connect proxy to telnet server: %v", err)
+	}
+	
+	b.connected = true
+	b.t.Logf("Proxy connected to test server at %s", address)
+	
+	b.cleanupFuncs = append(b.cleanupFuncs, func() {
+		if b.proxy != nil {
+			b.proxy.Disconnect()
+		}
+	})
+	
+	return b
+}
+
 // SetupExpectEngine creates the expect engine
 func (b *ExpectTelnetBridge) SetupExpectEngine() *ExpectTelnetBridge {
 	if b.proxy == nil {
@@ -143,21 +174,15 @@ func (b *ExpectTelnetBridge) SetupExpectEngine() *ExpectTelnetBridge {
 		b.proxy.SendInput(input)
 	}, "\r")
 	
+	// Set up server to handle expect engine commands (after everything is set up)
+	go b.handleServerCommands()
+	
 	return b
 }
 
 // handleServerCommands processes commands from expect engine to control server responses
 func (b *ExpectTelnetBridge) handleServerCommands() {
-	// For now, we'll set initial responses that the telnet server will send
-	// This is simpler than trying to dynamically send data
-	initialResponses := []string{
-		"Trade Wars 2002 - The Game\r\n",
-		"Enter your login name: ",
-	}
-	
-	if b.telnetServer != nil {
-		b.telnetServer.SetResponses(initialResponses)
-	}
+	// No default responses - all responses should come from server scripts
 }
 
 // SetServerScript sets the server-side expect script with automatic sync token

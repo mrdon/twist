@@ -2,22 +2,22 @@ package components
 
 import (
 	"twist/internal/theme"
-	
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 // ConnectionDialog represents a dialog for connecting to a server
 type ConnectionDialog struct {
-	form     *tview.Form
-	callback func(string)
+	form           *tview.Form
+	callback       func(string)
 	cancelCallback func()
 }
 
 // NewConnectionDialog creates a new connection dialog
 func NewConnectionDialog(callback func(string), cancelCallback func()) *ConnectionDialog {
 	cd := &ConnectionDialog{
-		callback: callback,
+		callback:       callback,
 		cancelCallback: cancelCallback,
 	}
 
@@ -29,7 +29,7 @@ func NewConnectionDialog(callback func(string), cancelCallback func()) *Connecti
 func (cd *ConnectionDialog) setupComponents() {
 	// Create the form using theme factory
 	cd.form = theme.NewForm()
-	
+
 	// Set title and border
 	cd.form.SetTitle(" Connect to Server ")
 	cd.form.SetTitleAlign(tview.AlignCenter)
@@ -37,7 +37,7 @@ func (cd *ConnectionDialog) setupComponents() {
 	cd.form.SetBorderPadding(2, 2, 2, 2) // top, bottom, left, right padding
 
 	// Add server address field with default value
-	cd.form.AddInputField("Server Address:", "twgs.geekm0nkey.com:23", 40, nil, nil)
+	cd.form.AddInputField("Server Address:", "192.168.1.182:23", 40, nil, nil)
 
 	// Add buttons (Connect first for easy tab access, Cancel second)
 	cd.form.AddButton("Connect", func() {
@@ -58,7 +58,7 @@ func (cd *ConnectionDialog) setupComponents() {
 
 	// Set focus to the input field
 	cd.form.SetFocus(0)
-	
+
 	// Set up input capture to handle Enter key
 	cd.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
 		if event.Key() == tcell.KeyEnter {
@@ -88,7 +88,7 @@ func (cd *ConnectionDialog) GetView() tview.Primitive {
 	// Apply theme colors for modal overlay effect
 	currentTheme := theme.Current()
 	flex.SetBackgroundColor(currentTheme.DialogColors().Background)
-	
+
 	return flex
 }
 

@@ -76,6 +76,7 @@ func (m *MockVMInterface) GetCurrentLine() int { return 0 }
 func (m *MockVMInterface) IsWaitingForInput() bool { return m.paused }
 func (m *MockVMInterface) GetPendingInputPrompt() string { return m.lastInputPrompt }
 func (m *MockVMInterface) GetPendingInputResult() string { return m.inputResult }
+func (m *MockVMInterface) JustResumedFromInput() bool { return false } // Mock doesn't use this flag
 func (m *MockVMInterface) ClearPendingInput() {
 	m.lastInputPrompt = ""
 	m.inputResult = ""
@@ -91,17 +92,25 @@ func TestGetInputBasic(t *testing.T) {
 		{Type: types.ParamValue, Value: &types.Value{Type: types.StringType, String: "Enter value"}},
 	}
 	
-	vm.inputResult = "test_input"
-	
+	// First call - should initiate input and pause
 	err := cmdGetInput(vm, params)
-	if err != nil {
-		t.Fatalf("cmdGetInput failed: %v", err)
+	if err == nil {
+		t.Fatalf("Expected script to pause on first call")
 	}
 	
 	// Check that prompt was displayed
 	expectedPrompt := "Enter value"
 	if vm.lastInputPrompt != expectedPrompt {
 		t.Errorf("Expected prompt '%s', got '%s'", expectedPrompt, vm.lastInputPrompt)
+	}
+	
+	// Simulate user providing input
+	vm.inputResult = "test_input"
+	
+	// Second call - should process the input and complete
+	err = cmdGetInput(vm, params)
+	if err != nil {
+		t.Fatalf("cmdGetInput failed on resume: %v", err)
 	}
 	
 	// Check that variable was set
@@ -121,18 +130,25 @@ func TestGetInputWithDefault(t *testing.T) {
 		{Type: types.ParamValue, Value: &types.Value{Type: types.StringType, String: "default_val"}},
 	}
 	
-	// Simulate empty input (user presses enter)
-	vm.inputResult = ""
-	
+	// First call - should initiate input and pause
 	err := cmdGetInput(vm, params)
-	if err != nil {
-		t.Fatalf("cmdGetInput failed: %v", err)
+	if err == nil {
+		t.Fatalf("Expected script to pause on first call")
 	}
 	
 	// Check that prompt includes default value
 	expectedPrompt := "Enter value [default_val]"
 	if vm.lastInputPrompt != expectedPrompt {
 		t.Errorf("Expected prompt '%s', got '%s'", expectedPrompt, vm.lastInputPrompt)
+	}
+	
+	// Simulate empty input (user presses enter)
+	vm.inputResult = ""
+	
+	// Second call - should process empty input and use default
+	err = cmdGetInput(vm, params)
+	if err != nil {
+		t.Fatalf("cmdGetInput failed on resume: %v", err)
 	}
 	
 	// Check that default value was used
@@ -152,12 +168,19 @@ func TestGetInputUserOverridesDefault(t *testing.T) {
 		{Type: types.ParamValue, Value: &types.Value{Type: types.StringType, String: "default_val"}},
 	}
 	
+	// First call - should initiate input and pause
+	err := cmdGetInput(vm, params)
+	if err == nil {
+		t.Fatalf("Expected script to pause on first call")
+	}
+	
 	// User provides input
 	vm.inputResult = "user_input"
 	
-	err := cmdGetInput(vm, params)
+	// Second call - should process user input and override default
+	err = cmdGetInput(vm, params)
 	if err != nil {
-		t.Fatalf("cmdGetInput failed: %v", err)
+		t.Fatalf("cmdGetInput failed on resume: %v", err)
 	}
 	
 	// Check that user input was used instead of default
@@ -210,15 +233,23 @@ func TestGetInputPromptFormatting(t *testing.T) {
 				})
 			}
 			
-			vm.inputResult = "test"
-			
+			// First call - should initiate input and pause
 			err := cmdGetInput(vm, params)
-			if err != nil {
-				t.Fatalf("cmdGetInput failed: %v", err)
+			if err == nil {
+				t.Fatalf("Expected script to pause on first call")
 			}
 			
 			if vm.lastInputPrompt != tt.expected {
 				t.Errorf("Expected prompt '%s', got '%s'", tt.expected, vm.lastInputPrompt)
+			}
+			
+			// Set input result and make second call to complete the test
+			vm.inputResult = "test"
+			
+			// Second call - should process input and complete
+			err = cmdGetInput(vm, params)
+			if err != nil {
+				t.Fatalf("cmdGetInput failed on resume: %v", err)
 			}
 		})
 	}

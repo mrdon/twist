@@ -44,6 +44,7 @@ type VirtualMachine struct {
 	waitingForInput     bool
 	pendingInputPrompt  string
 	pendingInputResult  string
+	justResumed         bool
 }
 
 // NewVirtualMachine creates a new virtual machine
@@ -301,6 +302,11 @@ func (vm *VirtualMachine) GetPendingInputResult() string {
 	return vm.pendingInputResult
 }
 
+// JustResumedFromInput returns true if we just resumed from input and haven't processed it yet
+func (vm *VirtualMachine) JustResumedFromInput() bool {
+	return vm.justResumed
+}
+
 // ResumeWithInput provides the input value and resumes script execution
 func (vm *VirtualMachine) ResumeWithInput(input string) error {
 	scriptName := "unknown"
@@ -317,7 +323,8 @@ func (vm *VirtualMachine) ResumeWithInput(input string) error {
 	
 	vm.pendingInputResult = input
 	vm.waitingForInput = false
-	// Don't clear pendingInputPrompt yet - cmdGetInput needs it to detect resume state
+	vm.pendingInputPrompt = "" // Clear prompt since input has been provided
+	vm.justResumed = true       // Flag to indicate we just resumed with input
 	
 	// Resume script execution
 	vm.state.SetRunning()
@@ -332,6 +339,7 @@ func (vm *VirtualMachine) ClearPendingInput() {
 	vm.pendingInputResult = ""
 	vm.pendingInputPrompt = ""
 	vm.waitingForInput = false
+	vm.justResumed = false
 }
 
 // GetState returns the VM's execution state

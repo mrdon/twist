@@ -504,6 +504,14 @@ func (p *TWXParser) processLine(line string) {
 		return
 	}
 
+	// Pascal: Check for density scanner first (Copy(Line, 27, 16) = 'Relative Density')
+	// This must be checked before pattern handlers to match Pascal behavior
+	if strings.Contains(line, "Relative Density") {
+		p.currentDisplay = DisplayDensity
+		// Return early - don't process this line further, just set the mode
+		return
+	}
+
 	// Handle continuation based on current display state
 	switch p.currentDisplay {
 	case DisplaySector:
@@ -852,8 +860,11 @@ func (p *TWXParser) handlePortCR(line string) {
 }
 
 func (p *TWXParser) handleDensityStart(line string) {
-	fmt.Printf("DENSITY MODE ACTIVATED!\n")
-	p.currentDisplay = DisplayDensity
+	// Pascal: if (Copy(Line, 27, 16) = 'Relative Density') then
+	// Check position 26 in 0-indexed Go (27-1), length 16
+	if len(line) >= 42 && line[26:42] == "Relative Density" {
+		p.currentDisplay = DisplayDensity
+	}
 }
 
 func (p *TWXParser) handleWarpLaneStart(line string) {
@@ -1416,7 +1427,7 @@ func (p *TWXParser) storePortCIMData(sectorNum, oreAmount, orePercent int, buyOr
 	}
 }
 
-// processDensityLine processes density scanner data (mirrors Pascal logic lines 1335-1355)
+// processDensityLine processes density scanner data (mirrors Pascal logic lines 1343-1375)
 func (p *TWXParser) processDensityLine(line string) {
 	
 	// Pascal: if (FCurrentDisplay = dDensity) and (Copy(Line, 1, 6) = 'Sector') then
@@ -1428,48 +1439,56 @@ func (p *TWXParser) processDensityLine(line string) {
 		return
 	}
 	
-	// Remove parentheses and commas for Pascal-compliant parsing
-	cleanLine := strings.ReplaceAll(line, "(", "")
-	cleanLine = strings.ReplaceAll(cleanLine, ")", "")
-	cleanLine = strings.ReplaceAll(cleanLine, ",", "")
+	// Pascal implementation (lines 1346-1375):
+	// X := Line;
+	// StripChar(X, '(');
+	// StripChar(X, ')');
+	x := line
+	x = strings.ReplaceAll(x, "(", "")
+	x = strings.ReplaceAll(x, ")", "")
 	
-	// Extract sector number (should be second parameter)
-	sectorNum := p.parseIntSafe(p.getParameter(cleanLine, 2))
+	// Pascal: I := StrToIntSafe(GetParameter(X, 2));
+	sectorNum := p.parseIntSafe(p.getParameter(x, 2))
 	if sectorNum <= 0 {
 		return
 	}
 	
-	// Load or create sector
+	// Pascal: Sect := TWXDatabase.LoadSector(I);
 	sector, err := p.database.LoadSector(sectorNum)
 	if err != nil {
 		sector = database.NULLSector()
 	}
 	
-	// Use exact TWX parameter extraction (mirrors Pascal Process.pas lines 1351-1365)
-	// Pascal: S := GetParameter(X, 4); Sect.Density := StrToIntSafe(S);
-	densityStr := p.getParameter(cleanLine, 4)
-	p.stripChar(&densityStr, ',') // Pascal: StripChar(S, ',');
+	// Pascal: S := GetParameter(X, 4); StripChar(S, ','); Sect.Density := StrToIntSafe(S);
+	densityStr := p.getParameter(x, 4)
+	densityStr = strings.ReplaceAll(densityStr, ",", "")
 	sector.Density = p.parseIntSafe(densityStr)
 	
-	// Pascal: Sect.Warps := StrToIntSafe(GetParameter(X, 7));
-	sector.Warps = p.parseIntSafe(p.getParameter(cleanLine, 7))
-	
 	// Pascal: if (GetParameter(X, 13) = 'Yes') then Sect.Anomaly := TRUE else Sect.Anomaly := FALSE;
-	anomalyStr := p.getParameter(cleanLine, 13)
-	sector.Anomaly = (anomalyStr == "Yes")
+	anomalyParam := p.getParameter(x, 13)
+	sector.Anomaly = (anomalyParam == "Yes")
 	
-	// Always update the timestamp when density data is processed
-	sector.UpDate = time.Now()
+	// Pascal: S := GetParameter(X, 10); S := Copy(S, 1, length(S) - 1); Sect.NavHaz := StrToIntSafe(S);
+	navhazStr := p.getParameter(x, 10)
+	if len(navhazStr) > 0 {
+		navhazStr = navhazStr[:len(navhazStr)-1] // Remove last character (%)
+	}
+	sector.NavHaz = p.parseIntSafe(navhazStr)
+	
+	// Pascal: Sect.Warps := StrToIntSafe(GetParameter(X, 7));
+	sector.Warps = p.parseIntSafe(p.getParameter(x, 7))
 	
 	// Pascal: if (Sect.Explored in [etNo, etCalc]) then
 	if sector.Explored == database.EtNo || sector.Explored == database.EtCalc {
-		// Sector hasn't been scanned or seen before - set exploration status and constellation
+		// Pascal: Sect.Constellation := '???' + ANSI_9 + ' (Density only)';
+		// Pascal: Sect.Explored := etDensity;
+		// Pascal: Sect.Update := Now;
 		sector.Constellation = "??? (Density only)"
 		sector.Explored = database.EtDensity
+		sector.UpDate = time.Now()
 	}
-	// For EtHolo and EtDensity sectors, preserve exploration status but update density data
 	
-	// Save sector to database (always save to update density/warps/anomaly data)
+	// Pascal: TWXDatabase.SaveSector(Sect, I, nil, nil, nil);
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return
 	}

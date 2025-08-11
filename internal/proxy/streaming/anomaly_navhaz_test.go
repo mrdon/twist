@@ -185,9 +185,9 @@ func TestAnomalyDetectionValidation(t *testing.T) {
 		// Test that anomalies are only detected through density scanner mode
 		// This validates that our implementation matches Pascal behavior
 		
-		// Process density scan with anomaly
+		// Process density scan with anomaly using real TWX format
 		parser.ProcessString("Relative Density Scan\r")
-		parser.ProcessString("Sector 7777 (Anomaly Test) Density: 1,500, NavHaz: 5%, Warps: 6, Anomaly: Yes\r")
+		parser.ProcessString("Sector ( 7777) ==>           1500  Warps : 6    NavHaz :     5%    Anom : Yes\r")
 		
 		// Verify anomaly was detected from density scan
 		sector, err := db.LoadSector(7777)

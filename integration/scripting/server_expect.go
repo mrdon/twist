@@ -83,6 +83,11 @@ func (ets *ExpectTelnetServer) SetServerScript(script string) {
 	ets.t.Logf("SERVER SCRIPT SET:\n%s", script)
 }
 
+// HasServerScript returns true if a server script has been set
+func (ets *ExpectTelnetServer) HasServerScript() bool {
+	return ets.serverScript != ""
+}
+
 // Start starts the telnet server with expect script support
 func (ets *ExpectTelnetServer) Start() (int, error) {
 	// We need to manually implement the start logic to use our connection handler
@@ -142,10 +147,8 @@ func (ets *ExpectTelnetServer) handleConnection(conn net.Conn) {
 			err := ets.serverEngine.RunServerScript(ets.serverScript)
 			ets.scriptComplete <- err
 		}()
-	} else {
-		// Fallback to original behavior - send initial prompt
-		ets.sendResponse(conn, "Trade Wars 2002\r\nEnter your login name: ")
 	}
+	// No fallback behavior - all responses should come from server scripts
 	
 	// Handle dynamic data in background
 	go func() {

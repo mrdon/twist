@@ -7,14 +7,157 @@ import (
 	"strings"
 	"sync"
 
-	"twist/internal/debug"
-	"twist/internal/proxy/streaming"
-	"twist/internal/proxy/database"
-	"twist/internal/proxy/scripting"
-	"twist/internal/proxy/menu"
-	"twist/internal/proxy/input"
 	"twist/internal/api"
+	"twist/internal/debug"
+	"twist/internal/proxy/database"
+	"twist/internal/proxy/input"
+	"twist/internal/proxy/menu"
+	"twist/internal/proxy/scripting"
+	"twist/internal/proxy/streaming"
 )
+
+// ProxyState interface for state pattern implementation
+type ProxyState interface {
+	// Core operations that vary by connection state
+	SendToTUI(output string) error      // Script output → pipeline → TUI
+	SendToServer(input string) error    // User input → script processing → server
+	IsConnected() bool
+	GetParser() *streaming.TWXParser
+	
+	// Internal operations for I/O handlers
+	writeServerData(data string) error      // Direct write to server connection
+	readServerData(buffer []byte) (int, error)  // Direct read from server connection
+	processServerData(data []byte)          // Process server data → pipeline → TUI
+	
+	// Resource cleanup
+	Close() error
+}
+
+// DisconnectedState represents the proxy when not connected to a server
+type DisconnectedState struct{}
+
+func NewDisconnectedState() *DisconnectedState {
+	return &DisconnectedState{}
+}
+
+func (s *DisconnectedState) SendToTUI(output string) error {
+	// Drop output when disconnected (current behavior)
+	return nil
+}
+
+func (s *DisconnectedState) SendToServer(input string) error {
+	// No-op when disconnected
+	return nil
+}
+
+func (s *DisconnectedState) IsConnected() bool {
+	return false
+}
+
+func (s *DisconnectedState) GetParser() *streaming.TWXParser {
+	return nil
+}
+
+func (s *DisconnectedState) writeServerData(data string) error {
+	return fmt.Errorf("not connected")
+}
+
+func (s *DisconnectedState) readServerData(buffer []byte) (int, error) {
+	return 0, fmt.Errorf("not connected")
+}
+
+func (s *DisconnectedState) processServerData(data []byte) {
+	// No-op when disconnected
+}
+
+func (s *DisconnectedState) Close() error {
+	return nil // Nothing to close
+}
+
+// ConnectedState represents the proxy when connected to a server
+type ConnectedState struct {
+	// Network components
+	conn     net.Conn
+	reader   *bufio.Reader
+	writer   *bufio.Writer
+	pipeline *streaming.Pipeline
+	
+	// Processing components - always present when connected
+	scriptManager *scripting.ScriptManager
+	gameDetector  *GameDetector
+}
+
+func NewConnectedState(conn net.Conn, reader *bufio.Reader, writer *bufio.Writer, pipeline *streaming.Pipeline, scriptManager *scripting.ScriptManager, gameDetector *GameDetector) *ConnectedState {
+	return &ConnectedState{
+		conn:          conn,
+		reader:        reader, 
+		writer:        writer,
+		pipeline:      pipeline,
+		scriptManager: scriptManager,
+		gameDetector:  gameDetector,
+	}
+}
+
+func (s *ConnectedState) SendToTUI(output string) error {
+	data := []byte(output + "\r\n")
+	if s.pipeline != nil {
+		s.pipeline.InjectTUIData(data)
+	}
+	return nil
+}
+
+func (s *ConnectedState) SendToServer(input string) error {
+	// Process through script manager - no nil check needed, always present
+	s.scriptManager.ProcessOutgoingText(input)
+	
+	// Process through game detector - no nil check needed, always present  
+	s.gameDetector.ProcessUserInput(input)
+	
+	// Then write directly to server
+	return s.writeServerData(input)
+}
+
+func (s *ConnectedState) IsConnected() bool {
+	return true
+}
+
+func (s *ConnectedState) GetParser() *streaming.TWXParser {
+	if s.pipeline == nil {
+		return nil
+	}
+	return s.pipeline.GetParser()
+}
+
+func (s *ConnectedState) writeServerData(data string) error {
+	_, err := s.writer.WriteString(data)
+	if err != nil {
+		return err
+	}
+	return s.writer.Flush()
+}
+
+func (s *ConnectedState) readServerData(buffer []byte) (int, error) {
+	return s.reader.Read(buffer)
+}
+
+func (s *ConnectedState) processServerData(data []byte) {
+	if s.pipeline != nil {
+		s.pipeline.Write(data)
+	}
+}
+
+func (s *ConnectedState) Close() error {
+	// Stop pipeline first
+	if s.pipeline != nil {
+		s.pipeline.Stop()
+	}
+	
+	// Close connection
+	if s.conn != nil {
+		return s.conn.Close()
+	}
+	return nil
+}
 
 // proxyAdapter adapts the Proxy to work with menu.ProxyInterface
 type proxyAdapter struct {
@@ -34,133 +177,106 @@ func (pa *proxyAdapter) SendInput(input string) {
 }
 
 func (pa *proxyAdapter) SendDirectToServer(input string) {
-	pa.proxy.SendDirectToServer(input)
+	pa.proxy.SendToServer(input)
 }
 
 func (pa *proxyAdapter) SendOutput(output string) {
-	pa.proxy.SendOutput(output)
+	pa.proxy.SendToTUI(output)
 }
 
 type Proxy struct {
-	conn     net.Conn
-	reader   *bufio.Reader
-	writer   *bufio.Writer
-	mu       sync.RWMutex
-	connected bool
-	
+	// State pattern - holds ProxyState with mutex protection
+	stateMu sync.RWMutex
+	state   ProxyState
+
 	// Channels for communication
 	outputChan chan string
 	inputChan  chan string
 	errorChan  chan error
-	
+
 	// Core components
-	pipeline      *streaming.Pipeline
 	scriptManager *scripting.ScriptManager
 	db            database.Database
-	
+
 	// Terminal menu system
 	terminalMenuManager *menu.TerminalMenuManager
-	
+
 	// Direct TuiAPI reference
 	tuiAPI api.TuiAPI
-	
+
 	// Script input collector - reuses menu input collector for consistency
 	scriptInputCollector *input.InputCollector
-	
+
 	// Game detection
-	gameDetector  *GameDetector
-	
+	gameDetector *GameDetector
+
 	// Connection tracking for callbacks
-	currentAddress string  // Track address for OnConnectionStatusChanged callbacks
-	currentHost    string  // Track hostname for database naming
-	currentPort    string  // Track port for database naming
-	
+	currentAddress string // Track address for OnConnectionStatusChanged callbacks
+	currentHost    string // Track hostname for database naming
+	currentPort    string // Track port for database naming
+
 	// Game state tracking (Phase 4.3) - based on parser CurrentSectorIndex
 	currentSector int    // Track current sector number (from parser)
 	playerName    string // Track current player name
-	
+
 	// Input handler state
 	inputHandlerStarted bool
-	
+
 	// Input buffering for script input collection
-	scriptInputBuffer strings.Builder
+	scriptInputBuffer     strings.Builder
 	scriptWaitingForInput bool
+}
+
+// State helper methods
+func (p *Proxy) getState() ProxyState {
+	p.stateMu.RLock()
+	defer p.stateMu.RUnlock()
+	
+	state := p.state
+	if state == nil {
+		return NewDisconnectedState()
+	}
+	return state
+}
+
+func (p *Proxy) setState(newState ProxyState) {
+	p.stateMu.Lock()
+	defer p.stateMu.Unlock()
+	
+	oldState := p.state
+	p.state = newState
+	
+	// Close old state's resources after storing new state
+	if oldState != nil {
+		oldState.Close()
+	}
 }
 
 func New(tuiAPI api.TuiAPI) *Proxy {
 	// Initialize with no database initially - will be loaded when game is detected
 	var db database.Database = nil
-	
-	p := &Proxy{
-		outputChan:    make(chan string, 100),
-		inputChan:     make(chan string, 100),
-		errorChan:     make(chan error, 100),
-		connected:     false,
-		db:            db,
-		tuiAPI:        tuiAPI,  // Store TuiAPI reference
-		pipeline:      nil,     // Pipeline created only after connection
-		gameDetector:  nil,     // Will be created when connection is established
-	}
-	
-	// Initialize terminal menu manager
-	p.terminalMenuManager = menu.NewTerminalMenuManager()
-	
-	// Set up menu data injection function
-	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
-	
-	// Set up proxy interface for menu system
-	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
-	
-	// Initialize script input collector - reuses same logic as menu input
-	p.scriptInputCollector = input.NewInputCollector(func(output string) {
-		// Echo script input to screen via TuiAPI
-		if p.tuiAPI != nil {
-			p.tuiAPI.OnData([]byte(output))
-		}
-	})
-	
-	// Create script manager that can request database dynamically
-	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
-	
-	// Setup script manager connections immediately so sendHandler is available
-	p.scriptManager.SetupConnections(p, nil)
-	
-	// Setup menu manager for script menu commands
-	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
-	
-	// Start input handler immediately so menu system works even when not connected
-	p.mu.Lock()
-	p.inputHandlerStarted = true
-	p.mu.Unlock()
-	go p.handleInput()
-	
-	return p
-}
 
-func NewWithScript(tuiAPI api.TuiAPI, initialScript string) *Proxy {
-	// Initialize with no database initially - will be loaded when game is detected
-	var db database.Database = nil
-	
 	p := &Proxy{
-		outputChan:    make(chan string, 100),
-		inputChan:     make(chan string, 100),
-		errorChan:     make(chan error, 100),
-		connected:     false,
-		db:            db,
-		tuiAPI:        tuiAPI,  // Store TuiAPI reference
-		pipeline:      nil,     // Pipeline created only after connection
-		gameDetector:  nil,     // Will be created when connection is established
+		outputChan:   make(chan string, 100),
+		inputChan:    make(chan string, 100),
+		errorChan:    make(chan error, 100),
+		db:           db,
+		tuiAPI:       tuiAPI, // Store TuiAPI reference
+		gameDetector: nil,    // Will be created when connection is established
 	}
-	
+
+	// Initialize with disconnected state
+	p.state = NewDisconnectedState()
+
 	// Initialize terminal menu manager
 	p.terminalMenuManager = menu.NewTerminalMenuManager()
-	
+
 	// Set up menu data injection function
 	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
-	
+
 	// Set up proxy interface for menu system
 	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
-	
+
 	// Initialize script input collector - reuses same logic as menu input
 	p.scriptInputCollector = input.NewInputCollector(func(output string) {
 		// Echo script input to screen via TuiAPI
@@ -168,74 +284,68 @@ func NewWithScript(tuiAPI api.TuiAPI, initialScript string) *Proxy {
 			p.tuiAPI.OnData([]byte(output))
 		}
 	})
-	
+
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
-	
+
 	// Setup script manager connections immediately so sendHandler is available
-	p.scriptManager.SetupConnections(p, nil)
-	
+	adapter := &proxyAdapter{p}
+	p.scriptManager.SetupConnections(adapter, nil)
+
 	// Setup menu manager for script menu commands
 	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
-	
+
 	// Start input handler immediately so menu system works even when not connected
-	p.mu.Lock()
 	p.inputHandlerStarted = true
-	p.mu.Unlock()
 	go p.handleInput()
-	
-	// Store initial script to load on connection
-	if initialScript != "" {
-		p.scriptManager.SetInitialScript(initialScript)
-	}
-	
+
 	return p
 }
 
 // NewWithDatabase creates a new proxy with a pre-configured database (for testing)
 func NewWithDatabase(tuiAPI api.TuiAPI, db database.Database) *Proxy {
 	p := &Proxy{
-		outputChan:    make(chan string, 100),
-		inputChan:     make(chan string, 100),
-		errorChan:     make(chan error, 100),
-		connected:     false,
-		db:            db,  // Use the provided database
-		tuiAPI:        tuiAPI,
-		pipeline:      nil,
-		gameDetector:  nil,
+		outputChan:   make(chan string, 100),
+		inputChan:    make(chan string, 100),
+		errorChan:    make(chan error, 100),
+		db:           db, // Use the provided database
+		tuiAPI:       tuiAPI,
+		gameDetector: nil,
 	}
-	
+
+	// Initialize with disconnected state
+	p.state = NewDisconnectedState()
+
 	// Initialize terminal menu manager
 	p.terminalMenuManager = menu.NewTerminalMenuManager()
-	
+
 	// Set up menu data injection function
 	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
-	
+
 	// Set up proxy interface for menu system
 	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
-	
+
 	// Initialize script input collector
 	p.scriptInputCollector = input.NewInputCollector(func(output string) {
 		if p.tuiAPI != nil {
 			p.tuiAPI.OnData([]byte(output))
 		}
 	})
-	
+
 	// Create script manager that can request database dynamically
 	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
-	
+
 	// Setup script manager connections immediately
-	p.scriptManager.SetupConnections(p, nil)
-	
+	adapter := &proxyAdapter{p}
+	p.scriptManager.SetupConnections(adapter, nil)
+
 	// Setup menu manager for script menu commands
 	p.scriptManager.SetupMenuManager(p.terminalMenuManager)
-	
+
 	// Start input handler immediately
-	p.mu.Lock()
 	p.inputHandlerStarted = true
-	p.mu.Unlock()
 	go p.handleInput()
-	
+
 	return p
 }
 
@@ -258,25 +368,31 @@ func extractContext(data []byte, target string) string {
 	if index == -1 {
 		return ""
 	}
-	
+
 	start := index - 10
 	if start < 0 {
 		start = 0
 	}
-	
+
 	end := index + len(target) + 10
 	if end > len(str) {
 		end = len(str)
 	}
-	
+
 	context := str[start:end]
 	return escapeANSI([]byte(context))
 }
 
-func (p *Proxy) Connect(address string) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.connected {
+func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
+	
+	// Parse options
+	var opts *api.ConnectOptions
+	if len(options) > 0 && options[0] != nil {
+		opts = options[0]
+	} else {
+		opts = &api.ConnectOptions{}
+	}
+	if p.getState().IsConnected() {
 		return fmt.Errorf("already connected")
 	}
 
@@ -284,7 +400,6 @@ func (p *Proxy) Connect(address string) error {
 	if !strings.Contains(address, ":") {
 		address = address + ":23"
 	}
-	
 	// Store connection details for database naming
 	p.currentAddress = address
 	parts := strings.Split(address, ":")
@@ -295,44 +410,57 @@ func (p *Proxy) Connect(address string) error {
 		p.currentHost = address
 		p.currentPort = "23"
 	}
-	
 	// Create game detector with connection info
 	connInfo := ConnectionInfo{Host: p.currentHost, Port: p.currentPort}
 	p.gameDetector = NewGameDetector(connInfo)
-	
-	// Setup database loaded callback
-	p.gameDetector.SetDatabaseLoadedCallback(p.onDatabaseLoaded)
-	
+
+	// If database path is provided, force load that database instead of auto-detection
+	if opts.DatabasePath != "" {
+		db := database.NewDatabase()
+		if err := db.CreateDatabase(opts.DatabasePath); err != nil {
+			if err := db.OpenDatabase(opts.DatabasePath); err != nil {
+				return fmt.Errorf("failed to load forced database %s: %w", opts.DatabasePath, err)
+			}
+		}
+
+		// Set up database and script manager directly
+		p.db = db
+		p.scriptManager = scripting.NewScriptManager(db)
+
+		// Skip game detector's database loading by not setting callbacks
+	} else {
+		// Setup database loaded callback for normal auto-detection
+		p.gameDetector.SetDatabaseLoadedCallback(p.onDatabaseLoaded)
+	}
+
 	// Setup database state change callback
 	p.gameDetector.SetDatabaseStateChangedCallback(p.onDatabaseStateChanged)
-	
-
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
 		return fmt.Errorf("failed to connect to %s: %w", address, err)
 	}
+	reader := bufio.NewReader(conn)
+	writer := bufio.NewWriter(conn)
 
-	p.conn = conn
-	p.reader = bufio.NewReader(conn)
-	p.writer = bufio.NewWriter(conn)
-	p.connected = true
-
-	// NOW create and start the streaming pipeline with a proper writer
 	writerFunc := func(data []byte) error {
-		_, err := p.writer.Write(data)
+		_, err := writer.Write(data)
 		if err != nil {
 			return err
 		}
-		return p.writer.Flush()
+		return writer.Flush()
 	}
-	
-	// Create pipeline with game detector - database may be nil initially
-	p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
-	
-	p.pipeline.Start()
+
+	// Create connected state first, before starting pipeline
+	connectedState := NewConnectedState(conn, reader, writer, nil, p.scriptManager, p.gameDetector)
+	p.setState(connectedState)
+
+	// Now create and start pipeline with state already set
+	pipeline := streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
+	connectedState.pipeline = pipeline
+	pipeline.Start()
 
 	// Send initial telnet negotiation through pipeline
-	err = p.pipeline.SendTelnetNegotiation()
+	err = pipeline.SendTelnetNegotiation()
 	if err != nil {
 		conn.Close()
 		return fmt.Errorf("telnet negotiation failed: %w", err)
@@ -343,6 +471,13 @@ func (p *Proxy) Connect(address string) error {
 		if err := p.scriptManager.LoadInitialScript(); err != nil {
 			// Script loading error - log but don't fail connection
 		}
+
+		// Load optional script if provided
+		if opts.ScriptName != "" {
+			if err := p.scriptManager.LoadAndRunScript(opts.ScriptName); err != nil {
+				// Script loading error - log but don't fail connection
+			}
+		}
 	}
 
 	// Start goroutines for handling I/O
@@ -352,50 +487,35 @@ func (p *Proxy) Connect(address string) error {
 		go p.handleInput()
 		p.inputHandlerStarted = true
 	}
-	
-	go p.handleOutput()
 
+	go p.handleOutput()
 	return nil
 }
 
 func (p *Proxy) Disconnect() error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if !p.connected {
+	if !p.getState().IsConnected() {
 		return nil
 	}
 
-	p.connected = false
-	
 	// Stop all scripts
 	if p.scriptManager != nil {
 		p.scriptManager.Stop()
 	}
-	
-	// Stop the streaming pipeline
-	if p.pipeline != nil {
-		p.pipeline.Stop()
-	}
-	
+
 	// Close game detector
 	if p.gameDetector != nil {
 		p.gameDetector.Close()
 		p.gameDetector = nil
 	}
-	
-	if p.conn != nil {
-		p.conn.Close()
-		p.conn = nil
-	}
+
+	// Transition to disconnected state (this will close resources)
+	p.setState(NewDisconnectedState())
 
 	return nil
 }
 
 func (p *Proxy) IsConnected() bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.connected
+	return p.getState().IsConnected()
 }
 
 func (p *Proxy) SendInput(input string) {
@@ -406,53 +526,29 @@ func (p *Proxy) SendInput(input string) {
 	}
 }
 
-func (p *Proxy) SendOutput(output string) {
-	p.mu.RLock()
-	pipeline := p.pipeline
-	connected := p.connected
-	p.mu.RUnlock()
-	
-	if !connected || pipeline == nil {
-		return
+func (p *Proxy) SendToTUI(output string) {
+	err := p.getState().SendToTUI(output)
+	if err != nil {
+		// Log error but don't fail - maintains current behavior
+		debug.Log("SendToTUI error: %v", err)
 	}
-	
-	// Send output to TUI only (for script echo commands)
-	// This displays in the terminal but doesn't send to server
-	data := []byte(output + "\r\n")
-	pipeline.InjectTUIData(data)
 }
 
-func (p *Proxy) SendDirectToServer(input string) {
-	p.mu.RLock()
-	connected := p.connected && p.writer != nil
-	p.mu.RUnlock()
+
+func (p *Proxy) SendToServer(input string) {
+	state := p.getState()
 	
-	if !connected {
+	if !state.IsConnected() {
 		return
 	}
-	
-	// Process outgoing text through script manager
-	if p.scriptManager != nil {
-		p.scriptManager.ProcessOutgoingText(input)
-	}
-	
-	// Process user input through game detector
-	if p.gameDetector != nil {
-		p.gameDetector.ProcessUserInput(input)
-	}
-	
-	// Send directly to server bypassing menu system
-	_, err := p.writer.WriteString(input)
+
+	// State handles all processing internally - no nil checks needed
+	err := state.SendToServer(input)
 	if err != nil {
-		p.errorChan <- fmt.Errorf("direct write error: %w", err)
-		return
-	}
-	
-	err = p.writer.Flush()
-	if err != nil {
-		p.errorChan <- fmt.Errorf("direct flush error: %w", err)
+		p.errorChan <- fmt.Errorf("write error: %w", err)
 	}
 }
+
 
 func (p *Proxy) GetOutputChan() <-chan string {
 	return p.outputChan
@@ -466,9 +562,8 @@ func (p *Proxy) GetErrorChan() <-chan error {
 
 func (p *Proxy) handleInput() {
 	for input := range p.inputChan {
-		p.mu.RLock()
-		connected := p.connected && p.writer != nil
-		p.mu.RUnlock()
+		state := p.getState()
+		connected := state.IsConnected()
 
 		// Check for terminal menu activation - works even when disconnected
 		if p.terminalMenuManager != nil {
@@ -519,18 +614,18 @@ func (p *Proxy) handleInput() {
 							if isWaiting {
 								// Script is waiting for input - start buffering
 								debug.Log("SCRIPT INPUT DEBUG: received input %q (len=%d), current buffer: %q", input, len(input), p.scriptInputBuffer.String())
-								
+
 								// Check if this is ENTER (carriage return, newline, or CRLF)
 								isEnterPressed := (input == "\r" || input == "\n" || input == "\r\n")
-								
+
 								if isEnterPressed {
 									// ENTER pressed - use any buffered input (the current input is just the ENTER key)
 									finalInput := p.scriptInputBuffer.String()
-									
+
 									// Clear buffer and send input to script
 									p.scriptInputBuffer.Reset()
 									debug.Log("SCRIPT INPUT DEBUG: sending final input %q to script %s", finalInput, script.GetID())
-									
+
 									err := internalEngine.ResumeScriptWithInput(script.GetID(), finalInput)
 									if err != nil {
 										p.errorChan <- fmt.Errorf("failed to resume script with input: %w", err)
@@ -539,7 +634,7 @@ func (p *Proxy) handleInput() {
 									// Regular character(s) - add to buffer
 									p.scriptInputBuffer.WriteString(input)
 								}
-								
+
 								// Input was consumed by script - don't send to server
 								continue
 							}
@@ -547,7 +642,7 @@ func (p *Proxy) handleInput() {
 					}
 				}
 			}
-			
+
 			// If no scripts are waiting for input, clear any stale buffer
 			stillWaitingForInput := false
 			for _, script := range runningScripts {
@@ -562,7 +657,7 @@ func (p *Proxy) handleInput() {
 					}
 				}
 			}
-			
+
 			if !stillWaitingForInput {
 				p.scriptInputBuffer.Reset()
 			}
@@ -572,21 +667,15 @@ func (p *Proxy) handleInput() {
 		if p.scriptManager != nil {
 			p.scriptManager.ProcessOutgoingText(input)
 		}
-		
+
 		// Process user input through game detector
 		if p.gameDetector != nil {
 			p.gameDetector.ProcessUserInput(input)
 		}
 
-		_, err := p.writer.WriteString(input)
+		err := state.writeServerData(input)
 		if err != nil {
 			p.errorChan <- fmt.Errorf("write error: %w", err)
-			continue
-		}
-
-		err = p.writer.Flush()
-		if err != nil {
-			p.errorChan <- fmt.Errorf("flush error: %w", err)
 		}
 	}
 }
@@ -596,21 +685,19 @@ func (p *Proxy) handleOutput() {
 	buffer := make([]byte, 4096)
 	
 	for {
-		p.mu.RLock()
-		connected := p.connected
-		reader := p.reader
-		p.mu.RUnlock()
-
-		if !connected {
+		state := p.getState()
+		if !state.IsConnected() {
+			break
+		}
+		
+		// Cast to ConnectedState to access methods directly (avoid repeated state calls)
+		connectedState, ok := state.(*ConnectedState)
+		if !ok {
 			break
 		}
 
-		if reader == nil {
-			break
-		}
-
-		// Read raw bytes from connection
-		n, err := reader.Read(buffer)
+		// Read raw bytes from connection  
+		n, err := connectedState.readServerData(buffer)
 		if err != nil {
 			// Read error in handleOutput - connection likely closed
 			if err.Error() != "EOF" {
@@ -621,34 +708,23 @@ func (p *Proxy) handleOutput() {
 			}
 			break
 		}
-		
+
 		if n > 0 {
 			rawData := buffer[:n]
-			
 			// Send raw data directly to the streaming pipeline
-			p.pipeline.Write(rawData)
+			connectedState.processServerData(rawData)
 		}
 	}
-	
+
 	// If we exit the loop, it means connection was lost
-	// handleOutput exiting, setting connected=false
-	p.mu.Lock()
-	p.connected = false
-	p.mu.Unlock()
+	// handleOutput exiting, setting disconnected state
+	p.setState(NewDisconnectedState())
 }
 
 // injectInboundData injects data into the inbound stream as if it came from the server
 // This is used by the terminal menu system to display menu output
 func (p *Proxy) injectInboundData(data []byte) {
-	// Only inject if we have an active pipeline and are connected
-	p.mu.RLock()
-	pipeline := p.pipeline
-	connected := p.connected
-	p.mu.RUnlock()
-	
-	if pipeline != nil && connected {
-		pipeline.Write(data)
-	}
+	p.getState().processServerData(data)
 }
 
 // GetScriptManager returns the script manager for external access
@@ -683,10 +759,7 @@ func (p *Proxy) GetDatabase() database.Database {
 
 // GetParser returns the TWX parser for accessing live game state
 func (p *Proxy) GetParser() *streaming.TWXParser {
-	if p.pipeline == nil {
-		return nil
-	}
-	return p.pipeline.GetParser()
+	return p.getState().GetParser()
 }
 
 // GetSector returns sector data using database LoadSector method
@@ -699,25 +772,23 @@ func (p *Proxy) GetCurrentSector() int {
 	if p.db == nil {
 		return 0
 	}
-	
+
 	playerStats, err := p.db.LoadPlayerStats()
 	if err != nil {
 		return 0
 	}
-	
+
 	return playerStats.CurrentSector
 }
 
 // SetCurrentSector sets the current sector number and triggers callbacks
 func (p *Proxy) SetCurrentSector(sectorNum int) {
-	p.mu.Lock()
 	oldSector := p.currentSector
 	p.currentSector = sectorNum
-	// Keep lock during callback check to prevent race conditions
+	// Check if callback needed
 	shouldCallback := oldSector != sectorNum && p.tuiAPI != nil
-	currentTuiAPI := p.tuiAPI // Capture reference while locked
-	p.mu.Unlock()
-	
+	currentTuiAPI := p.tuiAPI
+
 	// Trigger callback if sector changed and TuiAPI is available
 	if shouldCallback {
 		sectorInfo := api.SectorInfo{Number: sectorNum}
@@ -730,59 +801,60 @@ func (p *Proxy) GetPlayerName() string {
 	if p.db == nil {
 		return ""
 	}
-	
+
 	playerStats, err := p.db.LoadPlayerStats()
 	if err != nil {
 		return ""
 	}
-	
+
 	return playerStats.PlayerName
 }
 
 // SetPlayerName sets the current player name
 func (p *Proxy) SetPlayerName(name string) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
 	p.playerName = name
 }
 
 // onDatabaseLoaded is called when the game detector loads a database
 func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.ScriptManager) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	
 	// Update proxy state with new database
 	p.db = db
-	
+
 	// Update existing script manager with new database instead of replacing it
 	if p.scriptManager != nil {
 		p.scriptManager.UpdateDatabase()
-		p.scriptManager.SetupConnections(p, nil)
+		adapter := &proxyAdapter{p}
+		p.scriptManager.SetupConnections(adapter, nil)
 	}
-	
-	// If pipeline exists, update it with the new database
-	if p.pipeline != nil {
-		// Recreate pipeline with new database
+
+	// If we have a connected state, update its pipeline without recreating the state
+	currentState := p.getState()
+	if connectedState, ok := currentState.(*ConnectedState); ok {
+		// Stop the old pipeline first
+		if connectedState.pipeline != nil {
+			connectedState.pipeline.Stop()
+		}
+
+		// Create new pipeline with same writer function
 		writerFunc := func(data []byte) error {
-			_, err := p.writer.Write(data)
+			_, err := connectedState.writer.Write(data)
 			if err != nil {
 				return err
 			}
-			return p.writer.Flush()
+			return connectedState.writer.Flush()
 		}
-		
-		p.pipeline.Stop()
-		p.pipeline = streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
-		p.pipeline.Start()
+
+		newPipeline := streaming.NewPipelineWithWriter(p.tuiAPI, p.db, p.scriptManager, p, p.gameDetector, writerFunc)
+		connectedState.pipeline = newPipeline
+		newPipeline.Start()
 	}
-	
-	
+
 	return nil
 }
 
 // onDatabaseStateChanged is called when the game detector loads/unloads a database
 func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName string, isLoaded bool) {
-	
+
 	// Create database state info for TUI notification
 	info := api.DatabaseStateInfo{
 		GameName:     gameName,
@@ -791,7 +863,7 @@ func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName 
 		DatabaseName: dbName,
 		IsLoaded:     isLoaded,
 	}
-	
+
 	// Notify TUI about database state change
 	if p.tuiAPI != nil {
 		p.tuiAPI.OnDatabaseStateChanged(info)
@@ -826,16 +898,13 @@ func (p *Proxy) LoadGameDatabase(gameName string) error {
 // Returns true if input was consumed by a script, false otherwise
 func (p *Proxy) handleScriptInput(input string) bool {
 	runningScripts := p.scriptManager.GetEngine().GetRunningScripts()
-	debug.Log("PROXY INPUT: checking %d running scripts for input waiting", len(runningScripts))
-	
+
 	for _, script := range runningScripts {
-		debug.Log("PROXY INPUT: checking script %s", script.GetID())
 		// Check if this script is waiting for input (need to cast to get internal methods)
 		if scriptEngine := p.scriptManager.GetEngine(); scriptEngine != nil {
 			if internalEngine, ok := scriptEngine.(*scripting.Engine); ok {
 				if internalScript, err := internalEngine.GetScript(script.GetID()); err == nil {
 					isWaiting := internalScript.VM.IsWaitingForInput()
-					debug.Log("PROXY INPUT: script %s IsWaitingForInput=%v", script.GetID(), isWaiting)
 					if isWaiting {
 						// Script is waiting - start input collection if not already collecting
 						if !p.scriptInputCollector.IsCollecting() {
@@ -843,7 +912,6 @@ func (p *Proxy) handleScriptInput(input string) bool {
 							prompt := "SCRIPT_INPUT_" + script.GetID()
 							p.scriptInputCollector.RegisterCompletionHandler(prompt, func(menuName, value string) error {
 								// Send completed input to script
-								debug.Log("SCRIPT INPUT DEBUG: sending final input %q to script %s", value, script.GetID())
 								err := internalEngine.ResumeScriptWithInput(script.GetID(), value)
 								if err != nil {
 									p.errorChan <- fmt.Errorf("failed to resume script with input: %w", err)
@@ -852,13 +920,13 @@ func (p *Proxy) handleScriptInput(input string) bool {
 							})
 							p.scriptInputCollector.StartCollection(prompt, "")
 						}
-						
+
 						// Use shared input collector - handles buffering, echoing, backspace, etc.
 						err := p.scriptInputCollector.HandleInput(input)
 						if err != nil {
 							debug.Log("Script input collection error: %v", err)
 						}
-						
+
 						// Input was consumed by script
 						return true
 					}
@@ -866,8 +934,7 @@ func (p *Proxy) handleScriptInput(input string) bool {
 			}
 		}
 	}
-	
+
 	// Input was not consumed by any script
 	return false
 }
-

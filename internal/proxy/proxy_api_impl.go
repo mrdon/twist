@@ -9,11 +9,6 @@ import (
 	"twist/internal/proxy/converter"
 )
 
-func init() {
-	// Register the Connect implementation with the API package
-	api.SetConnectImpl(connect)
-	api.SetConnectWithScriptImpl(connectWithScript)
-}
 
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
 type ProxyApiImpl struct {
@@ -21,119 +16,21 @@ type ProxyApiImpl struct {
 	tuiAPI api.TuiAPI        // TuiAPI reference for callbacks
 }
 
-// connect creates a new proxy instance and returns a connected ProxyAPI
-// This is the internal implementation registered with the API package
-func connect(address string, tuiAPI api.TuiAPI) api.ProxyAPI {
-	// Never return errors - all failures go via callbacks
-	// Even nil tuiAPI or empty address should be handled gracefully via callbacks
-	if tuiAPI == nil {
-		// This is a programming error, but handle gracefully
-		return &ProxyApiImpl{} // Will fail safely when used
-	}
-	
-	// Create ProxyAPI wrapper first
-	impl := &ProxyApiImpl{
-		tuiAPI: tuiAPI,
-	}
-	
-	// Create proxy instance with TuiAPI directly - no adapter needed
-	proxyInstance := New(tuiAPI)
-	impl.proxy = proxyInstance
-	
-	// Notify TUI that connection is starting
-	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnecting, address)
-	
-	// Attempt connection asynchronously to avoid blocking with 5-second timeout
-	go func() {
-		// Create a channel for the connection result
-		resultChan := make(chan error, 1)
-		
-		// Start connection attempt in another goroutine
-		go func() {
-			err := proxyInstance.Connect(address)
-			resultChan <- err
-		}()
-		
-		// Wait for either connection result or timeout
-		select {
-		case err := <-resultChan:
-			if err != nil {
-				// Connection failure -> call TuiAPI error callback
-				tuiAPI.OnConnectionError(err)
-				return
-			}
-			
-			// Success -> call TuiAPI success callback
-			tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
-			
-			// Start monitoring for network disconnections
-			go impl.monitorConnection()
-			
-		case <-time.After(5 * time.Second):
-			// Timeout -> call TuiAPI error callback
-			tuiAPI.OnConnectionError(errors.New("connection timeout after 5 seconds"))
-		}
-	}()
-	
-	// Return connected ProxyAPI instance immediately
-	return impl
+// SetProxy sets the proxy instance (for factory package)
+func (p *ProxyApiImpl) SetProxy(proxy *Proxy) {
+	p.proxy = proxy
 }
 
-// connectWithScript creates a new proxy instance with initial script and returns a connected ProxyAPI
-func connectWithScript(address string, tuiAPI api.TuiAPI, scriptName string) api.ProxyAPI {
-	// Never return errors - all failures go via callbacks
-	if tuiAPI == nil {
-		// This is a programming error, but handle gracefully
-		return &ProxyApiImpl{} // Will fail safely when used
-	}
-	
-	// Create ProxyAPI wrapper first
-	impl := &ProxyApiImpl{
-		tuiAPI: tuiAPI,
-	}
-	
-	// Create proxy instance with TuiAPI directly - no adapter needed
-	proxyInstance := NewWithScript(tuiAPI, scriptName)
-	impl.proxy = proxyInstance
-	
-	// Notify TUI that connection is starting
-	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnecting, address)
-	
-	// Attempt connection asynchronously to avoid blocking with 5-second timeout
-	go func() {
-		// Create a channel for the connection result
-		resultChan := make(chan error, 1)
-		
-		// Start connection attempt in another goroutine
-		go func() {
-			err := proxyInstance.Connect(address)
-			resultChan <- err
-		}()
-		
-		// Wait for either connection result or timeout
-		select {
-		case err := <-resultChan:
-			if err != nil {
-				// Connection failure -> call TuiAPI error callback
-				tuiAPI.OnConnectionError(err)
-				return
-			}
-			
-			// Success -> call TuiAPI success callback
-			tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
-			
-			// Start monitoring for network disconnections
-			go impl.monitorConnection()
-			
-		case <-time.After(5 * time.Second):
-			// Timeout -> call TuiAPI error callback
-			tuiAPI.OnConnectionError(errors.New("connection timeout after 5 seconds"))
-		}
-	}()
-	
-	// Return connected ProxyAPI instance immediately
-	return impl
+// SetTuiAPI sets the TuiAPI instance (for factory package) 
+func (p *ProxyApiImpl) SetTuiAPI(tuiAPI api.TuiAPI) {
+	p.tuiAPI = tuiAPI
 }
+
+// StartMonitoring starts connection monitoring (for factory package)
+func (p *ProxyApiImpl) StartMonitoring() {
+	go p.monitorConnection()
+}
+
 
 // Thin orchestration methods - all one-liners delegating to proxy
 

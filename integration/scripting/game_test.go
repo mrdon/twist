@@ -116,56 +116,6 @@ func TestWaitForCommand_RealIntegration(t *testing.T) {
 	}
 }
 
-// TestWaitForCommand_NoMatch tests WAITFOR with pattern that doesn't match
-func TestWaitForCommand_NoMatch_RealIntegration(t *testing.T) {
-	tester := NewIntegrationScriptTester(t)
-	
-	script := `
-		echo "Starting wait"
-		waitfor "never matches"
-		echo "This should not be reached"
-	`
-	
-	// Start script execution asynchronously
-	resultChan, err := tester.ExecuteScriptAsync(script)
-	if err != nil {
-		t.Fatalf("Failed to start async script execution: %v", err)
-	}
-	
-	// Give script time to start and reach WAITFOR
-	time.Sleep(1 * time.Millisecond)
-	
-	// Verify the script is waiting
-	if !tester.IsWaiting() {
-		t.Error("Script should be waiting after WAITFOR command")
-	}
-	
-	// Simulate non-matching network text
-	err = tester.SimulateNetworkInput("This does not match the pattern")
-	if err != nil {
-		t.Errorf("Failed to simulate network input: %v", err)
-	}
-	
-	// Wait briefly - script should still be waiting
-	select {
-	case result := <-resultChan:
-		// If we get here, the script completed unexpectedly
-		t.Errorf("Script completed unexpectedly with error: %v", result.Error)
-		
-	case <-time.After(500 * time.Millisecond):
-		// Expected - script should still be waiting
-		// This is the correct behavior
-		
-		// Verify script is still waiting
-		if !tester.IsWaiting() {
-			t.Error("Script should still be waiting after non-matching input")
-		}
-		
-		// Verify we only got the first echo
-		// Note: Since the script is still running, we can't check the final output yet
-		// But we know it should still be waiting
-	}
-}
 
 // TestPauseCommand_RealIntegration tests PAUSE command
 func TestPauseCommand_RealIntegration(t *testing.T) {

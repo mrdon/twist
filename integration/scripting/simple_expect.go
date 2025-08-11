@@ -142,7 +142,7 @@ func (e *SimpleExpectEngine) expect(args []string) error {
 			return nil
 		}
 		
-		time.Sleep(50 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 	
 	output := strings.Join(e.outputCapture, "")
@@ -214,4 +214,9 @@ func (e *SimpleExpectEngine) log(args []string) error {
 // AddOutput feeds output to the engine
 func (e *SimpleExpectEngine) AddOutput(output string) {
 	e.outputCapture = append(e.outputCapture, output)
+}
+
+// GetAllOutput returns all captured output as a single string
+func (e *SimpleExpectEngine) GetAllOutput() string {
+	return strings.Join(e.outputCapture, "")
 }

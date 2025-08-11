@@ -126,7 +126,8 @@ func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 		scriptName, vm.GetPendingInputResult(), vm.IsWaitingForInput(), vm.GetPendingInputPrompt())
 	
 	// Check if there's a pending input result (we're resuming from input)
-	if vm.GetPendingInputResult() != "" || (!vm.IsWaitingForInput() && vm.GetPendingInputPrompt() != "") {
+	// We use JustResumedFromInput to handle cases where input is empty string
+	if vm.IsWaitingForInput() || vm.JustResumedFromInput() {
 		// We're resuming - get the input result and store it
 		debug.Log("GETINPUT [%s]: RESUMING from input, processing stored result", scriptName)
 		input := vm.GetPendingInputResult()

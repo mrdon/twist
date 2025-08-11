@@ -98,14 +98,14 @@ func (ic *InputCollector) HandleInput(input string) error {
 	var actualValue string
 	var hasEnter bool
 	
-	if strings.HasSuffix(input, "\r") {
+	if strings.HasSuffix(input, "\r\n") {
+		actualValue = strings.TrimSuffix(input, "\r\n")
+		hasEnter = true
+	} else if strings.HasSuffix(input, "\r") {
 		actualValue = strings.TrimSuffix(input, "\r")
 		hasEnter = true
 	} else if strings.HasSuffix(input, "\n") {
 		actualValue = strings.TrimSuffix(input, "\n")
-		hasEnter = true
-	} else if strings.HasSuffix(input, "\r\n") {
-		actualValue = strings.TrimSuffix(input, "\r\n")
 		hasEnter = true
 	} else if input == "" {
 		actualValue = ""

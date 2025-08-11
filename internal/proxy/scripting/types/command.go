@@ -61,6 +61,7 @@ type VMInterface interface {
 	IsWaitingForInput() bool
 	GetPendingInputResult() string
 	GetPendingInputPrompt() string
+	JustResumedFromInput() bool
 	ClearPendingInput()
 	WaitFor(text string) error
 	

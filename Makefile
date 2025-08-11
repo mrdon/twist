@@ -47,11 +47,17 @@ vet:
 
 # Run tests (including integration tests)
 test:
-	@echo "Running unit tests..."
-	@go test -v ./... && echo "Unit tests passed"
-	@echo "Running integration tests..."
-	@go test -tags=integration ./integration/... -p=1 && echo "Integration tests passed"
-	@echo "All tests completed successfully"
+	@echo "Running all tests..."
+	@go test -timeout=1s -tags=integration ./... -p=1 -json 2>&1 | tee test_output.json | jq -r 'select(.Action == "pass" or .Action == "fail" or .Action == "skip" or .Action == "build-output") | if .Action == "build-output" then ("BUILD ERROR: " + .Output) else (select(.Test) | "\(.Action | ascii_upcase): \(.Test)") end' 2>/dev/null | grep -v "^$$" | grep -E "FAIL|SKIP|BUILD ERROR" || echo "Tests completed"
+	@if grep -q '"Action":"fail"' test_output.json 2>/dev/null || grep -q "panic: test timed out" test_output.json 2>/dev/null; then \
+		if grep -q "panic: test timed out" test_output.json; then \
+			echo "TIMEOUTS:"; \
+			jq -r 'select(.Output and (.Output | contains("panic: test timed out"))) | .Test' test_output.json 2>/dev/null | sort -u | sed 's/^/  /' || true; \
+		fi; \
+		exit 1; \
+	fi
+	@echo "All tests passed"
+	@rm -f test_output.json
 
 # Run integration tests only
 test-integration:
