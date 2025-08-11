@@ -85,8 +85,8 @@ log "Should not reach here"
 	}
 }
 
-// TestSimpleExpectRegex demonstrates regex patterns
-func TestSimpleExpectRegex(t *testing.T) {
+// TestSimpleExpectLiteral demonstrates literal string matching
+func TestSimpleExpectLiteral(t *testing.T) {
 	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	expectEngine.AddOutput("Player Level: 25")
 	expectEngine.AddOutput("Credits: 1,234,567")
@@ -94,17 +94,17 @@ func TestSimpleExpectRegex(t *testing.T) {
 
 	expectScript := `
 timeout "1s"
-expect "Player Level: [0-9]+"
-expect "Credits: [0-9,]+"
-expect "Ship Class: [A-Za-z ]+"
+expect "Player Level: 25"
+expect "Credits: 1,234,567"
+expect "Ship Class: Imperial Starship"
 assert "Level: 25"
-assert "Credits.*567"
-log "Regex patterns matched"
+assert "Credits: 1,234,567"
+log "Literal patterns matched"
 `
 
 	err := expectEngine.Run(expectScript)
 	if err != nil {
-		t.Fatalf("Regex test failed: %v", err)
+		t.Fatalf("Literal test failed: %v", err)
 	}
 }
 
@@ -146,4 +146,116 @@ func slicesEqual(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestProcessEscapeSequences tests the escape sequence processing function
+func TestProcessEscapeSequences(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "carriage return",
+			input:    "hello\\rworld",
+			expected: "hello\rworld",
+		},
+		{
+			name:     "newline",
+			input:    "hello\\nworld",
+			expected: "hello\nworld",
+		},
+		{
+			name:     "tab",
+			input:    "hello\\tworld",
+			expected: "hello\tworld",
+		},
+		{
+			name:     "escape sequence",
+			input:    "\\x1b[31mred\\x1b[0m",
+			expected: "\x1b[31mred\x1b[0m",
+		},
+		{
+			name:     "escaped backslash",
+			input:    "hello\\\\world",
+			expected: "hello\\world",
+		},
+		{
+			name:     "multiple escape sequences",
+			input:    "\\r\\n\\x1b[35mCommand\\x1b[0m\\r\\n",
+			expected: "\r\n\x1b[35mCommand\x1b[0m\r\n",
+		},
+		{
+			name:     "hex sequences with different values",
+			input:    "\\x00\\x1b\\xff",
+			expected: "\x00\x1b\xff",
+		},
+		{
+			name:     "invalid hex sequence - too short",
+			input:    "\\x1",
+			expected: "\\x1",
+		},
+		{
+			name:     "invalid hex sequence - non-hex chars",
+			input:    "\\xzz",
+			expected: "\\xzz",
+		},
+		{
+			name:     "no escape sequences",
+			input:    "plain text",
+			expected: "plain text",
+		},
+		{
+			name:     "backslash at end",
+			input:    "text\\",
+			expected: "text\\",
+		},
+		{
+			name:     "unknown escape sequence",
+			input:    "\\q",
+			expected: "\\q",
+		},
+		{
+			name:     "complex probe data",
+			input:    "E\\r\\x1b[0m\\n\\x1b[32mSubSpace Ether Probe loaded in launch tube, \\x1b[1;33m13 \\x1b[0;32mremaining.\\r\\x1b[0m\\n",
+			expected: "E\r\x1b[0m\n\x1b[32mSubSpace Ether Probe loaded in launch tube, \x1b[1;33m13 \x1b[0;32mremaining.\r\x1b[0m\n",
+		},
+		{
+			name:     "probe sector data",
+			input:    "\\x1b[33mProbe entering sector \\x1b[1m: \\x1b[36m274\\r\\x1b[0m\\n\\r\\n\\x1b[1;32mSector  \\x1b[33m: \\x1b[36m274 \\x1b[0;32min \\x1b[34muncharted space.\\r\\x1b[0m\\n",
+			expected: "\x1b[33mProbe entering sector \x1b[1m: \x1b[36m274\r\x1b[0m\n\r\n\x1b[1;32mSector  \x1b[33m: \x1b[36m274 \x1b[0;32min \x1b[34muncharted space.\r\x1b[0m\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := processEscapeSequences(tt.input)
+			if result != tt.expected {
+				t.Errorf("processEscapeSequences(%q) = %q; expected %q", tt.input, result, tt.expected)
+				
+				// Show byte-by-byte comparison for debugging
+				t.Logf("Input bytes: %v", []byte(tt.input))
+				t.Logf("Result bytes: %v", []byte(result))
+				t.Logf("Expected bytes: %v", []byte(tt.expected))
+			}
+		})
+	}
+}
+
+// TestProcessEscapeSequences_ByteValues tests specific byte values to ensure correct conversion
+func TestProcessEscapeSequences_ByteValues(t *testing.T) {
+	input := "\\r\\n\\t\\x1b\\x00\\xff"
+	result := processEscapeSequences(input)
+	expected := []byte{13, 10, 9, 27, 0, 255} // CR, LF, TAB, ESC, NULL, 255
+	
+	resultBytes := []byte(result)
+	if len(resultBytes) != len(expected) {
+		t.Fatalf("Length mismatch: got %d bytes, expected %d", len(resultBytes), len(expected))
+	}
+	
+	for i, expectedByte := range expected {
+		if resultBytes[i] != expectedByte {
+			t.Errorf("Byte %d: got %d, expected %d", i, resultBytes[i], expectedByte)
+		}
+	}
 }

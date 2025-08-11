@@ -80,9 +80,9 @@ func (cd *ConnectionDialog) GetView() tview.Primitive {
 		SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false). // Top spacer (proportional)
 		AddItem(tview.NewFlex().
-			AddItem(nil, 0, 1, false). // Left spacer (proportional)
-			AddItem(cd.form, 60, 0, true). // Fixed width for form (60 chars)
-			AddItem(nil, 0, 1, false), 10, 0, true). // Fixed height (10 rows)
+						AddItem(nil, 0, 1, false).               // Left spacer (proportional)
+						AddItem(cd.form, 60, 0, true).           // Fixed width for form (60 chars)
+						AddItem(nil, 0, 1, false), 10, 0, true). // Fixed height (10 rows)
 		AddItem(nil, 0, 1, false) // Bottom spacer (proportional)
 
 	// Apply theme colors for modal overlay effect

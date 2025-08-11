@@ -2,7 +2,7 @@ package scripting
 
 import (
 	"fmt"
-	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -19,7 +19,7 @@ type SimpleExpectEngine struct {
 
 // SimpleExpectCommand represents a single command
 type SimpleExpectCommand struct {
-	Type string   // expect, send, assert, timeout, log
+	Type string // expect, send, assert, timeout, log
 	Args []string
 	Line int
 }
@@ -40,8 +40,6 @@ func (e *SimpleExpectEngine) Run(script string) error {
 	lines := strings.Split(script, "\n")
 
 	for lineNum, line := range lines {
-		line = strings.TrimSpace(line)
-
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -124,15 +122,14 @@ func (e *SimpleExpectEngine) expect(args []string) error {
 	}
 
 	pattern := args[0]
+	// Process escape sequences to convert string literals to actual control characters
+	pattern = processEscapeSequences(pattern)
 	deadline := time.Now().Add(e.timeout)
 
 	for time.Now().Before(deadline) {
 		output := strings.Join(e.outputCapture, "")
 
-		// Try regex first, fall back to literal match
-		if matched, _ := regexp.MatchString(pattern, output); matched {
-			return nil
-		}
+		// Use only literal string matching to avoid regex interpretation issues
 		if strings.Contains(output, pattern) {
 			return nil
 		}
@@ -155,6 +152,9 @@ func (e *SimpleExpectEngine) send(args []string) error {
 	// Process "*" using configured replacement
 	input = strings.ReplaceAll(input, "*", e.starReplacement)
 
+	// Process escape sequences to convert string literals to actual control characters
+	input = processEscapeSequences(input)
+
 	if e.inputSender != nil {
 		e.inputSender(input)
 	}
@@ -170,10 +170,7 @@ func (e *SimpleExpectEngine) assert(args []string) error {
 	pattern := args[0]
 	output := strings.Join(e.outputCapture, "")
 
-	// Try regex first, fall back to literal match
-	if matched, _ := regexp.MatchString(pattern, output); matched {
-		return nil
-	}
+	// Use only literal string matching to avoid regex interpretation issues
 	if strings.Contains(output, pattern) {
 		return nil
 	}
@@ -219,4 +216,47 @@ func (e *SimpleExpectEngine) GetAllOutput() string {
 // ClearOutput clears the output capture buffer
 func (e *SimpleExpectEngine) ClearOutput() {
 	e.outputCapture = e.outputCapture[:0]
+}
+
+// processEscapeSequences converts escape sequences like \r, \n, \t, \x1b to actual characters
+func processEscapeSequences(input string) string {
+	result := strings.Builder{}
+
+	for i := 0; i < len(input); i++ {
+		if input[i] == '\\' && i+1 < len(input) {
+			switch input[i+1] {
+			case 'r':
+				result.WriteByte('\r') // carriage return (ASCII 13)
+				i++                    // skip the 'r'
+			case 'n':
+				result.WriteByte('\n') // newline (ASCII 10)
+				i++                    // skip the 'n'
+			case 't':
+				result.WriteByte('\t') // tab (ASCII 9)
+				i++                    // skip the 't'
+			case 'x':
+				// Handle hex sequences like \x1b
+				if i+3 < len(input) {
+					hexStr := input[i+2 : i+4]
+					if val, err := strconv.ParseUint(hexStr, 16, 8); err == nil {
+						result.WriteByte(byte(val))
+						i += 3 // skip 'x' and two hex digits
+					} else {
+						result.WriteByte(input[i]) // keep the backslash if invalid hex
+					}
+				} else {
+					result.WriteByte(input[i]) // keep the backslash if incomplete
+				}
+			case '\\':
+				result.WriteByte('\\') // escaped backslash
+				i++                    // skip the second backslash
+			default:
+				result.WriteByte(input[i]) // keep the backslash for other cases
+			}
+		} else {
+			result.WriteByte(input[i])
+		}
+	}
+
+	return result.String()
 }

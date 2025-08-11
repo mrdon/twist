@@ -22,8 +22,8 @@ type IntegrationTestResult struct {
 	Error    error
 }
 
-// TestScript implements types.ScriptInterface for testing purposes
-type TestScript struct {
+// MockScript implements types.ScriptInterface for testing purposes
+type MockScript struct {
 	id       string
 	filename string
 	name     string
@@ -31,9 +31,9 @@ type TestScript struct {
 	system   bool
 }
 
-// NewTestScript creates a new test script with a unique ID and registers it in the database
-func NewTestScript(name string, db database.Database) *TestScript {
-	script := &TestScript{
+// NewMockScript creates a new test script with a unique ID and registers it in the database
+func NewMockScript(name string, db database.Database) *MockScript {
+	script := &MockScript{
 		id:       "test_script_" + name, // Remove timestamp to make it deterministic
 		filename: name + ".twx",
 		name:     name,
@@ -57,27 +57,27 @@ func NewTestScript(name string, db database.Database) *TestScript {
 	return script
 }
 
-func (ts *TestScript) GetID() string {
+func (ts *MockScript) GetID() string {
 	return ts.id
 }
 
-func (ts *TestScript) GetFilename() string {
+func (ts *MockScript) GetFilename() string {
 	return ts.filename
 }
 
-func (ts *TestScript) GetName() string {
+func (ts *MockScript) GetName() string {
 	return ts.name
 }
 
-func (ts *TestScript) IsRunning() bool {
+func (ts *MockScript) IsRunning() bool {
 	return ts.running
 }
 
-func (ts *TestScript) IsSystem() bool {
+func (ts *MockScript) IsSystem() bool {
 	return ts.system
 }
 
-func (ts *TestScript) Stop() error {
+func (ts *MockScript) Stop() error {
 	ts.running = false
 	return nil
 }
@@ -160,7 +160,7 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 	})
 	
 	// Create a test script instance for call stack persistence
-	testScript := NewTestScript("integration_test", tester.setupData.DB)
+	testScript := NewMockScript("integration_test", tester.setupData.DB)
 	tester.currentScript = &scripting.Script{
 		ID:       "integration_test",
 		Filename: "test.ts",
@@ -334,7 +334,7 @@ func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan
 	})
 	
 	// Create a test script instance
-	testScript := NewTestScript("integration_test_async", tester.setupData.DB)
+	testScript := NewMockScript("integration_test_async", tester.setupData.DB)
 	
 	// Start async execution
 	go func() {

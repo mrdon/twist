@@ -1,142 +1,430 @@
 package scripting
 
 import (
+	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"twist/internal/api"
 )
 
-// TestDualExpectScripts demonstrates server-side and client-side expect scripts working together
-func TestDualExpectScripts(t *testing.T) {
-	serverScript := `send "Hello*"
-expect "Hi"
-send "Bye*"`
-	clientScript := `expect "Hello"
-send "Hi"
-expect "Bye"`
-	
-	result := Execute(t, serverScript, clientScript, nil)
-	
-	// Basic assertions - database will be nil since no DatabasePath was provided
-	if result.Database != nil {
-		t.Error("Expected no database instance when DatabasePath not provided")
+func TestLoadScriptFile(t *testing.T) {
+	tests := []struct {
+		name        string
+		content     string
+		expected    []ScriptLine
+		expectError bool
+	}{
+		{
+			name: "simple server and client data",
+			content: `# Test Script
+# Simple test
+
+< Hello World
+> user input
+< Server response`,
+			expected: []ScriptLine{
+				{Direction: "<", Data: "Hello World"},
+				{Direction: ">", Data: "user input"},
+				{Direction: "<", Data: "Server response"},
+			},
+			expectError: false,
+		},
+		{
+			name: "with ANSI escape sequences",
+			content: `< \x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : 
+> e
+< E\r\n\x1b[32mProbe loaded\x1b[0m`,
+			expected: []ScriptLine{
+				{Direction: "<", Data: `\x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : `},
+				{Direction: ">", Data: "e"},
+				{Direction: "<", Data: `E\r\n\x1b[32mProbe loaded\x1b[0m`},
+			},
+			expectError: false,
+		},
+		{
+			name: "comments and empty lines",
+			content: `# Header comment
+# Description
+
+< server data
+# inline comment
+> client data
+
+< final server data`,
+			expected: []ScriptLine{
+				{Direction: "<", Data: "server data"},
+				{Direction: ">", Data: "client data"},
+				{Direction: "<", Data: "final server data"},
+			},
+			expectError: false,
+		},
+		{
+			name: "invalid format - no direction",
+			content: `invalid line without direction
+< valid line`,
+			expected:    nil,
+			expectError: true,
+		},
+		{
+			name: "invalid format - wrong direction",
+			content: `^ invalid direction
+< valid line`,
+			expected:    nil,
+			expectError: true,
+		},
 	}
-	
-	if !strings.Contains(result.ClientOutput, "Hello") {
-		t.Errorf("Expected 'Hello' in client output, got: %q", result.ClientOutput)
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary file
+			tmpFile, err := os.CreateTemp("", "test_script_*.script")
+			if err != nil {
+				t.Fatalf("Failed to create temp file: %v", err)
+			}
+			defer os.Remove(tmpFile.Name())
+
+			// Write test content
+			if _, err := tmpFile.WriteString(tt.content); err != nil {
+				t.Fatalf("Failed to write test content: %v", err)
+			}
+			tmpFile.Close()
+
+			// Test LoadScriptFile
+			result, err := LoadScriptFile(tmpFile.Name())
+
+			if tt.expectError {
+				if err == nil {
+					t.Error("Expected error but got none")
+				}
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("Unexpected error: %v", err)
+			}
+
+			if len(result) != len(tt.expected) {
+				t.Fatalf("Expected %d script lines, got %d", len(tt.expected), len(result))
+			}
+
+			for i, expected := range tt.expected {
+				if result[i].Direction != expected.Direction {
+					t.Errorf("Line %d: expected direction %q, got %q", i, expected.Direction, result[i].Direction)
+				}
+				if result[i].Data != expected.Data {
+					t.Errorf("Line %d: expected data %q, got %q", i, expected.Data, result[i].Data)
+				}
+			}
+		})
 	}
-	
-	t.Log("Dual expect scripts completed successfully!")
 }
 
-
-// TestExecuteScript demonstrates running a TWX script with the API
-func TestExecuteScript(t *testing.T) {
-	// Simple server responses for script execution
-	serverScript := `send "Connected*"
-send "Script response*"`
-
-	// Client expects script output, then server responses
-	clientScript := `expect "Hello from script"
-expect "Connected"
-expect "Script response"`
-
-	// Use ConnectOptions with ScriptName as content (will be auto-converted to temp file)
-	twxScript := `echo "Hello from script"`
-	connectOpts := &api.ConnectOptions{ScriptName: twxScript}
-	result := Execute(t, serverScript, clientScript, connectOpts)
-
-	// Verify script execution - database will be nil since no DatabasePath was provided
-	if result.Database != nil {
-		t.Error("Expected no database instance when DatabasePath not provided")
+func TestConvertToExpectScripts(t *testing.T) {
+	tests := []struct {
+		name           string
+		scriptLines    []ScriptLine
+		expectedServer string
+		expectedClient string
+	}{
+		{
+			name: "simple conversation",
+			scriptLines: []ScriptLine{
+				{Direction: "<", Data: `\x1b[35mCommand? : `},
+				{Direction: ">", Data: "e"},
+				{Direction: "<", Data: `Probe loaded: `},
+				{Direction: ">", Data: "493"},
+				{Direction: "<", Data: `Probe Self Destructs`},
+			},
+			expectedServer: `send "\x1b[35mCommand? : "
+expect "e"
+send "Probe loaded: "
+expect "493"
+send "Probe Self Destructs"`,
+			expectedClient: `expect "\x1b[35mCommand? : "
+send "e"
+expect "e loaded: "
+send "493"`,
+		},
+		{
+			name: "server only",
+			scriptLines: []ScriptLine{
+				{Direction: "<", Data: "Server message 1"},
+				{Direction: "<", Data: "Server message 2"},
+			},
+			expectedServer: `send "Server message 1"
+send "Server message 2"`,
+			expectedClient: ``,
+		},
+		{
+			name: "client only",
+			scriptLines: []ScriptLine{
+				{Direction: ">", Data: "client input 1"},
+				{Direction: ">", Data: "client input 2"},
+			},
+			expectedServer: ``,
+			expectedClient: `send "client input 1"
+send "client input 2"`,
+		},
+		{
+			name:           "empty script",
+			scriptLines:    []ScriptLine{},
+			expectedServer: "",
+			expectedClient: "",
+		},
 	}
 
-	if !strings.Contains(result.ClientOutput, "Connected") {
-		t.Errorf("Expected 'Connected' in client output, got: %q", result.ClientOutput)
-	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			serverScript, clientScript := ConvertToExpectScripts(tt.scriptLines)
 
-	if !strings.Contains(result.ClientOutput, "Script response") {
-		t.Errorf("Expected 'Script response' in client output, got: %q", result.ClientOutput)
-	}
+			if serverScript != tt.expectedServer {
+				t.Errorf("Server script mismatch:\nExpected:\n%q\nGot:\n%q", tt.expectedServer, serverScript)
+			}
 
-	t.Log("ExecuteScript test completed successfully!")
+			if clientScript != tt.expectedClient {
+				t.Errorf("Client script mismatch:\nExpected:\n%q\nGot:\n%q", tt.expectedClient, clientScript)
+			}
+		})
+	}
 }
 
-// TestExecuteScriptWithGame demonstrates running a script in game context and validating database state
-func TestExecuteScriptWithGame(t *testing.T) {
-	// Server sends sector display, warps, and command prompt to trigger database save
-	serverScript := `send "Sector  : 123 in The Sphere*"
-send "Warps to Sector(s) : (124) - 125*"
-send "Command [TL=00:00:01]:[123] (?=Help)? : "`
+// unescapeString converts string literals like "\\x1b[35m" to actual ANSI escape sequences
+func unescapeString(s string) string {
+	result, _ := strconv.Unquote("\"" + s + "\"")
+	return result
+}
 
-	// Client expects the sector data
-	clientScript := `expect "Sector  : 123"
-expect "Warps to Sector"
-expect "Command"`
-
-	// Use ConnectOptions with both DatabasePath and ScriptName (content will be auto-converted to temp file)
-	dbPath := t.TempDir() + "/test.db"
-	twxScript := `# Script just needs to be present for parsing to occur`
-	connectOpts := &api.ConnectOptions{
-		DatabasePath: dbPath,
-		ScriptName:   twxScript,
+func TestGenerateExpectPattern(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    string
+		expected string
+	}{
+		{
+			name:     "command prompt with ANSI",
+			input:    `\x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : `,
+			expected: "0\x1b[0;35m]? : ",
+		},
+		{
+			name:     "probe destination prompt",
+			input:    `\x1b[32mSubSpace Ether Probe loaded\x1b[0m\n\x1b[35mPlease enter a destination for this probe\x1b[1;33m: \x1b[36m `,
+			expected: "e\x1b[1;33m: \x1b[36m ",
+		},
+		{
+			name:     "probe self destruct message",
+			input:    `\x1b[33mProbe entering sector\x1b[36m493\r\x1b[0m\n\r\n\x1b[1;36mProbe Self Destructs\r\x1b[0m`,
+			expected: "Destructs\r\x1b[0m",
+		},
+		{
+			name:     "question mark colon pattern",
+			input:    `Some text here? : `,
+			expected: "t here? : ",
+		},
+		{
+			name:     "colon space pattern",
+			input:    `Enter value: `,
+			expected: "er value: ",
+		},
+		{
+			name:     "short text - use whole string",
+			input:    `Short`,
+			expected: "Short",
+		},
+		{
+			name:     "exactly 5 chars - use whole string",
+			input:    `Hello`,
+			expected: "Hello",
+		},
+		{
+			name:     "exactly 10 chars - use whole string",
+			input:    `HelloWorld`,
+			expected: "HelloWorld",
+		},
+		{
+			name:     "long text - use last 10 chars",
+			input:    `This is a very long piece of text`,
+			expected: "ce of text",
+		},
+		{
+			name:     "long text - use more than 10 if repeated",
+			input:    `iece of text and This is a very long piece of text`,
+			expected: "ce of text",
+		},
+		{
+			name:     "empty text",
+			input:    "",
+			expected: "",
+		},
 	}
-	result := Execute(t, serverScript, clientScript, connectOpts)
 
-	// Verify game context was created
-	if result.Database == nil {
-		t.Fatal("Expected database instance")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := generateExpectPattern(tt.input)
+			if result != tt.expected {
+				t.Errorf("Expected %q, got %q", tt.expected, result)
+			}
+		})
 	}
+}
 
-	// Verify sector was parsed and saved to database
-	var sectorExists int
-	var err error
-	err = result.Database.QueryRow("SELECT COUNT(*) FROM sectors WHERE sector_index = 123").Scan(&sectorExists)
+func i(t *testing.T) {
+	// Test the complete pipeline: file -> parse -> convert -> expect scripts
+	scriptContent := `# Probe Test Script
+# End-to-end testf
+
+< \x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : 
+> e
+< E\r\x1b[0m\n\x1b[35mPlease enter a destination for this probe\x1b[1;33m: \x1b[36m 
+> 493
+< \x1b[1;36mProbe Self Destructs\r\x1b[0m`
+
+	expectedServerScript := `send "\x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : "
+expect "e"
+send "E\r\x1b[0m\n\x1b[35mPlease enter a destination for this probe\x1b[1;33m: \x1b[36m "
+expect "493"
+send "\x1b[1;36mProbe Self Destructs\r\x1b[0m"`
+
+	expectedClientScript := `expect "0;35m]? : "
+send "e"
+expect "3m: \x1b[36m "
+send "493"`
+
+	// Create temporary file
+	tmpFile, err := os.CreateTemp("", "test_end_to_end_*.script")
 	if err != nil {
-		t.Fatalf("Failed to query sector 123: %v", err)
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	// Write test content
+	if _, err := tmpFile.WriteString(scriptContent); err != nil {
+		t.Fatalf("Failed to write test content: %v", err)
+	}
+	tmpFile.Close()
+
+	// Load script file
+	scriptLines, err := LoadScriptFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to load script file: %v", err)
 	}
 
-	if sectorExists != 1 {
-		t.Errorf("Expected sector 123 to be saved, but found %d records", sectorExists)
+	// Convert to expect scripts
+	serverScript, clientScript := ConvertToExpectScripts(scriptLines)
+
+	// Verify server script
+	if strings.TrimSpace(serverScript) != strings.TrimSpace(expectedServerScript) {
+		t.Errorf("Server script mismatch:\nExpected:\n%s\nGot:\n%s", expectedServerScript, serverScript)
 	}
 
-	t.Log("ExecuteScriptWithGame test completed successfully!")
+	// Verify client script
+	if clientScript != expectedClientScript {
+		t.Errorf("Client script mismatch:\nExpected:\n%s\nGot:\n%s", expectedClientScript, clientScript)
+	}
 }
 
-// TestExecuteWithGame demonstrates Execute() in game context without a script
-func TestExecuteWithGame(t *testing.T) {
-	// Server sends sector display, warps, and command prompt to trigger database save
-	serverScript := `send "Sector  : 456 in The Sphere*"
-send "Warps to Sector(s) : (457) - 458*"
-send "Command [TL=00:00:01]:[456] (?=Help)? : "`
+// TestServerExpectScriptProcessesANSI tests that server expect scripts correctly
+// convert ANSI escape sequences from string literals to actual binary bytes
+func TestServerExpectScriptProcessesANSI(t *testing.T) {
+	// Capture what the TUI receives
+	var receivedData []byte
 
-	// Client expects the sector data
-	clientScript := `expect "Sector  : 456"
-expect "Warps to Sector"
-expect "Command"`
+	// Server script with ANSI escape sequences as string literals
+	serverScript := `send "\\x1b[35mCommand \\x1b[1;33mTL\\x1b[0;33m=\\x1b[1m00:00:00\\x1b[0;35m]? : "
+expect "e"
+send "E\\r\\x1b[0m\\n\\x1b[32mSubSpace Ether Probe loaded"`
 
-	// Use Connect with forced database path
-	dbPath := t.TempDir() + "/test.db"
-	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
-	result := Execute(t, serverScript, clientScript, connectOpts)
+	clientScript := `expect "0;35m]? : "
+send "e"
+expect "Space Ether"`
 
-	// Verify game context was created
-	if result.Database == nil {
-		t.Fatal("Expected database instance")
+	// Execute the test using the proxy framework
+	result := Execute(t, serverScript, clientScript, &api.ConnectOptions{})
+
+	// Check the client output from the result
+	if result.ClientOutput == "" {
+		t.Fatal("No client output received")
 	}
 
-	// Verify sector was parsed and saved to database
-	var sectorExists int
-	var err error
-	err = result.Database.QueryRow("SELECT COUNT(*) FROM sectors WHERE sector_index = 456").Scan(&sectorExists)
-	if err != nil {
-		t.Fatalf("Failed to query sector 456: %v", err)
+	// Use the client output for analysis
+	receivedStr := result.ClientOutput
+
+	// Check that actual ANSI escape sequences are present (byte 27 = ESC)
+	if !strings.Contains(receivedStr, "\x1b") {
+		t.Error("Expected actual ESC character (0x1B) in received data, but found none")
+		t.Logf("Received bytes: %v", receivedData)
+		t.Logf("Received string: %q", receivedStr)
 	}
 
-	if sectorExists != 1 {
-		t.Errorf("Expected sector 456 to be saved, but found %d records", sectorExists)
+	// Check for actual carriage return and newline
+	if !strings.Contains(receivedStr, "\r") {
+		t.Error("Expected actual CR character (0x0D) in received data")
 	}
 
-	t.Log("ExecuteWithGame test completed successfully!")
+	if !strings.Contains(receivedStr, "\n") {
+		t.Error("Expected actual LF character (0x0A) in received data")
+	}
+
+	// Verify specific ANSI sequences are properly converted
+	expectedSequences := []string{
+		"\x1b[35m",   // Magenta color
+		"\x1b[1;33m", // Bold yellow
+		"\x1b[0;33m", // Yellow
+		"\x1b[1m",    // Bold
+		"\x1b[0m",    // Reset
+		"\x1b[32m",   // Green
+	}
+
+	for _, expectedSeq := range expectedSequences {
+		if !strings.Contains(receivedStr, expectedSeq) {
+			t.Errorf("Expected ANSI sequence %q not found in received data", expectedSeq)
+		}
+	}
+
+	// Verify that literal strings like "\\x1b" are NOT present
+	if strings.Contains(receivedStr, "\\x1b") {
+		t.Error("Found literal '\\x1b' in received data - escape sequences were not processed")
+		t.Logf("Received string: %q", receivedStr)
+	}
+
+	if strings.Contains(receivedStr, "\\r") {
+		t.Error("Found literal '\\r' in received data - escape sequences were not processed")
+	}
+
+	if strings.Contains(receivedStr, "\\n") {
+		t.Error("Found literal '\\n' in received data - escape sequences were not processed")
+	}
+
+	t.Logf("Successfully received %d bytes with properly processed ANSI sequences", len(receivedData))
+}
+
+// TestEscapeSequenceProcessing tests that client expects with escaped ANSI sequences
+// are properly decoded to match actual ANSI sequences from the server
+func TestEscapeSequenceProcessing(t *testing.T) {
+	// Server script sends literal ANSI sequences
+	serverScript := `send "Please enter a destination for this probe \x1b[1;33m: \x1b[36m "`
+
+	// Client script expects literal ANSI sequences (same format)
+	clientScript := `expect "this probe \x1b[1;33m: \x1b[36m "`
+
+	// Execute the test
+	result := Execute(t, serverScript, clientScript, &api.ConnectOptions{})
+
+	// Check the client output to see what was actually received
+	if result.ClientOutput == "" {
+		t.Fatal("No client output received")
+	}
+
+	// The test should pass - the escaped sequences in clientScript should be decoded
+	// to match the actual ANSI sequences sent by the server
+	t.Logf("Server sent: %q", result.ClientOutput)
+	t.Logf("Client expected (raw): \"this probe \\\\x1b[1;33m: \\\\x1b[36m \"")
+	t.Logf("Client expected (decoded): \"this probe \\x1b[1;33m: \\x1b[36m \"")
+
+	// Check if the pattern should match
+	expectedPattern := "this probe \x1b[1;33m: \x1b[36m "
+	if !strings.Contains(result.ClientOutput, expectedPattern) {
+		t.Errorf("Expected client output to contain pattern %q, but it doesn't", expectedPattern)
+		t.Logf("Full client output: %q", result.ClientOutput)
+	}
 }

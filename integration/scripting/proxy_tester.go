@@ -1,33 +1,226 @@
 package scripting
 
 import (
+	"bufio"
 	"database/sql"
 	"fmt"
 	"net"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
+	"twist/integration/setup"
 	"twist/internal/api"
 	"twist/internal/api/factory"
 )
 
+// ScriptLine represents a single line in the raw script format
+type ScriptLine struct {
+	Direction string // "<" for server, ">" for client
+	Data      string // the raw data
+}
+
 // ProxyResult contains the result of running a proxy test
 type ProxyResult struct {
-	Database     *sql.DB // Database instance for assertions
-	ClientOutput string  // All output the client received
+	Database     *sql.DB          // Database instance for assertions
+	Assert       *setup.DBAsserts // Database assertion helper
+	ClientOutput string           // All output the client received
+}
+
+// ExecuteScriptFile runs a test script from a script file
+func ExecuteScriptFile(t *testing.T, scriptFilePath string, connectOpts *api.ConnectOptions) *ProxyResult {
+	scriptLines, err := LoadScriptFile(scriptFilePath)
+	if err != nil {
+		t.Fatalf("Failed to load test script from %s: %v", scriptFilePath, err)
+	}
+
+	serverScript, clientScript := ConvertToExpectScripts(scriptLines)
+	return Execute(t, serverScript, clientScript, connectOpts)
+}
+
+// LoadScriptFile loads a test script from a script file
+func LoadScriptFile(scriptFilePath string) ([]ScriptLine, error) {
+	file, err := os.Open(scriptFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open script file: %w", err)
+	}
+	defer file.Close()
+
+	var lines []ScriptLine
+	scanner := bufio.NewScanner(file)
+
+	// Regex to parse lines like: < data or > data
+	lineRegex := regexp.MustCompile(`^([<>])\s+(.+)$`)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Skip comments and empty lines
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		matches := lineRegex.FindStringSubmatch(line)
+		if matches == nil {
+			return nil, fmt.Errorf("invalid line format: %s", line)
+		}
+
+		direction := matches[1]
+		data := matches[2]
+
+		lines = append(lines, ScriptLine{
+			Direction: direction,
+			Data:      data,
+		})
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("error reading script file: %w", err)
+	}
+
+	return lines, nil
+}
+
+// ConvertToExpectScripts converts ScriptLines to server and client expect scripts with intelligent pattern generation
+func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScript string) {
+	var serverLines, clientLines []string
+
+	for i, line := range scriptLines {
+		if line.Direction == "<" {
+			// Server sends data (keep literal string format)
+			serverLines = append(serverLines, `send "`+line.Data+`"`)
+
+			// Generate client expect only if next line is client data
+			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == ">" {
+				// Generate expect pattern from last unique characters
+				expectPattern := generateExpectPattern(line.Data)
+				// Escape any actual ANSI sequences back to string literals for expect scripts
+				escapedPattern := escapeANSIForExpect(expectPattern)
+				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
+			} else if i == len(scriptLines)-1 {
+				// This is the last server message - add sync mechanism
+				// Generate client expect for the last server message to ensure processing completes
+				expectPattern := generateExpectPattern(line.Data)
+				escapedPattern := escapeANSIForExpect(expectPattern)
+				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
+				
+				// Add sync token: server sends a unique marker, client expects it
+				syncToken := "\\x1b[0m<SYNC_COMPLETE>\\x1b[0m"
+				serverLines = append(serverLines, `send "`+syncToken+`"`)
+				clientLines = append(clientLines, `expect "`+syncToken+`"`)
+			}
+		} else if line.Direction == ">" {
+			// Client sends data (keep literal string format)
+			clientLines = append(clientLines, `send "`+line.Data+`"`)
+
+			// Check if next line is server data - if so, generate server expect
+			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == "<" {
+				// Server expects exactly what client sends
+				serverLines = append(serverLines, `expect "`+line.Data+`"`)
+			}
+		}
+	}
+
+	return strings.Join(serverLines, "\n"), strings.Join(clientLines, "\n")
+}
+
+// generateExpectPattern extracts a unique expect pattern from server data
+// Takes last 10-20 characters and finds a good breaking point at ANSI sequences or control chars
+func generateExpectPattern(serverData string) string {
+	// Convert escaped sequences to actual characters but keep ANSI codes
+	actualData, _ := strconv.Unquote("\"" + serverData + "\"")
+
+	// If text is empty, return it as-is
+	if len(actualData) == 0 {
+		return actualData
+	}
+
+	// If text is short, return the whole string
+	if len(actualData) <= 10 {
+		return actualData
+	}
+
+	// Start from last 20 characters (or beginning if shorter) to give us room to find break points
+	startSearchPos := len(actualData) - 20
+	if startSearchPos < 0 {
+		startSearchPos = 0
+	}
+	
+	// Count visible characters from the end to find where we'd have 10 left
+	visibleCount := 0
+	tenCharsLeftPos := len(actualData)
+	
+	for i := len(actualData) - 1; i >= 0; i-- {
+		// Skip ANSI sequences and control characters when counting
+		if actualData[i] == '\x1b' {
+			// We're at the end of an ANSI sequence, skip backwards to find start
+			continue
+		} else if actualData[i] == '\r' || actualData[i] == '\n' {
+			// Skip control characters
+			continue
+		} else if i > 0 && actualData[i-1] == '\x1b' && actualData[i] == '[' {
+			// We're at [ in \x1b[, skip
+			continue
+		} else if i > 1 && actualData[i-2] == '\x1b' && actualData[i-1] == '[' {
+			// We're in the middle of an ANSI sequence
+			continue
+		}
+		
+		// This is a visible character
+		visibleCount++
+		if visibleCount == 10 {
+			tenCharsLeftPos = i
+			break
+		}
+	}
+
+	// Now scan forward from startSearchPos to find the best break point
+	// We prefer break points that give us more context, but only if they're significantly better
+	bestBreakPoint := tenCharsLeftPos // Default to exactly 10 chars
+	
+	// Only look for break points in the first half of our search range
+	// This ensures we don't choose ANSI sequences that are very close to the 10-char boundary
+	midPoint := startSearchPos + (tenCharsLeftPos-startSearchPos)/2
+	
+	for i := startSearchPos; i < midPoint && i < len(actualData); i++ {
+		// Look for good break points
+		if actualData[i] == '\x1b' {
+			// Start of ANSI sequence - this is a good break point if it gives us more context
+			bestBreakPoint = i
+			break
+		} else if actualData[i] == '\r' || actualData[i] == '\n' {
+			// Start of newline - this is a good break point
+			bestBreakPoint = i  
+			break
+		}
+	}
+
+	return actualData[bestBreakPoint:]
+}
+
+
+
+// escapeANSIForExpect converts actual ANSI escape characters back to string literals
+// This is needed when building expect scripts that contain ANSI sequences
+func escapeANSIForExpect(text string) string {
+	// Replace escape character and control characters with their string literals
+	text = strings.ReplaceAll(text, "\x1b", "\\x1b")
+	text = strings.ReplaceAll(text, "\r", "\\r")
+	text = strings.ReplaceAll(text, "\n", "\\n")
+	return text
 }
 
 // Execute runs server and client scripts using the API for complete black-box testing
 //
 // Flow:
 // 1. SERVER: Creates ExpectTelnetServer that runs serverScript (sends data to proxy)
-// 2. PROXY: Created via api.Connect(), may load TWX script, processes data bidirectionally  
+// 2. PROXY: Created via api.Connect(), may load TWX script, processes data bidirectionally
 // 3. CLIENT: Creates SimpleExpectEngine that runs clientScript (expects data from proxy, sends user input)
-//
 func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.ConnectOptions) *ProxyResult {
 	// 1. SERVER: Create and start telnet server with server script
 	server := NewExpectTelnetServer(t)
@@ -68,6 +261,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	}
 
 	// 3. CLIENT: Run client script (includes automatic sync token wait)
+	t.Logf("CLIENT SCRIPT SET:\n%s", clientScript)
 	err = clientExpectEngine.Run(clientScript)
 	if err != nil {
 		t.Fatalf("Client script failed: %v", err)
@@ -75,16 +269,27 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 
 	// Open database for return if path was specified
 	var sqlDB *sql.DB
+	var dbAsserts *setup.DBAsserts
 	if connectOpts != nil && connectOpts.DatabasePath != "" {
 		sqlDB, err = sql.Open("sqlite3", connectOpts.DatabasePath)
 		if err != nil {
 			t.Fatalf("Failed to open database: %v", err)
 		}
-		t.Logf("PROXY TESTER: Returning database at %s", connectOpts.DatabasePath)
+		// Validate database was created and is accessible
+		if sqlDB == nil {
+			t.Fatal("Expected database instance to be created")
+		}
+		// Test database connection
+		if err := sqlDB.Ping(); err != nil {
+			t.Fatalf("Database connection failed: %v", err)
+		}
+		// Create database assertion helper
+		dbAsserts = setup.NewDBAsserts(t, sqlDB)
 	}
 
 	return &ProxyResult{
 		Database:     sqlDB,
+		Assert:       dbAsserts,
 		ClientOutput: clientExpectEngine.GetAllOutput(),
 	}
 }
@@ -305,7 +510,7 @@ func (ets *ExpectTelnetServer) cleanTelnetInput(input string) string {
 		}
 	}
 
-	return strings.TrimSpace(result.String())
+	return result.String()
 }
 
 // sendResponse sends response to client
@@ -345,9 +550,11 @@ func (s *ServerExpectEngine) sendToClient(data string) {
 	s.t.Logf("SERVER EXPECT SENDING TO CLIENT: %q", data)
 
 	if s.conn != nil {
+		// Process escape sequences to convert string literals to actual control characters
+		processedData := processEscapeSequences(data)
 		// Add small delay to simulate network latency
 		time.Sleep(10 * time.Millisecond)
-		s.conn.Write([]byte(data))
+		s.conn.Write([]byte(processedData))
 	}
 }
 

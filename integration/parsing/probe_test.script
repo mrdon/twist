@@ -1,0 +1,8 @@
+# Probe Data Parsing Test - Simple Format
+# Test probe command sequence from raw.log data
+
+< \x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]\x1b[1;37m:\x1b[0;35m[\x1b[1;36m190\x1b[0;35m] (\x1b[1;33m?=Help\x1b[0;35m)? : 
+> e
+< E\r\x1b[0m\n\x1b[32mSubSpace Ether Probe loaded in launch tube, \x1b[1;33m13 \x1b[0;32mremaining.\r\x1b[0m\n\x1b[35mPlease enter a destination for this probe \x1b[1;33m: \x1b[36m 
+> 493
+< \r\x1b[0m\n\r\n\x1b[33mProbe entering sector \x1b[1m: \x1b[36m274\r\x1b[0m\n\r\n\x1b[1;32mSector  \x1b[33m: \x1b[36m274 \x1b[0;32min \x1b[34muncharted space.\r\x1b[0m\n\x1b[35mPorts   \x1b[1;33m: \x1b[36mNerialt Annex\x1b[33m, \x1b[0;35mClass \x1b[1;36m7 \x1b[0;35m(\x1b[1;36mSSS\x1b[0;35m)\r\x1b[0m\n\r\n\x1b[33mProbe entering sector \x1b[1m: \x1b[36m510\r\x1b[0m\n\r\n\x1b[1;32mSector  \x1b[33m: \x1b[36m510 \x1b[0;32min \x1b[34muncharted space.\r\x1b[0m\n\x1b[35mPorts   \x1b[1;33m: \x1b[36mAachen\x1b[33m, \x1b[0;35mClass \x1b[1;36m2 \x1b[0;35m(\x1b[32mB\x1b[1;36mS\x1b[0;32mB\x1b[35m)\r\x1b[0m\n\r\n\x1b[33mProbe entering sector \x1b[1m: \x1b[36m493\r\x1b[0m\n\r\n\x1b[1;32mSector  \x1b[33m: \x1b[36m493 \x1b[0;32min \x1b[34muncharted space.\r\x1b[0m\n\r\n\x1b[1;36mProbe Self Destructs\r\x1b[0m\n\r\n\x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]\x1b[1;37m:\x1b[0;35m[\x1b[1;36m190\x1b[0;35m] (\x1b[1;33m?=Help\x1b[0;35m)? : 

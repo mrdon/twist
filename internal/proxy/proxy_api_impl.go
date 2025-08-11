@@ -2,10 +2,9 @@ package proxy
 
 import (
 	"errors"
-	"fmt"
-	"os"
 	"time"
 	"twist/internal/api"
+	"twist/internal/debug"
 	"twist/internal/proxy/converter"
 )
 
@@ -62,24 +61,8 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 		return errors.New("not connected")
 	}
 	
-	// Log what the TUI is sending to the proxy - append to raw.log
-	if f, err := os.OpenFile("raw.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644); err == nil {
-		fmt.Fprintf(f, "SEND TO PROXY (%d bytes):\n", len(data))
-		// Show each byte in hex and as printable character
-		for _, b := range data {
-			if b >= 32 && b <= 126 {
-				fmt.Fprintf(f, "%c", b)
-			} else if b == 13 {
-				fmt.Fprintf(f, "\\r")
-			} else if b == 10 {
-				fmt.Fprintf(f, "\\n")
-			} else {
-				fmt.Fprintf(f, "\\x%02x", b)
-			}
-		}
-		fmt.Fprintf(f, "\n")
-		f.Close()
-	}
+	// Log raw data chunks for debugging
+	debug.LogDataChunk("SendData", data)
 	
 	p.proxy.SendInput(string(data))
 	return nil
