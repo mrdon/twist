@@ -7,11 +7,10 @@ scripting, and an interactive terminal interface.
 
 ## Status
 
-**Early Alpha - Not for Production Use**
+**⚠️ Early Alpha - Not for Production Use**
 
-- ⚠️ **Early alpha**: Has lots of bugs and shouldn't be used in a real game
-- 🐧 **Limited testing**: Only tested on Linux with modern terminals like Konsole
-- 🚧 **TWX compatibility incomplete**: See [@docs/twx-gaps.md](docs/twx-gaps.md) for detailed analysis
+- **Limited testing**: Only tested on Linux with modern terminals like Konsole
+- **TWX compatibility incomplete**: See [@docs/twx-gaps.md](docs/twx-gaps.md) for detailed analysis
 
 ## Features
 
