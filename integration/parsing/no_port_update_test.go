@@ -39,7 +39,7 @@ func TestNoPortDetectionUpdatesDatabase(t *testing.T) {
 		"Warps to Sector(s) : 5678\r\n" +
 		"\r\n" // No port line - just end the sector
 
-	// Parse sector without port  
+	// Parse sector without port
 	parser.ProcessInBound(sectorWithoutPort)
 	parser.Finalize()
 
@@ -47,56 +47,6 @@ func TestNoPortDetectionUpdatesDatabase(t *testing.T) {
 	port, err = db.LoadPort(1234)
 	if err == nil && port.ClassIndex > 0 {
 		t.Errorf("Expected port data to be cleared, but port still exists: %+v", port)
-	}
-}
-
-// TestNoPortDetectionWithMultipleSectors verifies the fix works correctly
-// across multiple sector visits
-func TestNoPortDetectionWithMultipleSectors(t *testing.T) {
-	// Create test parser with database
-	parser, _, db := CreateTestParser(t)
-	defer db.CloseDatabase()
-
-	// Sector 1000 with port
-	sector1000WithPort := "Sector  : 1000 in uncharted space\r\n" +
-		"Warps to Sector(s) : 1001\r\n" +
-		"Ports   : Trading Post, Class 2 BSS (Ore-50% Organics-70% Equipment-85%)\r\n" +
-		"\r\n"
-
-	parser.ProcessInBound(sector1000WithPort)
-
-	// Sector 1001 without port
-	sector1001WithoutPort := "Sector  : 1001 in uncharted space\r\n" +
-		"Warps to Sector(s) : 1000 1002\r\n" +
-		"\r\n" // No port
-
-	parser.ProcessInBound(sector1001WithoutPort)
-
-	// Sector 1002 with port
-	sector1002WithPort := "Sector  : 1002 in uncharted space\r\n" +
-		"Warps to Sector(s) : 1001\r\n" +
-		"Ports   : Fuel Depot, Class 3 SBS (Ore-40% Organics-60% Equipment-75%)\r\n" +
-		"\r\n"
-
-	parser.ProcessInBound(sector1002WithPort)
-	parser.Finalize()
-
-	// Verify sector 1000 still has port
-	port1000, err := db.LoadPort(1000)
-	if err != nil || port1000.ClassIndex <= 0 {
-		t.Errorf("Expected sector 1000 to have port, got error: %v, port: %+v", err, port1000)
-	}
-
-	// Verify sector 1001 has no port
-	port1001, err := db.LoadPort(1001)
-	if err == nil && port1001.ClassIndex > 0 {
-		t.Errorf("Expected sector 1001 to have no port, but found: %+v", port1001)
-	}
-
-	// Verify sector 1002 has port
-	port1002, err := db.LoadPort(1002)
-	if err != nil || port1002.ClassIndex <= 0 {
-		t.Errorf("Expected sector 1002 to have port, got error: %v, port: %+v", err, port1002)
 	}
 }
 

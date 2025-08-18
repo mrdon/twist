@@ -818,7 +818,15 @@ func (d *SQLiteDatabase) DeletePort(sectorIndex int) error {
 	}
 
 	query := `DELETE FROM ports WHERE sector_index = ?;`
-	_, err := d.db.Exec(query, sectorIndex)
+	
+	// Use transaction if active, otherwise use direct connection (consistent with SavePort)
+	var err error
+	if d.tx != nil {
+		_, err = d.tx.Exec(query, sectorIndex)
+	} else {
+		_, err = d.db.Exec(query, sectorIndex)
+	}
+	
 	if err != nil {
 		return fmt.Errorf("failed to delete port for sector %d: %w", sectorIndex, err)
 	}

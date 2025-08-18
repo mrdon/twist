@@ -1,6 +1,7 @@
 package streaming
 
 import (
+	"database/sql"
 	"fmt"
 	"twist/internal/api"
 	"twist/internal/debug"
@@ -8,8 +9,28 @@ import (
 
 // database_integration.go - Clean database integration points
 // This file focuses solely on connecting the parser to the database layer
+//
+// PREFERRED SAVE PATTERN: Use specific save functions instead of bulk saves
+// Player Stats:
+//   - savePlayerCurrentSector() - updates current sector only
+//   - savePlayerCredits() - updates credits only  
+//   - savePlayerTurns() - updates turns only
+//   - saveAllPlayerStats() - full save (for initial setup only)
+//
+// Sector Data:
+//   - saveSectorBasicInfo() - saves constellation, beacon, navhaz (preserves warps)
+//   - saveProbeWarp(from, to) - saves individual probe warps
+//   - saveSectorPort() - saves port data
+//   - saveSectorVisited(sectorIndex) - marks sector as actually visited (EtHolo)
+//   - saveSectorProbeData(sectorIndex) - marks sector as having probe data (EtCalc)
+//
+// Benefits: Prevents data overwrites, better performance, atomic operations
 
-// saveSectorToDatabase saves the current sector data to database
+// DEPRECATED: saveSectorToDatabase is deprecated. Use specific save functions instead:
+// - saveSectorBasicInfo() - saves constellation, beacon, navhaz (preserves warps)
+// - saveProbeWarp() - saves individual probe warps  
+// - saveSectorPort() - saves port data
+// This prevents accidental data overwrites and provides better performance.
 func (p *TWXParser) saveSectorToDatabase() error {
 	
 	if p.currentSectorIndex <= 0 {
@@ -98,24 +119,196 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	return nil
 }
 
-// savePlayerStatsToDatabase saves current player stats to database
-func (p *TWXParser) savePlayerStatsToDatabase() error {
-	debug.Log("savePlayerStatsToDatabase: p.playerStats - credits: %d, turns: %d, sector: %d", 
-		p.playerStats.Credits, p.playerStats.Turns, p.playerStats.CurrentSector)
+// savePlayerCurrentSector updates only the current sector in player stats
+func (p *TWXParser) savePlayerCurrentSector() error {
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	
-	// Convert to database format using converter
+	_, err := db.Exec("UPDATE player_stats SET current_sector = ? WHERE id = 1", p.playerStats.CurrentSector)
+	return err
+}
+
+// savePlayerCredits updates only the credits in player stats
+func (p *TWXParser) savePlayerCredits() error {
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	_, err := db.Exec("UPDATE player_stats SET credits = ? WHERE id = 1", p.playerStats.Credits)
+	return err
+}
+
+// savePlayerTurns updates only the turns in player stats
+func (p *TWXParser) savePlayerTurns() error {
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	_, err := db.Exec("UPDATE player_stats SET turns = ? WHERE id = 1", p.playerStats.Turns)
+	return err
+}
+
+// saveAllPlayerStats saves complete player stats (for initial setup or complete refresh)
+func (p *TWXParser) saveAllPlayerStats() error {
 	converter := NewPlayerStatsConverter()
 	dbStats := converter.ToDatabase(p.playerStats)
+	return p.database.SavePlayerStats(dbStats)
+}
+
+// saveSectorBasicInfo saves sector constellation, beacon, and navhaz (but not warps)
+func (p *TWXParser) saveSectorBasicInfo() error {
+	if p.currentSectorIndex <= 0 {
+		return nil
+	}
 	
-	debug.Log("savePlayerStatsToDatabase: after conversion - credits: %d, turns: %d, sector: %d", 
-		dbStats.Credits, dbStats.Turns, dbStats.CurrentSector)
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
 	
-	// Save to database
-	if err := p.database.SavePlayerStats(dbStats); err != nil {
+	// Check if sector exists to decide between INSERT and UPDATE
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM sectors WHERE sector_index = ?", p.currentSectorIndex).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check if sector exists: %w", err)
+	}
+	
+	if exists == 0 {
+		// INSERT new sector with basic info only (no warps, no exploration status change)
+		_, err = db.Exec(`
+			INSERT INTO sectors (sector_index, constellation, beacon, nav_haz)
+			VALUES (?, ?, ?, ?)
+		`, p.currentSectorIndex, p.currentSector.Constellation, p.currentSector.Beacon, p.currentSector.NavHaz)
+	} else {
+		// UPDATE only the basic info fields, preserving warps and exploration status
+		_, err = db.Exec(`
+			UPDATE sectors 
+			SET constellation = ?, beacon = ?, nav_haz = ?
+			WHERE sector_index = ?
+		`, p.currentSector.Constellation, p.currentSector.Beacon, p.currentSector.NavHaz, p.currentSectorIndex)
+	}
+	
+	return err
+}
+
+// saveProbeWarp saves a single probe warp from one sector to another
+func (p *TWXParser) saveProbeWarp(fromSector, toSector int) error {
+	debug.Log("saveProbeWarp: adding warp %d -> %d", fromSector, toSector)
+	
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	// First, get existing warps to find an empty slot
+	var warp1, warp2, warp3, warp4, warp5, warp6 int
+	row := db.QueryRow("SELECT warp1, warp2, warp3, warp4, warp5, warp6 FROM sectors WHERE sector_index = ?", fromSector)
+	err := row.Scan(&warp1, &warp2, &warp3, &warp4, &warp5, &warp6)
+	
+	if err == sql.ErrNoRows {
+		// Sector doesn't exist, create it with the warp and mark as probe data (EtCalc = 1)
+		_, err = db.Exec(`
+			INSERT INTO sectors (sector_index, warp1, explored) VALUES (?, ?, 1)
+		`, fromSector, toSector)
+		debug.Log("saveProbeWarp: created new sector %d with warp to %d", fromSector, toSector)
+		return err
+	} else if err != nil {
+		return fmt.Errorf("failed to query existing warps for sector %d: %w", fromSector, err)
+	}
+	
+	// Check if warp already exists
+	warps := []int{warp1, warp2, warp3, warp4, warp5, warp6}
+	for _, warp := range warps {
+		if warp == toSector {
+			debug.Log("saveProbeWarp: warp %d -> %d already exists", fromSector, toSector)
+			return nil
+		}
+	}
+	
+	// Find first empty slot (0 value) and update it
+	for i, warp := range warps {
+		if warp == 0 {
+			warpCol := fmt.Sprintf("warp%d", i+1)
+			_, err = db.Exec(fmt.Sprintf("UPDATE sectors SET %s = ? WHERE sector_index = ?", warpCol), toSector, fromSector)
+			debug.Log("saveProbeWarp: added warp to %s in sector %d", warpCol, fromSector)
+			return err
+		}
+	}
+	
+	debug.Log("saveProbeWarp: no empty warp slots in sector %d", fromSector)
+	return nil // All warp slots full
+}
+
+// saveSectorPort saves port data for the current sector (only when we actually have port data)
+func (p *TWXParser) saveSectorPort() error {
+	if p.currentSectorIndex <= 0 {
+		return nil
+	}
+	
+	// Only save if we actually have port data to save
+	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
+		converter := NewSectorConverter()
+		dbPort := converter.convertPortData(p.currentSector.Port)
+		return p.ensureSectorExistsAndSavePort(dbPort, p.currentSectorIndex)
+	}
+	
+	// Do nothing if no port data - we don't know if sector has a port or not
+	return nil
+}
+
+// clearSectorPort explicitly clears port data when we know the sector has no port
+func (p *TWXParser) clearSectorPort() error {
+	if p.currentSectorIndex <= 0 {
+		return nil
+	}
+	
+	return p.clearPortData(p.currentSectorIndex)
+}
+
+// saveSectorVisited marks a sector as actually visited by the player (EtHolo)
+func (p *TWXParser) saveSectorVisited(sectorIndex int) error {
+	if sectorIndex <= 0 {
+		return nil
+	}
+	
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	// Use INSERT OR IGNORE to create sector if it doesn't exist, then UPDATE to mark as EtHolo (3)
+	_, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", sectorIndex)
+	if err != nil {
 		return err
 	}
 	
-	return nil
+	_, err = db.Exec("UPDATE sectors SET explored = 3 WHERE sector_index = ?", sectorIndex) // EtHolo = 3
+	return err
+}
+
+// saveSectorProbeData marks a sector as having probe/calculated data (EtCalc)
+func (p *TWXParser) saveSectorProbeData(sectorIndex int) error {
+	if sectorIndex <= 0 {
+		return nil
+	}
+	
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	// Only update exploration status if sector doesn't exist or has lower exploration status
+	// Don't downgrade EtHolo (3) or EtDensity (2) to EtCalc (1)
+	_, err := db.Exec(`
+		INSERT OR IGNORE INTO sectors (sector_index, explored) VALUES (?, 1);
+		UPDATE sectors SET explored = 1 WHERE sector_index = ? AND explored < 1
+	`, sectorIndex, sectorIndex)
+	
+	return err
 }
 
 // buildSectorInfo converts SectorData to api.SectorInfo for TUI API

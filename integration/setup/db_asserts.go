@@ -127,3 +127,35 @@ func (a *DBAsserts) AssertSectorConstellation(sectorNum int, expectedConstellati
 			sectorNum, expectedConstellation, actualConstellation)
 	}
 }
+
+// AssertCurrentSector verifies that the current sector is set to the expected value
+func (a *DBAsserts) AssertCurrentSector(expectedSector int) {
+	var currentSector int
+	err := a.db.QueryRow("SELECT COALESCE(current_sector, 0) FROM player_stats WHERE id = 1").Scan(&currentSector)
+	if err != nil {
+		a.t.Fatalf("Failed to get current sector: %v", err)
+	}
+	if currentSector != expectedSector {
+		a.t.Errorf("Expected current sector to be %d, got %d", expectedSector, currentSector)
+	}
+}
+
+// AssertPlayerCredits verifies that player credits match the expected value
+func (a *DBAsserts) AssertPlayerCredits(expectedCredits int) {
+	var actualCredits int
+	err := a.db.QueryRow("SELECT COALESCE(credits, 0) FROM player_stats WHERE id = 1").Scan(&actualCredits)
+	if err != nil {
+		a.t.Fatalf("Failed to get player credits: %v", err)
+	}
+	if actualCredits != expectedCredits {
+		a.t.Errorf("Expected player credits to be %d, got %d", expectedCredits, actualCredits)
+	}
+}
+
+// SetPlayerCredits sets the player credits to a specific value for testing
+func (a *DBAsserts) SetPlayerCredits(credits int) {
+	_, err := a.db.Exec("INSERT OR REPLACE INTO player_stats (id, credits) VALUES (1, ?)", credits)
+	if err != nil {
+		a.t.Fatalf("Failed to set player credits: %v", err)
+	}
+}

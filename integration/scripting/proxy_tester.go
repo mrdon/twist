@@ -30,6 +30,7 @@ type ProxyResult struct {
 	Database     *sql.DB          // Database instance for assertions
 	Assert       *setup.DBAsserts // Database assertion helper
 	ClientOutput string           // All output the client received
+	TuiAPI       *TrackingSectorChangeTuiAPI // TUI API for tracking sector changes
 }
 
 // ExecuteScriptFile runs a test script from a script file
@@ -246,9 +247,13 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 
 	// 2. PROXY: Create client expect engine and connect proxy
 	clientExpectEngine := NewSimpleExpectEngine(t, nil, "\r")
-	tuiAPI := &TestTuiAPI{expectEngine: clientExpectEngine}
+	baseTuiAPI := &TestTuiAPI{expectEngine: clientExpectEngine}
+	trackingTuiAPI := &TrackingSectorChangeTuiAPI{
+		TestTuiAPI:        baseTuiAPI,
+		SectorChangeCalls: make([]api.SectorInfo, 0),
+	}
 	address := fmt.Sprintf("localhost:%d", port)
-	proxyInstance := factory.Connect(address, tuiAPI, connectOpts)
+	proxyInstance := factory.Connect(address, trackingTuiAPI, connectOpts)
 	defer proxyInstance.Disconnect()
 
 	// Set the input sender for client expect engine - this simulates user typing
@@ -292,6 +297,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 		Database:     sqlDB,
 		Assert:       dbAsserts,
 		ClientOutput: clientExpectEngine.GetAllOutput(),
+		TuiAPI:       trackingTuiAPI,
 	}
 }
 
@@ -313,6 +319,16 @@ func (t *TestTuiAPI) OnDatabaseStateChanged(info api.DatabaseStateInfo)         
 func (t *TestTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo)               {}
 func (t *TestTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.TraderInfo) {}
 func (t *TestTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo)                 {}
+
+// TrackingSectorChangeTuiAPI implements api.TuiAPI and tracks OnCurrentSectorChanged calls
+type TrackingSectorChangeTuiAPI struct {
+	*TestTuiAPI
+	SectorChangeCalls []api.SectorInfo
+}
+
+func (t *TrackingSectorChangeTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo) {
+	t.SectorChangeCalls = append(t.SectorChangeCalls, sectorInfo)
+}
 
 // ExpectTelnetServer - Telnet server with server-side expect script support for black-box testing
 type ExpectTelnetServer struct {

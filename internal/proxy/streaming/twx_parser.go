@@ -101,11 +101,11 @@ type TraderInfo struct {
 
 // PlanetInfo holds planet information from sector data
 type PlanetInfo struct {
-	Name      string
-	Owner     string
-	Fighters  int
-	Citadel   bool
-	Stardock  bool
+	Name     string
+	Owner    string
+	Fighters int
+	Citadel  bool
+	Stardock bool
 }
 
 // MineInfo holds mine information from sector data
@@ -126,12 +126,12 @@ const (
 
 // ProductInfo holds product line information
 type ProductInfo struct {
-	Type       ProductType
-	Quantity   int
-	Percent    int
-	Buying     bool
-	Selling    bool
-	Status     string // "Buying", "Selling", etc.
+	Type     ProductType
+	Quantity int
+	Percent  int
+	Buying   bool
+	Selling  bool
+	Status   string // "Buying", "Selling", etc.
 }
 
 // MessageType represents different message categories (mirrors TWX Pascal htXXX types)
@@ -162,30 +162,30 @@ type MessageHistory struct {
 
 // SectorData holds comprehensive sector information
 type SectorData struct {
-	Index        int
+	Index         int
 	Constellation string
-	Beacon       string
-	Warps        [6]int // Warp destinations (1-6)
-	Port         PortData
-	Density      int
-	NavHaz       int
-	Anomaly      bool
-	Explored     bool
+	Beacon        string
+	Warps         [6]int // Warp destinations (1-6)
+	Port          PortData
+	Density       int
+	NavHaz        int
+	Anomaly       bool
+	Explored      bool
 	// Detailed sector data
-	Ships        []ShipInfo
-	Traders      []TraderInfo
-	Planets      []PlanetInfo
-	Mines        []MineInfo
-	Products     []ProductInfo
+	Ships    []ShipInfo
+	Traders  []TraderInfo
+	Planets  []PlanetInfo
+	Mines    []MineInfo
+	Products []ProductInfo
 }
 
 // CurrentSector holds current sector being parsed
 type CurrentSector struct {
-	Index        int
+	Index         int
 	Constellation string
-	Beacon       string
-	Port         PortData // Current port data for build time tracking
-	NavHaz       int      // Navigation hazard percentage
+	Beacon        string
+	Port          PortData // Current port data for build time tracking
+	NavHaz        int      // Navigation hazard percentage
 }
 
 // TWXParser implements the TWX-style stream parser with buffering for partial lines
@@ -198,26 +198,28 @@ type TWXParser struct {
 	ansiStripper    *ansi.StreamingStripper // Handles ANSI sequences across chunks
 
 	// State tracking (mirrors TWX Pascal state)
-	currentDisplay       DisplayType
-	sectorPosition       SectorPosition
-	currentSectorIndex   int
-	portSectorIndex      int
-	figScanSector        int
-	lastWarp             int
-	sectorSaved          bool
-	menuKey              rune
+	currentDisplay         DisplayType
+	sectorPosition         SectorPosition
+	currentSectorIndex     int
+	portSectorIndex        int
+	figScanSector          int
+	lastWarp               int
+	sectorSaved            bool
+	probeMode              bool         // True when parsing probe-discovered sectors, prevents TUI events
+	probeDiscoveredSectors map[int]bool // Track sectors discovered by probes to suppress TUI events
+	menuKey                rune
 
 	// Player statistics (mirrors TWX Pascal FCurrentXXX variables)
 	playerStats PlayerStats
 
 	// Current game data
-	currentSector CurrentSector
+	currentSector      CurrentSector
 	currentSectorWarps [6]int // Temporary storage for parsed warps
-	currentMessage string
-	currentChannel int        // Current radio channel for message context
-	twgsVer       string
-	tw2002Ver     string
-	twgsType      int
+	currentMessage     string
+	currentChannel     int // Current radio channel for message context
+	twgsVer            string
+	tw2002Ver          string
+	twgsType           int
 
 	// Message history
 	messageHistory []MessageHistory
@@ -229,7 +231,7 @@ type TWXParser struct {
 	currentPlanets  []PlanetInfo
 	currentMines    []MineInfo
 	currentProducts []ProductInfo
-	currentTrader   TraderInfo  // Temporary storage for trader being parsed
+	currentTrader   TraderInfo // Temporary storage for trader being parsed
 
 	// Pattern handlers
 	handlers map[string]PatternHandler
@@ -237,53 +239,53 @@ type TWXParser struct {
 	// Position tracking
 	position int64
 	lastChar rune
-	
+
 	// Database integration
 	database database.Database
-	
+
 	// TUI API integration
 	tuiAPI api.TuiAPI
-	
+
 	// Script integration (mirrors Pascal TWXInterpreter integration)
 	scriptEventProcessor *ScriptEventProcessor
-	
+
 	// Observer pattern and event system (Pascal: TTWXModule integration)
-	observers  []IObserver
-	eventBus   IEventBus
+	observers         []IObserver
+	eventBus          IEventBus
 	scriptInterpreter IScriptInterpreter
-	
 }
 
 // NewTWXParser creates a new TWX-style parser with database and TUI API
 func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 	parser := &TWXParser{
-		currentLine:      "",
-		currentANSILine:  "",
-		rawANSILine:      "",
-		inANSI:           false,
-		ansiStripper:     ansi.NewStreamingStripper(),
-		currentDisplay:   DisplayNone,
-		sectorPosition:   SectorPosNormal,
-		lastWarp:         0,
-		sectorSaved:      false,
-		menuKey:          '$',
-		handlers:         make(map[string]PatternHandler),
-		position:         0,
-		lastChar:         0,
-		maxHistorySize:   1000,
-		database:         db, // Required database
-		tuiAPI:           tuiAPI, // Optional TUI API
+		currentLine:            "",
+		currentANSILine:        "",
+		rawANSILine:            "",
+		inANSI:                 false,
+		ansiStripper:           ansi.NewStreamingStripper(),
+		currentDisplay:         DisplayNone,
+		sectorPosition:         SectorPosNormal,
+		lastWarp:               0,
+		sectorSaved:            false,
+		probeDiscoveredSectors: make(map[int]bool),
+		menuKey:                '$',
+		handlers:               make(map[string]PatternHandler),
+		position:               0,
+		lastChar:               0,
+		maxHistorySize:         1000,
+		database:               db,     // Required database
+		tuiAPI:                 tuiAPI, // Optional TUI API
 		// Version detection fields
-		twgsType:         0,
-		twgsVer:          "",
-		tw2002Ver:        "",
+		twgsType:  0,
+		twgsVer:   "",
+		tw2002Ver: "",
 		// Initialize data structures
-		messageHistory:   make([]MessageHistory, 0),
-		currentShips:     make([]ShipInfo, 0),
-		currentTraders:   make([]TraderInfo, 0),
-		currentPlanets:   make([]PlanetInfo, 0),
-		currentMines:     make([]MineInfo, 0),
-		currentProducts:  make([]ProductInfo, 0),
+		messageHistory:  make([]MessageHistory, 0),
+		currentShips:    make([]ShipInfo, 0),
+		currentTraders:  make([]TraderInfo, 0),
+		currentPlanets:  make([]PlanetInfo, 0),
+		currentMines:    make([]MineInfo, 0),
+		currentProducts: make([]ProductInfo, 0),
 		// Initialize script integration (disabled by default)
 		scriptEventProcessor: NewScriptEventProcessor(nil),
 		// Initialize observer pattern
@@ -338,7 +340,7 @@ func (p *TWXParser) setupDefaultHandlers() {
 	p.AddHandler("Fighters: ", p.handleSectorFighters)
 	p.AddHandler("NavHaz  : ", p.handleSectorNavHaz)
 	p.AddHandler("Mines   : ", p.handleSectorMines)
-	
+
 	p.AddHandler(": ", p.handleCIMPrompt)
 
 	// Port data
@@ -368,7 +370,7 @@ func (p *TWXParser) setupDefaultHandlers() {
 	p.AddHandler("Continuing transmission from", p.handleTransmission)
 	p.AddHandler("Deployed Fighters Report Sector", p.handleFighterReport)
 	p.AddHandler("Shipboard Computers ", p.handleComputerReport)
-	
+
 	// Stardock detection from 'V' screen (Pascal: Copy(Line, 14, 8) = 'StarDock')
 	// Note: We register the pattern differently since we need position-specific matching
 }
@@ -377,7 +379,7 @@ func (p *TWXParser) setupDefaultHandlers() {
 func (p *TWXParser) ProcessInBound(data string) {
 	// Note: Text events are fired in processLine() for complete, processed lines
 	// not here for raw chunks which may contain partial data or ANSI codes
-	
+
 	// Remove null chars
 	data = strings.ReplaceAll(data, "\x00", "")
 	p.rawANSILine = data
@@ -416,7 +418,7 @@ func (p *TWXParser) ProcessInBound(data string) {
 		p.currentANSILine = completeANSILine
 
 		// TextLineEvent is fired in processLine, not here (Pascal ProcessInBound behavior)
-		
+
 		// Process the complete line with error recovery
 		p.safeParseWithRecovery("processLine", func() {
 			// Validate line format before processing
@@ -449,7 +451,7 @@ func (p *TWXParser) ProcessInBound(data string) {
 	// Pascal: only fires AutoTextEvent at end of ProcessInBound for partial/prompt data
 	if p.currentLine != "" {
 		p.FireAutoTextEvent(p.currentLine, false)
-		
+
 		// Process partial line for prompts (key TWX feature!)
 		p.processPrompt(p.currentLine)
 	}
@@ -462,7 +464,7 @@ func (p *TWXParser) Finalize() {
 		p.processLine(p.currentLine)
 		p.processPrompt(p.currentLine)
 	}
-	
+
 	// Complete any pending sector
 	if !p.sectorSaved && p.currentSectorIndex > 0 {
 		p.sectorCompleted()
@@ -473,7 +475,7 @@ func (p *TWXParser) Finalize() {
 func (p *TWXParser) stripANSI(s *string) {
 	// Remove bells first
 	*s = strings.ReplaceAll(*s, "\x07", "")
-	
+
 	// Use streaming ANSI stripper to handle sequences split across chunks
 	*s = p.ansiStripper.StripChunk(*s)
 }
@@ -556,7 +558,6 @@ func (p *TWXParser) processPrompt(line string) {
 	// Fire TextEvent as in Pascal TWX ProcessPrompt (mirrors Pascal TWXInterpreter.TextEvent)
 	p.FireTextEvent(line, false)
 
-
 	// Check for prompt patterns
 	for pattern, handler := range p.handlers {
 		if strings.HasPrefix(line, pattern) {
@@ -582,7 +583,7 @@ func (p *TWXParser) checkPatterns(line string) {
 			}
 		}
 	}
-	
+
 	for pattern, handler := range p.handlers {
 		if strings.Contains(line, pattern) {
 			handler(line)
@@ -594,6 +595,13 @@ func (p *TWXParser) checkPatterns(line string) {
 // Handler implementations (core TWX parsing logic)
 
 func (p *TWXParser) handleCommandPrompt(line string) {
+	// Clear all probe state when we get back to command prompt (back to normal player interaction)
+	if p.probeMode || len(p.probeDiscoveredSectors) > 0 {
+		p.probeMode = false
+		p.probeDiscoveredSectors = make(map[int]bool) // Clear all probe-discovered sectors
+		debug.Log("PROBE: Cleared all probe state (command prompt) - back to normal player mode")
+	}
+
 	// Save current sector if not done already
 	if !p.sectorSaved {
 		p.sectorCompleted()
@@ -601,12 +609,12 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 
 	// Extract sector number from "Command [TL=150] (2500) ?" or "Command [TL=00:00:01]:[190] (?=Help)? : "
 	// Try square brackets first (for new format), then parentheses (for old format)
-	
+
 	// Check for square brackets pattern: [sector_number]
 	openBracket := strings.Index(line, "]:[")
 	if openBracket > 0 {
 		// Look for closing bracket after the sector number
-		startPos := openBracket + 3 // Skip "]:[" 
+		startPos := openBracket + 3 // Skip "]:["
 		closeBracket := strings.Index(line[startPos:], "]")
 		if closeBracket > 0 {
 			sectorStr := strings.TrimSpace(line[startPos : startPos+closeBracket])
@@ -616,6 +624,11 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				if p.lastWarp == 0 {
 					p.lastWarp = sectorNum
 				}
+				// Update current sector in player stats and save to database
+				p.playerStats.CurrentSector = sectorNum
+				p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
+					return p.savePlayerCurrentSector()
+				})
 			}
 		}
 	} else {
@@ -630,6 +643,11 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				if p.lastWarp == 0 {
 					p.lastWarp = sectorNum
 				}
+				// Update current sector in player stats and save to database
+				p.playerStats.CurrentSector = sectorNum
+				p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
+					return p.savePlayerCurrentSector()
+				})
 			}
 		}
 	}
@@ -655,28 +673,59 @@ func (p *TWXParser) handleComputerPrompt(line string) {
 }
 
 func (p *TWXParser) handleProbePrompt(line string) {
+	debug.Log("PROBE: handleProbePrompt called with line: %q", line)
+
 	// Check if this is "Probe entering sector :" to extract target sector
 	if strings.Contains(line, "Probe entering sector :") {
+		// Set probe mode to prevent TUI sector change events for probe-discovered sectors
+		p.probeMode = true
+		debug.Log("PROBE: Set probe mode to true")
 		// Handle concatenated lines - extract just the probe part
 		probeStart := strings.Index(line, "Probe entering sector :")
 		if probeStart >= 0 {
 			probeLine := line[probeStart:]
-			
+
 			// Extract sector number from "Probe entering sector : 510"
 			parts := strings.Fields(probeLine)
+			debug.Log("PROBE: parts=%v, len=%d", parts, len(parts))
 			if len(parts) >= 5 {
-				if targetSector := p.parseIntSafe(parts[4]); targetSector > 0 {
+				targetSectorStr := parts[4]
+				debug.Log("PROBE: targetSectorStr=%q", targetSectorStr)
+				if targetSector := p.parseIntSafe(targetSectorStr); targetSector > 0 {
+					debug.Log("PROBE: targetSector=%d, lastWarp=%d", targetSector, p.lastWarp)
+
+					// Mark this sector as discovered by probe to suppress TUI events
+					p.probeDiscoveredSectors[targetSector] = true
+					debug.Log("PROBE: Marked sector %d as probe-discovered", targetSector)
+
 					// If we have a previous sector (lastWarp), create a one-way warp connection
 					if p.lastWarp > 0 && p.lastWarp != targetSector {
+						debug.Log("PROBE: Creating warp from %d to %d", p.lastWarp, targetSector)
 						p.addProbeWarp(p.lastWarp, targetSector)
+					} else {
+						debug.Log("PROBE: Not creating warp - lastWarp=%d, targetSector=%d", p.lastWarp, targetSector)
 					}
 					// Update lastWarp to current target sector for next probe movement
 					p.lastWarp = targetSector
+					debug.Log("PROBE: Updated lastWarp to %d", p.lastWarp)
+				} else {
+					debug.Log("PROBE: Failed to parse targetSectorStr=%q as int", targetSectorStr)
 				}
+			} else {
+				debug.Log("PROBE: Not enough parts in probeLine=%q", probeLine)
 			}
 		}
 	}
-	
+
+	// Check if probe self-destructs to clear probe mode
+	if strings.Contains(line, "Probe Self Destructs") {
+		// Clear probe mode - we're no longer parsing probe data
+		p.probeMode = false
+		// Don't clear probeDiscoveredSectors here - we want to continue suppressing TUI events
+		// for those sectors until the player actually visits them
+		debug.Log("PROBE: Set probe mode to false (probe self-destructed)")
+	}
+
 	if !p.sectorSaved {
 		p.sectorCompleted()
 	}
@@ -696,7 +745,7 @@ func (p *TWXParser) handleCIMPrompt(line string) {
 	if !strings.HasPrefix(line, ": ") {
 		return // Don't trigger for lines like "Probe entering sector : 274"
 	}
-	
+
 	// Pascal: // begin CIM download
 	// Pascal: FCurrentDisplay := dCIM;
 	debug.Log("CIM: handleCIMPrompt called, resetting lastWarp from %d to 0", p.lastWarp)
@@ -706,7 +755,7 @@ func (p *TWXParser) handleCIMPrompt(line string) {
 
 func (p *TWXParser) handleSectorStart(line string) {
 	debug.Log("SECTOR: handleSectorStart called with line: %q, lastWarp=%d", line, p.lastWarp)
-	
+
 	// Extract sector number first to determine if this is a new sector
 	// Format: "Sector  : 1234 in The Sphere"
 	parts := strings.Fields(line)
@@ -718,18 +767,18 @@ func (p *TWXParser) handleSectorStart(line string) {
 				debug.Log("SECTOR: Completing previous sector %d", p.currentSectorIndex)
 				p.sectorCompleted()
 			}
-			
+
 			// Always reset sector data when processing a sector visit
 			// This ensures that data from previous visits doesn't carry over
 			// (including port data that might persist from previous visits)
-			p.sectorSaved = false  // Reset for any sector visit
+			p.sectorSaved = false // Reset for any sector visit
 			debug.Log("SECTOR: About to reset current sector, lastWarp=%d", p.lastWarp)
 			p.resetCurrentSector()
 			debug.Log("SECTOR: After reset current sector, lastWarp=%d", p.lastWarp)
 			p.currentSectorIndex = sectorNum
-			
+
 			p.currentDisplay = DisplaySector
-			
+
 			// Extract constellation (everything after "in")
 			if len(parts) >= 5 && parts[3] == "in" {
 				constellation := strings.Join(parts[4:], " ")
@@ -742,13 +791,13 @@ func (p *TWXParser) handleSectorStart(line string) {
 }
 
 func (p *TWXParser) handleSectorWarps(line string) {
-	
+
 	// Parse warp data from line like "Warps to Sector(s) :  (8247) - 18964"
 	if len(line) > 20 {
 		warpData := line[20:] // Remove "Warps to Sector(s) :"
 		p.parseWarpConnections(warpData)
 	}
-	
+
 	// Don't complete sector here - warps are not always the last item!
 	// Sector display continues with other data like ports, traders, etc.
 }
@@ -761,75 +810,73 @@ func (p *TWXParser) handleSectorBeacon(line string) {
 
 func (p *TWXParser) handleSectorPorts(line string) {
 	p.sectorPosition = SectorPosPorts
-	
+
 	// Parse port data (mirrors TWX Pascal logic from lines 671-703)
 	if strings.Contains(line, "<=-DANGER-=>") {
 		// Port is destroyed - set Dead flag
 		return
 	}
-	
+
 	if len(line) <= 10 {
 		return
 	}
-	
+
 	portInfo := line[10:] // Remove "Ports   : "
-	
+
 	// Extract port name (before ", Class")
 	classPos := strings.Index(portInfo, ", Class")
 	if classPos <= 0 {
 		return
 	}
-	
+
 	portName := strings.TrimSpace(portInfo[:classPos])
-	
+
 	// Extract class number (Pascal: StrToIntSafe(Copy(Line, Pos(', Class', Line) + 8, 1)))
 	classNum := 0
 	if classPos+8 < len(portInfo) {
 		classStr := string(portInfo[classPos+8])
 		classNum = p.parseIntSafe(classStr)
 	}
-	
+
 	// Parse buy/sell indicators from end of line (Pascal logic: lines 685-698)
 	// Format: "Port Name, Class 1 Port BBS" (last 3 chars indicate buy/sell)
 	buyOre := false
 	buyOrg := false
 	buyEquip := false
-	
+
 	if len(portInfo) >= 3 {
 		// Get last 3 characters for trade pattern
 		tradePattern := portInfo[len(portInfo)-3:]
-		
+
 		// Pascal logic: if (Line[length(Line) - 3] = 'B')
 		if len(tradePattern) >= 3 {
 			buyOre = (tradePattern[0] == 'B')
-			buyOrg = (tradePattern[1] == 'B') 
+			buyOrg = (tradePattern[1] == 'B')
 			buyEquip = (tradePattern[2] == 'B')
 		}
 	}
-	
-	
+
 	// Determine port class from buy/sell pattern if not explicit (mirrors Pascal logic)
 	if classNum == 0 {
 		classNum = p.determinePortClassFromPattern(buyOre, buyOrg, buyEquip)
 	}
-	
+
 	// Store port information in current sector data (mirrors Pascal FCurrentSector.SPort)
 	p.currentSector.Port.Name = portName
 	p.currentSector.Port.ClassIndex = classNum
 	p.currentSector.Port.BuildTime = 0 // Reset build time, will be set by continuation line
-	
-	
+
 }
 
 // determinePortClassFromPattern determines port class from buy/sell pattern (mirrors Pascal logic)
 func (p *TWXParser) determinePortClassFromPattern(buyOre, buyOrg, buyEquip bool) int {
 	// Mirror Pascal logic from ProcessPortLine (lines 1055-1062)
 	// BBS = Class 1, BSB = Class 2, SBB = Class 3, etc.
-	
+
 	if buyOre && buyOrg && !buyEquip {
 		return 1 // BBS
 	} else if buyOre && !buyOrg && buyEquip {
-		return 2 // BSB  
+		return 2 // BSB
 	} else if !buyOre && buyOrg && buyEquip {
 		return 3 // SBB
 	} else if !buyOre && !buyOrg && buyEquip {
@@ -843,7 +890,7 @@ func (p *TWXParser) determinePortClassFromPattern(buyOre, buyOrg, buyEquip bool)
 	} else if buyOre && buyOrg && buyEquip {
 		return 8 // BBB
 	}
-	
+
 	return 0 // Unknown pattern
 }
 
@@ -900,7 +947,7 @@ func (p *TWXParser) handlePortReport(line string) {
 
 func (p *TWXParser) handlePortCR(line string) {
 	p.currentDisplay = DisplayPortCR
-	
+
 	// Extract sector number from end of line
 	closeBracket := strings.LastIndex(line, "]")
 	if closeBracket > 0 && closeBracket < len(line)-1 {
@@ -936,14 +983,13 @@ func (p *TWXParser) handleFigScanStart(line string) {
 
 // handleTWGSVersion detects TWGS version (mirrors Pascal lines 295-304)
 func (p *TWXParser) handleTWGSVersion(line string) {
-	
+
 	// Pascal: if TWXClient.BlockExtended and (Copy(Line, 1, 14) = 'TradeWars Game') then
 	if strings.HasPrefix(line, "TradeWars Game") {
 		p.twgsType = 2
 		p.twgsVer = "2.20b"
 		p.tw2002Ver = "3.34"
-		
-		
+
 		// Pascal: TWXInterpreter.TextEvent('Selection (? for menu):', FALSE);
 		// Fire script event after version detection as in Pascal TWX
 		if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
@@ -955,54 +1001,54 @@ func (p *TWXParser) handleTWGSVersion(line string) {
 
 // handleTW2002Version detects TW2002 version (mirrors Pascal lines 305-316)
 func (p *TWXParser) handleTW2002Version(line string) {
-	
+
 	// Pascal: else if TWXClient.BlockExtended and (Copy(Line, 1, 20) = 'Trade Wars 2002 Game') then
 	if strings.HasPrefix(line, "Trade Wars 2002 Game") {
 		p.twgsType = 1
 		p.twgsVer = "1.03"
 		p.tw2002Ver = "3.13"
-		
+
 	}
 }
 
 // handleCitadelTreasury handles Citadel treasury detection (mirrors Pascal line 283)
 func (p *TWXParser) handleCitadelTreasury(line string) {
-	
+
 	// Pascal: else if (Copy(Line, 1, 25) = 'Citadel treasury contains') then
 	if strings.HasPrefix(line, "Citadel treasury contains") {
 		// In Citadel - Save current sector if not done already
 		if !p.sectorSaved {
 			p.sectorCompleted()
 		}
-		
+
 		// No displays anymore, all done (Pascal: FCurrentDisplay := dNone)
 		p.currentDisplay = DisplayNone
-		
+
 	}
 }
 
 func (p *TWXParser) handleTransmission(line string) {
-	
+
 	// Enhanced Pascal-compliant transmission parsing
 	// Pascal: else if (Copy(Line, 1, 26) = 'Incoming transmission from') then
 	if strings.HasPrefix(line, "Incoming transmission from") || strings.HasPrefix(line, "Continuing transmission from") {
 		p.handleEnhancedTransmissionLine(line)
 		return
 	}
-	
+
 	// Fallback to basic parsing for compatibility
 	p.handleBasicTransmission(line)
 }
 
 // handleEnhancedTransmissionLine implements Pascal-compliant transmission parsing (lines 1199-1228)
 func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
-	
+
 	// Pascal: I := GetParameterPos(Line, 4);
 	paramPos := p.getParameterPos(line, 4)
 	if paramPos == -1 {
 		return
 	}
-	
+
 	// Pascal: if (Copy(Line, Length(Line) - 9, 10) = 'comm-link:') then
 	if len(line) >= 10 && line[len(line)-10:] == "comm-link:" {
 		// Fedlink transmission
@@ -1016,7 +1062,7 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 		}
 		return
 	}
-	
+
 	// Pascal: else if (GetParameter(Line, 5) = 'Fighters:') then
 	if p.getParameter(line, 5) == "Fighters:" {
 		// Fighter transmission
@@ -1024,7 +1070,7 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 		p.currentMessage = "Figs"
 		return
 	}
-	
+
 	// Pascal: else if (GetParameter(Line, 5) = 'Computers:') then
 	if p.getParameter(line, 5) == "Computers:" {
 		// Computer transmission
@@ -1032,7 +1078,7 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 		p.currentMessage = "Comp"
 		return
 	}
-	
+
 	// Pascal: else if (Pos(' on channel ', Line) <> 0) then
 	channelPos := strings.Index(line, " on channel ")
 	if channelPos != -1 {
@@ -1041,7 +1087,7 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 		if channelPos > paramPos {
 			sender := strings.TrimSpace(line[paramPos:channelPos])
 			p.currentMessage = "R " + sender + " "
-			
+
 			// Extract channel number for context
 			channelStr := line[channelPos+12:] // After " on channel "
 			channelParts := strings.Fields(channelStr)
@@ -1049,13 +1095,13 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 				channelNum := p.parseIntSafe(strings.TrimSuffix(channelParts[0], ":"))
 				p.currentChannel = channelNum
 			}
-			
+
 		} else {
 			p.currentMessage = "R  "
 		}
 		return
 	}
-	
+
 	// Pascal: else begin // hail
 	// Pascal: FCurrentMessage := 'P ' + Copy(Line, I, Length(Line) - I) + ' ';
 	// TEMPORARILY DISABLED: This causes next line to be treated as message continuation
@@ -1072,7 +1118,7 @@ func (p *TWXParser) handleEnhancedTransmissionLine(line string) {
 
 // handleBasicTransmission provides fallback transmission parsing for compatibility
 func (p *TWXParser) handleBasicTransmission(line string) {
-	
+
 	// Parse transmission type using basic logic
 	if strings.HasSuffix(line, "comm-link:") {
 		// Fedlink transmission
@@ -1134,7 +1180,7 @@ func (p *TWXParser) handleComputerReport(line string) {
 // Processing methods for different display states
 
 func (p *TWXParser) processSectorLine(line string) {
-	
+
 	// Handle continuation lines (start with 8 spaces)
 	if strings.HasPrefix(line, "        ") {
 		p.handleSectorContinuation(line)
@@ -1161,14 +1207,14 @@ func (p *TWXParser) processSectorLine(line string) {
 // This method is kept for compatibility but delegates to the enhanced version
 
 func (p *TWXParser) processWarpLine(line string) {
-	
+
 	// Parse warp lane format: "3 > 300 > 5362 > 13526 > 149 > 434"
 	line = strings.ReplaceAll(line, ")", "")
 	line = strings.ReplaceAll(line, "(", "")
-	
+
 	parts := strings.Split(line, " >")
 	lastSect := p.lastWarp
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		if curSect := p.parseIntSafe(part); curSect > 0 {
@@ -1181,14 +1227,14 @@ func (p *TWXParser) processWarpLine(line string) {
 }
 
 func (p *TWXParser) processCIMLine(line string) {
-	
+
 	// Pascal: // find out what kind of CIM this is
 	// Pascal: if (Length(Line) > 2) then
 	if len(line) <= 2 {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
+
 	// Pascal: if (Line[Length(Line) - 1] = '%') then
 	// Pascal: TWXDatabase.LastPortCIM := Now;
 	// Pascal: FCurrentDisplay := dPortCIM;
@@ -1212,21 +1258,20 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
+
 	sectorNum := p.parseIntSafe(parts[0])
 	if sectorNum <= 0 {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
-	
+
 	// Parse available warp destinations (up to 6 max)
 	var warps [6]int
 	maxWarps := len(parts) - 1 // Number of warp destinations available
 	if maxWarps > 6 {
 		maxWarps = 6 // Cap at 6 warps maximum
 	}
-	
+
 	for i := 0; i < maxWarps; i++ {
 		warpSector := p.parseIntSafe(parts[i+1])
 		if warpSector < 0 { // Invalid warp sector
@@ -1234,35 +1279,35 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 		}
 		warps[i] = warpSector
 	}
-	
+
 	// Store warp data to database (mirrors Pascal TWXDatabase.SaveSector)
 	sector, err := p.database.LoadSector(sectorNum)
 	if err != nil {
 		// Create new sector if it doesn't exist
 		sector = database.NULLSector()
 	}
-	
+
 	// Update warp data
 	for i := 0; i < 6; i++ {
 		sector.Warp[i] = warps[i]
 	}
-	
+
 	// Mark root sector as calculated since it appears in CIM sector report
 	// CIM data marks sectors as calculated, not fully explored (matches TWX behavior)
 	if sector.Explored == database.EtNo {
-		sector.Explored = database.EtCalc  // Mark as calculated (not fully explored)
+		sector.Explored = database.EtCalc // Mark as calculated (not fully explored)
 		if sector.Constellation == "" {
 			sector.Constellation = "??? (warp calc only)"
 		}
 	}
-	
+
 	sector.UpDate = time.Now()
-	
+
 	// Save updated sector
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return
 	}
-	
+
 }
 
 // processPortCIMLine processes port CIM data (mirrors Pascal ProcessCIMLine lines 570-611)
@@ -1271,25 +1316,25 @@ func (p *TWXParser) processPortCIMLine(line string) {
 	// Pascal: save port CIM data
 	// Sect := GetCIMValue(Line, 1);
 	// Len := Length(IntToStr(TWXDatabase.DBHeader.Sectors));
-	
+
 	sectorNum := p.getCIMValue(line, 1)
 	// Check sector number validity (Pascal validation)
 	if sectorNum <= 0 {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
+
 	// Check minimum line length - need at least 7 parameters
 	if len(strings.Fields(line)) < 7 {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
+
 	// Pascal: M := StringReplace(Line, '-', '', [rfReplaceAll]);
 	// Pascal: M := StringReplace(M, '%', '', [rfReplaceAll]);
 	cleanLine := strings.ReplaceAll(line, "-", "")
 	cleanLine = strings.ReplaceAll(cleanLine, "%", "")
-	
+
 	// Pascal: Ore := GetCIMValue(M, 2); POre := GetCIMValue(M, 3);
 	// Pascal: Org := GetCIMValue(M, 4); POrg := GetCIMValue(M, 5);
 	// Pascal: Equip := GetCIMValue(M, 6); PEquip := GetCIMValue(M, 7);
@@ -1299,7 +1344,7 @@ func (p *TWXParser) processPortCIMLine(line string) {
 	orgPercent := p.getCIMValue(cleanLine, 5)
 	equipAmount := p.getCIMValue(cleanLine, 6)
 	equipPercent := p.getCIMValue(cleanLine, 7)
-	
+
 	// Pascal validation: if (Ore < 0) or (Org < 0) or (Equip < 0)
 	//  or (POre < 0) or (POre > 100) or (POrg < 0) or (POrg > 100)
 	//  or (PEquip < 0) or (PEquip > 100) then
@@ -1310,16 +1355,16 @@ func (p *TWXParser) processPortCIMLine(line string) {
 		p.currentDisplay = DisplayNone
 		return
 	}
-	
+
 	// Determine buy/sell status by examining dash positions in original line
 	// This mirrors Pascal logic that would check the original line for dash indicators
 	buyOre := p.determineCIMBuyStatus(line, 2)   // Parameter 2 = ore amount
-	buyOrg := p.determineCIMBuyStatus(line, 4)   // Parameter 4 = org amount  
+	buyOrg := p.determineCIMBuyStatus(line, 4)   // Parameter 4 = org amount
 	buyEquip := p.determineCIMBuyStatus(line, 6) // Parameter 6 = equip amount
-	
+
 	// Determine port class from buy/sell pattern (mirrors Pascal port class logic)
 	portClass := p.determinePortClassFromPattern(buyOre, buyOrg, buyEquip)
-	
+
 	// Store enhanced port CIM data to database
 	p.storePortCIMData(sectorNum, oreAmount, orePercent, buyOre,
 		orgAmount, orgPercent, buyOrg, equipAmount, equipPercent, buyEquip, portClass)
@@ -1333,16 +1378,16 @@ func (p *TWXParser) getCIMValue(line string, paramNum int) int {
 	if paramNum <= 0 || paramNum > len(parts) {
 		return -1 // Invalid parameter number
 	}
-	
+
 	// Convert to 0-indexed (Pascal is 1-indexed)
 	paramValue := parts[paramNum-1]
-	
+
 	// Pascal: if (S = '') or (S = '0') then Result := 0
 	// Pascal: else Result := StrToIntSafe(S);
 	if paramValue == "" || paramValue == "0" {
 		return 0
 	}
-	
+
 	return p.parseIntSafe(paramValue)
 }
 
@@ -1353,7 +1398,7 @@ func (p *TWXParser) determineCIMBuyStatus(originalLine string, paramNum int) boo
 	if paramNum <= 0 || paramNum > len(parts) {
 		return false
 	}
-	
+
 	// Check if the parameter at this position starts with a dash
 	paramValue := parts[paramNum-1]
 	return strings.HasPrefix(paramValue, "-")
@@ -1365,25 +1410,16 @@ func (p *TWXParser) ensureSectorExistsAndSavePort(port database.TPort, sectorNum
 	if p.database == nil {
 		return fmt.Errorf("database not available")
 	}
-	
-	// Always ensure sector exists first (required for foreign key constraint)
-	sector, err := p.database.LoadSector(sectorNum)
-	if err != nil {
-		// Create minimal sector entry
-		sector = database.NULLSector()
-		sector.UpDate = time.Now()
-	}
-	
-	// Always save/update sector to ensure it exists in current transaction context
-	if err := p.database.SaveSector(sector, sectorNum); err != nil {
-		return fmt.Errorf("failed to save sector %d: %w", sectorNum, err)
-	}
-	
+
+	debug.Log("PORT: ensureSectorExistsAndSavePort called for sector %d with port '%s' (Class %d)", sectorNum, port.Name, port.ClassIndex)
+
 	// Save port data
 	if err := p.database.SavePort(port, sectorNum); err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
 	}
-	
+
+	debug.Log("PORT: Successfully saved port data for sector %d: '%s' (Class %d)", sectorNum, port.Name, port.ClassIndex)
+
 	// Fire any necessary events (consistent with other database operations)
 	// This ensures proper notification flow like other database saves
 	return nil
@@ -1394,7 +1430,7 @@ func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort
 	if p.database == nil {
 		return fmt.Errorf("database not available")
 	}
-	
+
 	// Always ensure sector exists first (required for foreign key constraint)
 	sector, err := p.database.LoadSector(sectorNum)
 	if err != nil {
@@ -1402,27 +1438,27 @@ func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort
 		sector = database.NULLSector()
 		sector.UpDate = time.Now()
 	}
-	
+
 	// Mark root sector as calculated since it appears in CIM port report
 	// CIM data marks sectors as calculated, not fully explored (matches TWX behavior)
 	if sector.Explored == database.EtNo {
-		sector.Explored = database.EtCalc  // Mark as calculated (not fully explored)
+		sector.Explored = database.EtCalc // Mark as calculated (not fully explored)
 		if sector.Constellation == "" {
 			sector.Constellation = "??? (port data/calc only)"
 		}
 	}
 	sector.UpDate = time.Now()
-	
+
 	// Always save/update sector to ensure it exists in current transaction context
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return fmt.Errorf("failed to save sector %d: %w", sectorNum, err)
 	}
-	
+
 	// Save port data
 	if err := p.database.SavePort(port, sectorNum); err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
 	}
-	
+
 	// Fire any necessary events (consistent with other database operations)
 	// This ensures proper notification flow like other database saves
 	return nil
@@ -1434,12 +1470,12 @@ func (p *TWXParser) clearPortData(sectorIndex int) error {
 	if p.database == nil {
 		return fmt.Errorf("database not available")
 	}
-	
+
 	// Delete port data from the ports table
 	if err := p.database.DeletePort(sectorIndex); err != nil {
 		return fmt.Errorf("failed to delete port data for sector %d: %w", sectorIndex, err)
 	}
-	
+
 	return nil
 }
 
@@ -1447,11 +1483,11 @@ func (p *TWXParser) clearPortData(sectorIndex int) error {
 // This preserves important persistent data while clearing temporary parsing state
 func (p *TWXParser) resetCurrentSector() {
 	// Only reset parsing-specific data, not persistent sector information
-	p.currentSector.Port = PortData{}      // Clear port data (this was the main fix needed)
-	p.currentSector.Beacon = ""            // Clear beacon (will be set if present)
-	p.currentSector.Constellation = ""     // Clear constellation (will be set if present)
+	p.currentSector.Port = PortData{}  // Clear port data (this was the main fix needed)
+	p.currentSector.Beacon = ""        // Clear beacon (will be set if present)
+	p.currentSector.Constellation = "" // Clear constellation (will be set if present)
 	// Note: We intentionally do NOT reset Index or NavHaz as those are set elsewhere
-	
+
 	p.currentShips = nil
 	p.currentTraders = nil
 	p.currentPlanets = nil
@@ -1464,19 +1500,19 @@ func (p *TWXParser) resetCurrentSector() {
 // storePortCIMData stores complete port CIM data to database
 func (p *TWXParser) storePortCIMData(sectorNum, oreAmount, orePercent int, buyOre bool,
 	orgAmount, orgPercent int, buyOrg bool, equipAmount, equipPercent int, buyEquip bool, portClass int) {
-	
+
 	// Create port data
 	port := database.TPort{
-		Name:           "", 
+		Name:           "",
 		Dead:           false,
-		BuildTime:      0, 
+		BuildTime:      0,
 		ClassIndex:     portClass,
 		BuyProduct:     [3]bool{buyOre, buyOrg, buyEquip},
 		ProductPercent: [3]int{orePercent, orgPercent, equipPercent},
 		ProductAmount:  [3]int{oreAmount, orgAmount, equipAmount},
 		UpDate:         time.Now(),
 	}
-	
+
 	// Mark sector as visited and save port data (CIM port reports are from visited sectors)
 	if err := p.ensureSectorExistsAndSavePortWithVisited(port, sectorNum); err != nil {
 		// Log error but don't panic - this is often called in parsing context
@@ -1486,16 +1522,16 @@ func (p *TWXParser) storePortCIMData(sectorNum, oreAmount, orePercent int, buyOr
 
 // processDensityLine processes density scanner data (mirrors Pascal logic lines 1343-1375)
 func (p *TWXParser) processDensityLine(line string) {
-	
+
 	// Pascal: if (FCurrentDisplay = dDensity) and (Copy(Line, 1, 6) = 'Sector') then
 	if !strings.HasPrefix(line, "Sector") {
 		return
 	}
-	
+
 	if p.database == nil {
 		return
 	}
-	
+
 	// Pascal implementation (lines 1346-1375):
 	// X := Line;
 	// StripChar(X, '(');
@@ -1503,38 +1539,38 @@ func (p *TWXParser) processDensityLine(line string) {
 	x := line
 	x = strings.ReplaceAll(x, "(", "")
 	x = strings.ReplaceAll(x, ")", "")
-	
+
 	// Pascal: I := StrToIntSafe(GetParameter(X, 2));
 	sectorNum := p.parseIntSafe(p.getParameter(x, 2))
 	if sectorNum <= 0 {
 		return
 	}
-	
+
 	// Pascal: Sect := TWXDatabase.LoadSector(I);
 	sector, err := p.database.LoadSector(sectorNum)
 	if err != nil {
 		sector = database.NULLSector()
 	}
-	
+
 	// Pascal: S := GetParameter(X, 4); StripChar(S, ','); Sect.Density := StrToIntSafe(S);
 	densityStr := p.getParameter(x, 4)
 	densityStr = strings.ReplaceAll(densityStr, ",", "")
 	sector.Density = p.parseIntSafe(densityStr)
-	
+
 	// Pascal: if (GetParameter(X, 13) = 'Yes') then Sect.Anomaly := TRUE else Sect.Anomaly := FALSE;
 	anomalyParam := p.getParameter(x, 13)
 	sector.Anomaly = (anomalyParam == "Yes")
-	
+
 	// Pascal: S := GetParameter(X, 10); S := Copy(S, 1, length(S) - 1); Sect.NavHaz := StrToIntSafe(S);
 	navhazStr := p.getParameter(x, 10)
 	if len(navhazStr) > 0 {
 		navhazStr = navhazStr[:len(navhazStr)-1] // Remove last character (%)
 	}
 	sector.NavHaz = p.parseIntSafe(navhazStr)
-	
+
 	// Pascal: Sect.Warps := StrToIntSafe(GetParameter(X, 7));
 	sector.Warps = p.parseIntSafe(p.getParameter(x, 7))
-	
+
 	// Pascal: if (Sect.Explored in [etNo, etCalc]) then
 	if sector.Explored == database.EtNo || sector.Explored == database.EtCalc {
 		// Pascal: Sect.Constellation := '???' + ANSI_9 + ' (Density only)';
@@ -1544,7 +1580,7 @@ func (p *TWXParser) processDensityLine(line string) {
 		sector.Explored = database.EtDensity
 		sector.UpDate = time.Now()
 	}
-	
+
 	// Pascal: TWXDatabase.SaveSector(Sect, I, nil, nil, nil);
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return
@@ -1552,32 +1588,32 @@ func (p *TWXParser) processDensityLine(line string) {
 }
 
 func (p *TWXParser) processFigScanLine(line string) {
-	
+
 	// Handle "No fighters deployed" case - reset fighter database
 	if strings.HasPrefix(line, "No fighters deployed") {
 		p.resetFighterDatabase()
 		return
 	}
-	
+
 	// Parse fig scan format: "940  1  Personal  Defensive  N/A"
 	// Also handles: "940  10T  Personal  Defensive  N/A" (with multipliers)
 	fields := strings.Fields(line)
 	if len(fields) < 4 {
 		return
 	}
-	
+
 	// Parse sector number
 	sectorNum := p.parseIntSafe(fields[0])
 	if sectorNum <= 0 {
 		return
 	}
-	
+
 	// Parse fighter quantity (may have T/M/B multipliers)
 	figQuantity := p.parseFighterQuantity(fields[1])
 	if figQuantity < 0 {
 		return
 	}
-	
+
 	// Parse owner
 	ownerField := fields[2]
 	var owner string
@@ -1586,7 +1622,7 @@ func (p *TWXParser) processFigScanLine(line string) {
 	} else {
 		owner = "belong to your Corp"
 	}
-	
+
 	// Parse fighter type
 	typeField := fields[3]
 	var fighterType FighterType
@@ -1600,7 +1636,7 @@ func (p *TWXParser) processFigScanLine(line string) {
 	default:
 		fighterType = FighterOffensive // Default to offensive
 	}
-	
+
 	// Store fighter data (in a real implementation, this would go to database)
 	_ = FighterData{
 		SectorNum: sectorNum,
@@ -1608,23 +1644,23 @@ func (p *TWXParser) processFigScanLine(line string) {
 		Owner:     owner,
 		Type:      fighterType,
 	}
-	
+
 }
 
 // parseFighterQuantity parses fighter quantities with T/M/B multipliers
 // Examples: "1000", "10T", "5M", "2B"
 func (p *TWXParser) parseFighterQuantity(quantityStr string) int {
 	quantityStr = strings.ReplaceAll(quantityStr, ",", "")
-	
+
 	if quantityStr == "" {
 		return 0
 	}
-	
+
 	// Check for multiplier suffix
 	lastChar := quantityStr[len(quantityStr)-1]
 	var multiplier int = 1
 	var numStr string
-	
+
 	switch lastChar {
 	case 'T', 't':
 		multiplier = 1000
@@ -1639,22 +1675,22 @@ func (p *TWXParser) parseFighterQuantity(quantityStr string) int {
 		multiplier = 1
 		numStr = quantityStr
 	}
-	
+
 	baseQty := p.parseIntSafe(numStr)
 	if baseQty < 0 {
 		return -1
 	}
-	
+
 	return baseQty * multiplier
 }
 
 // resetFighterDatabase resets all fighter data (mirrors TWX Pascal ResetFigDatabase)
 func (p *TWXParser) resetFighterDatabase() {
-	
+
 	if p.database == nil {
 		return
 	}
-	
+
 	// Enhanced Pascal-compliant fighter database reset
 	if err := p.resetFighterDatabasePascalCompliant(); err != nil {
 		// Fallback to simple database reset
@@ -1671,34 +1707,34 @@ func (p *TWXParser) resetFighterDatabase() {
 // resetFighterDatabasePascalCompliant implements the Pascal TWX ResetFigDatabase logic exactly
 func (p *TWXParser) resetFighterDatabasePascalCompliant() error {
 	defer p.recoverFromPanic("resetFighterDatabasePascalCompliant")
-	
+
 	// Pascal: for i:= 11 to TWXDatabase.DBHeader.Sectors do
 	totalSectors := p.database.GetSectors()
 	if totalSectors <= 10 {
 		return nil
 	}
-	
+
 	// Find Stardock sector by checking for Stardock planets
 	stardockSector := p.findStardockSector()
-	
+
 	sectorsProcessed := 0
 	sectorsReset := 0
-	
+
 	// Iterate through sectors starting from 11 (Pascal convention)
 	for i := 11; i <= totalSectors; i++ {
 		// Pascal: if (i <> TWXDatabase.DBHeader.Stardock) then
 		if i == stardockSector {
 			continue
 		}
-		
+
 		// Pascal: Sect := TWXDatabase.LoadSector(i);
 		sector, err := p.database.LoadSector(i)
 		if err != nil {
 			continue
 		}
-		
+
 		sectorsProcessed++
-		
+
 		// Pascal: if (Sect.Figs.Owner = 'yours') or (Sect.Figs.Owner = 'belong to your Corp') then
 		if p.isPersonalOrCorpFighter(sector.Figs.Owner) {
 			// Pascal: Sect.Figs.Quantity := 0;
@@ -1706,16 +1742,16 @@ func (p *TWXParser) resetFighterDatabasePascalCompliant() error {
 			sector.Figs.Quantity = 0
 			sector.Figs.Owner = ""
 			sector.Figs.FigType = 3 // ftNone
-			
+
 			// Pascal: TWXDatabase.SaveSector(Sect, i);
 			if err := p.database.SaveSector(sector, i); err != nil {
 				continue
 			}
-			
+
 			sectorsReset++
 		}
 	}
-	
+
 	return nil
 }
 
@@ -1728,7 +1764,7 @@ func (p *TWXParser) findStardockSector() int {
 		if err != nil {
 			continue
 		}
-		
+
 		// Check if this sector has a Stardock planet
 		for _, planet := range sector.Planets {
 			if planet.Stardock {
@@ -1736,7 +1772,7 @@ func (p *TWXParser) findStardockSector() int {
 			}
 		}
 	}
-	
+
 	// Default fallback - no Stardock found
 	return -1 // No Stardock to exclude
 }
@@ -1746,48 +1782,47 @@ func (p *TWXParser) isPersonalOrCorpFighter(owner string) bool {
 	if owner == "" {
 		return false
 	}
-	
+
 	ownerLower := strings.ToLower(owner)
-	
+
 	// Pascal exact matching
-	return owner == "yours" || 
-		   owner == "belong to your Corp" ||
-		   ownerLower == "yours" ||
-		   ownerLower == "belong to your corp" ||
-		   strings.Contains(ownerLower, "your corp") ||
-		   strings.Contains(ownerLower, "your corporation")
+	return owner == "yours" ||
+		owner == "belong to your Corp" ||
+		ownerLower == "yours" ||
+		ownerLower == "belong to your corp" ||
+		strings.Contains(ownerLower, "your corp") ||
+		strings.Contains(ownerLower, "your corporation")
 }
 
 // handleStardockDetection processes Stardock detection from 'V' screen (mirrors Pascal lines 1234-1264)
 func (p *TWXParser) handleStardockDetection(line string) {
-	
+
 	// Find "sector" and extract the number after it
 	sectorPos := strings.Index(line, "sector")
 	if sectorPos == -1 {
 		return
 	}
-	
+
 	// Extract everything after "sector "
 	afterSector := line[sectorPos+7:] // Skip "sector "
 	dotPos := strings.Index(afterSector, ".")
 	if dotPos == -1 {
 		return
 	}
-	
+
 	sectorStr := strings.TrimSpace(afterSector[:dotPos])
 	sectorNum := p.parseIntSafe(sectorStr)
-	
+
 	if sectorNum <= 0 {
 		return
 	}
-	
-	
+
 	// Check if Stardock is already known
 	currentStardock := p.getStardockSector()
 	if currentStardock != 0 && currentStardock != 65535 {
 		return
 	}
-	
+
 	// Pascal: if (I > 0) and (I <= TWXDatabase.DBHeader.Sectors) then
 	// For now, we'll assume reasonable sector range
 	if sectorNum > 0 && sectorNum <= 50000 {
@@ -1801,31 +1836,31 @@ func (p *TWXParser) setupStardockSector(sectorNum int) {
 	if p.database == nil {
 		return
 	}
-	
+
 	// Pascal logic: setup Federation beacon and constellation, port class 9
 	sector, err := p.database.LoadSector(sectorNum)
 	if err != nil {
 		// Create new sector if it doesn't exist
 		sector = database.NULLSector()
 	}
-	
+
 	// Pascal: Sect.Constellation := 'The Federation';
 	sector.Constellation = "The Federation"
-	
+
 	// Pascal: Sect.Beacon := 'FedSpace, FedLaw Enforced';
 	sector.Beacon = "FedSpace, FedLaw Enforced"
-	
+
 	// Pascal: Sect.Explored := etCalc;
 	sector.Explored = database.EtCalc
-	
+
 	// Pascal: Sect.Update := Now;
 	sector.UpDate = time.Now()
-	
+
 	// Save the sector first
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
 		return
 	}
-	
+
 	// Phase 2: Create separate port data for Stargate
 	port := database.TPort{
 		Name:           "Stargate Alpha I",
@@ -1837,7 +1872,7 @@ func (p *TWXParser) setupStardockSector(sectorNum int) {
 		ProductAmount:  [3]int{0, 0, 0},
 		UpDate:         time.Now(),
 	}
-	
+
 	// Save port data directly (sector already exists)
 	if err := p.database.SavePort(port, sectorNum); err != nil {
 		return
@@ -1849,7 +1884,7 @@ func (p *TWXParser) setStardockSector(sectorNum int) {
 	if p.database == nil {
 		return
 	}
-	
+
 	// Store as script variable (Pascal stores in INI file, we'll use script variables)
 	if err := p.database.SaveScriptVariable("$STARDOCK", sectorNum); err != nil {
 	} else {
@@ -1861,12 +1896,12 @@ func (p *TWXParser) getStardockSector() int {
 	if p.database == nil {
 		return 0
 	}
-	
+
 	value, err := p.database.LoadScriptVariable("$STARDOCK")
 	if err != nil {
 		return 0 // Unknown
 	}
-	
+
 	// Handle different numeric types that database might return
 	switch v := value.(type) {
 	case int:
@@ -1879,50 +1914,107 @@ func (p *TWXParser) getStardockSector() int {
 			return sectorNum
 		}
 	}
-	
+
 	return 0 // Unknown
 }
 
 // Utility methods
 
+// DEPRECATED: sectorCompleted() is being phased out in favor of specific save functions.
+// Instead of relying on this bulk save at sector completion, individual parsers should
+// save their specific data immediately using functions like:
+// - savePlayerCurrentSector()
+// - saveSectorBasicInfo()
+// - saveSectorPort()
+// - saveProbeWarp()
+// This prevents data overwrites and improves performance with targeted SQL updates.
 func (p *TWXParser) sectorCompleted() {
 	defer p.recoverFromPanic("sectorCompleted")
-	
+	debug.Log("PROBE: sectorCompleted called for sector %d (probeMode=%t, sectorSaved=%t)", p.currentSectorIndex, p.probeMode, p.sectorSaved)
+
 	// Skip if already completed to avoid duplicate TUI API calls
 	if p.sectorSaved {
+		debug.Log("PROBE: Skipping sectorCompleted for sector %d - already saved", p.currentSectorIndex)
 		return
 	}
-	
+
 	// Finalize any pending trader without ship details
 	if p.sectorPosition == SectorPosTraders && p.currentTrader.Name != "" {
 		p.validateTraderData(&p.currentTrader)
 		p.currentTraders = append(p.currentTraders, p.currentTrader)
 		p.currentTrader = TraderInfo{} // Reset
 	}
-	
+
 	// Validate sector number before completion
 	if !p.validateSectorNumber(p.currentSectorIndex) {
 		return
 	}
-	
+
 	// Validate all collected data before saving
 	p.validateCollectedSectorData()
-	
-	
-	// Save sector data to database with error recovery
-	p.errorRecoveryHandler("saveSectorToDatabase", func() error {
-		return p.saveSectorToDatabase()
+
+	// Save sector data to database with error recovery using specific save functions
+	// This prevents overwriting probe warps that were saved separately
+	p.errorRecoveryHandler("saveSectorBasicInfo", func() error {
+		return p.saveSectorBasicInfo()
 	})
-	
+
+	// Handle port data - save if we have it, clear if we parsed a complete sector without finding any
+	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
+		// We found port data, save it
+		debug.Log("PORT: Saving port data for sector %d: %s (Class %d)", p.currentSectorIndex, p.currentSector.Port.Name, p.currentSector.Port.ClassIndex)
+		p.errorRecoveryHandler("saveSectorPort", func() error {
+			return p.saveSectorPort()
+		})
+	} else {
+		// Only clear port data if we've finished parsing a complete sector AND we have no other sector features
+		// This prevents clearing ports for sectors with planets/citadels that might have special properties
+		hasOtherFeatures := len(p.currentShips) > 0 || len(p.currentTraders) > 0 || len(p.currentPlanets) > 0 || len(p.currentMines) > 0
+		if !hasOtherFeatures {
+			// We've completed parsing a basic sector without any features, clear any existing port data
+			debug.Log("PORT: Clearing port data for sector %d (basic sector with no features)", p.currentSectorIndex)
+			p.errorRecoveryHandler("clearSectorPort", func() error {
+				return p.clearSectorPort()
+			})
+		} else {
+			debug.Log("PORT: Sector %d has other features (%d ships, %d traders, %d planets, %d mines), not clearing port data",
+				p.currentSectorIndex, len(p.currentShips), len(p.currentTraders), len(p.currentPlanets), len(p.currentMines))
+		}
+	}
+
+	// Mark sector exploration status based on context
+	if p.probeMode {
+		// Mark as probe data (EtCalc) when discovered by probes
+		p.errorRecoveryHandler("saveSectorProbeData", func() error {
+			return p.saveSectorProbeData(p.currentSectorIndex)
+		})
+	} else {
+		// Mark current sector as visited by player (EtHolo)
+		p.errorRecoveryHandler("saveSectorVisited", func() error {
+			return p.saveSectorVisited(p.currentSectorIndex)
+		})
+	}
+
+	// Fire TUI current sector change event (but not for probe-discovered sectors)
+	isProbeDiscovered := p.probeDiscoveredSectors[p.currentSectorIndex]
+	if p.tuiAPI != nil && !isProbeDiscovered {
+		sectorData := p.buildSectorData()
+		sectorInfo := p.buildSectorInfo(sectorData)
+		debug.Log("PROBE: Firing OnCurrentSectorChanged for sector %d (probe-discovered=%t)", sectorInfo.Number, isProbeDiscovered)
+		p.tuiAPI.OnCurrentSectorChanged(sectorInfo)
+	} else if p.tuiAPI != nil {
+		debug.Log("PROBE: Suppressing OnCurrentSectorChanged for sector %d (probe-discovered=%t)", p.currentSectorIndex, isProbeDiscovered)
+	}
+
 	// Fire sector complete event
 	sectorData := p.buildSectorData()
 	p.fireSectorCompleteEvent(sectorData)
-	
+
 	// Fire trader data update event if we have traders
 	if len(p.currentTraders) > 0 {
 		p.fireTraderDataEvent(p.currentSectorIndex, p.currentTraders)
 	}
-	
+
 	p.sectorSaved = true
 }
 
@@ -2022,11 +2114,12 @@ func (p *TWXParser) ProcessChunk(data []byte) {
 
 // processQuickStats parses the QuickStats line (mirrors TWX Pascal ProcessQuickStats)
 // Format: Sect 1│Turns 1,600│Creds 10,000│Figs 30│Shlds 0│Hlds 40│Ore 0│Org 0│Equ 0
-//         Col 0│Phot 0│Armd 0│Lmpt 0│GTorp 0│TWarp No│Clks 0│Beacns 0│AtmDt 0│Crbo 0
-//         EPrb 0│MDis 0│PsPrb No│PlScn No│LRS None,Dens,Holo│Aln 0│Exp 0│Ship 1 MerCru
+//
+//	Col 0│Phot 0│Armd 0│Lmpt 0│GTorp 0│TWarp No│Clks 0│Beacns 0│AtmDt 0│Crbo 0
+//	EPrb 0│MDis 0│PsPrb No│PlScn No│LRS None,Dens,Holo│Aln 0│Exp 0│Ship 1 MerCru
 func (p *TWXParser) processQuickStats(line string) {
 	defer p.recoverFromPanic("processQuickStats")
-	
+
 	if !strings.HasPrefix(line, " ") {
 		return
 	}
@@ -2035,7 +2128,6 @@ func (p *TWXParser) processQuickStats(line string) {
 	if !p.validateLineFormat(line) {
 		return
 	}
-
 
 	// Remove leading space with bounds checking
 	if len(line) < 2 {
@@ -2156,8 +2248,8 @@ func (p *TWXParser) processQuickStats(line string) {
 			key := parts[0]
 			switch key {
 			case "Turns", "Creds", "Figs", "Shlds", "Crbo", "Hlds", "Ore", "Org", "Equ", "Col",
-				 "Phot", "Armd", "Lmpt", "GTorp", "Clks", "Beacns", "AtmDt", "EPrb", "MDis",
-				 "Aln", "Exp", "Corp", "TWarp", "PsPrb", "PlScn", "LRS", "Ship":
+				"Phot", "Armd", "Lmpt", "GTorp", "Clks", "Beacns", "AtmDt", "EPrb", "MDis",
+				"Aln", "Exp", "Corp", "TWarp", "PsPrb", "PlScn", "LRS", "Ship":
 				foundStats = true
 				break
 			}
@@ -2166,19 +2258,19 @@ func (p *TWXParser) processQuickStats(line string) {
 			break
 		}
 	}
-	
+
 	if foundStats {
 		// Set current sector in player stats
 		p.playerStats.CurrentSector = p.currentSectorIndex
 
 		// Validate all collected player stats
 		p.validatePlayerStats(&p.playerStats)
-		
+
 		// Save player stats to database with error recovery
-		p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
-			return p.savePlayerStatsToDatabase()
+		p.errorRecoveryHandler("saveAllPlayerStats", func() error {
+			return p.saveAllPlayerStats()
 		})
-		
+
 		// Fire player stats update event
 		p.firePlayerStatsEvent(p.playerStats)
 	}
@@ -2195,18 +2287,18 @@ func (p *TWXParser) handleMessageLine(line string) {
 
 // parseWarpConnections parses warp connections from warp data string with validation and conflict resolution
 func (p *TWXParser) parseWarpConnections(warpData string) {
-	
+
 	// Initialize warps array
 	var warps [6]int
-	
+
 	// First, strip ANSI color codes to avoid parsing issues
 	warpData = ansi.StripString(warpData)
-	
+
 	// Clean up the warp data - remove parentheses and split on various delimiters
 	warpData = strings.ReplaceAll(warpData, "(", "")
 	warpData = strings.ReplaceAll(warpData, ")", "")
 	warpData = strings.TrimSpace(warpData)
-	
+
 	// Split on both " - " and ", " to handle different formats
 	var warpStrs []string
 	if strings.Contains(warpData, " - ") {
@@ -2217,7 +2309,7 @@ func (p *TWXParser) parseWarpConnections(warpData string) {
 		// Single warp or space-separated
 		warpStrs = strings.Fields(warpData)
 	}
-	
+
 	// Parse and validate each warp sector number
 	warpIndex := 0
 	for _, warpStr := range warpStrs {
@@ -2243,13 +2335,13 @@ func (p *TWXParser) parseWarpConnections(warpData string) {
 			}
 		}
 	}
-	
+
 	// Sort warps for consistency (mirrors Pascal AddWarp insertion sort logic)
 	p.sortWarps(warps[:warpIndex])
-	
+
 	// Store the warps in the current sector data
 	p.currentSectorWarps = warps
-	
+
 	// Update reverse warp connections in database for advanced pathfinding
 	p.updateReverseWarpConnections(p.currentSectorIndex, warps[:warpIndex])
 }
@@ -2260,15 +2352,15 @@ func (p *TWXParser) validateWarpSector(sectorNum int) bool {
 	if sectorNum <= 0 {
 		return false
 	}
-	
+
 	// NOTE: Don't validate against database max sectors as it prevents discovering new sectors
 	// The database only knows about sectors that have already been visited/parsed
-	
+
 	// Reasonable upper bound check (Trade Wars maximum is 20,000 sectors)
 	if sectorNum > 20000 {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -2300,7 +2392,7 @@ func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
 	if p.database == nil {
 		return
 	}
-	
+
 	// For each destination sector, ensure it has a reverse warp back to this sector
 	// This mirrors the Pascal AddWarp logic for maintaining bidirectional connectivity
 	for _, toSector := range warps {
@@ -2312,58 +2404,20 @@ func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
 
 // addProbeWarp adds a one-way warp connection discovered by probe movement
 func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
-	if p.database == nil {
-		return
-	}
-	
-	// Load the source sector
-	sector, err := p.database.LoadSector(fromSector)
+	debug.Log("PROBE WARP: addProbeWarp called from %d to %d", fromSector, toSector)
+
+	// Use the new specific save function
+	err := p.saveProbeWarp(fromSector, toSector)
 	if err != nil {
+		debug.Log("PROBE WARP: Failed to save probe warp %d -> %d: %v", fromSector, toSector, err)
 		return
 	}
-	
-	// Check if warp already exists
-	for _, existingWarp := range sector.Warp {
-		if existingWarp == toSector {
-			return // Already exists
-		}
-	}
-	
-	// Find insertion position (maintain sorted order like Pascal AddWarp)
-	insertPos := -1
-	for i, warp := range sector.Warp {
-		if warp == 0 || warp > toSector {
-			insertPos = i
-			break
-		}
-	}
-	
-	if insertPos >= 0 && insertPos < 6 {
-		// Shift existing warps right
-		for i := 5; i > insertPos; i-- {
-			sector.Warp[i] = sector.Warp[i-1]
-		}
-		sector.Warp[insertPos] = toSector
-		
-		// Mark as calculated data if not already explored
-		if sector.Explored == database.EtNo {
-			sector.Constellation = "??? (probe data/calc only)"
-			sector.Explored = database.EtCalc
-		}
-		sector.UpDate = time.Now()
-		
-		// Save the updated sector
-		err = p.database.SaveSector(sector, fromSector)
-		if err != nil {
-			return
-		}
-		
-		// CRITICAL: Also update in-memory warp state if this is the current sector
-		// This prevents sectorCompleted() from overwriting the probe warp with empty currentSectorWarps
-		if fromSector == p.currentSectorIndex {
-			copy(p.currentSectorWarps[:], sector.Warp[:])
-		}
-	}
+	debug.Log("PROBE WARP: Successfully saved probe warp %d -> %d", fromSector, toSector)
+
+	// Mark target sector as having probe data
+	p.errorRecoveryHandler("saveSectorProbeData", func() error {
+		return p.saveSectorProbeData(toSector)
+	})
 }
 
 // addReverseWarp adds a reverse warp connection (mirrors Pascal AddWarp method)
@@ -2373,14 +2427,14 @@ func (p *TWXParser) addReverseWarp(toSector, fromSector int) {
 	if err != nil {
 		return
 	}
-	
+
 	// Check if reverse warp already exists
 	for _, existingWarp := range sector.Warp {
 		if existingWarp == fromSector {
 			return // Already exists
 		}
 	}
-	
+
 	// Find insertion position (maintain sorted order like Pascal AddWarp)
 	insertPos := -1
 	for i, warp := range sector.Warp {
@@ -2389,20 +2443,20 @@ func (p *TWXParser) addReverseWarp(toSector, fromSector int) {
 			break
 		}
 	}
-	
+
 	if insertPos >= 0 && insertPos < 6 {
 		// Shift existing warps right
 		for i := 5; i > insertPos; i-- {
 			sector.Warp[i] = sector.Warp[i-1]
 		}
 		sector.Warp[insertPos] = fromSector
-		
+
 		// Mark as calculated data if not already explored
 		if sector.Explored == 0 { // EtNo
 			sector.Constellation = "???" + " (warp calc only)"
 			sector.Explored = 1 // EtCalc
 		}
-		
+
 		// Save updated sector
 		if err := p.database.SaveSector(sector, toSector); err != nil {
 		} else {
@@ -2421,7 +2475,7 @@ func (p *TWXParser) GetCurrentDisplay() DisplayType {
 func (p *TWXParser) SetCurrentDisplay(display DisplayType) {
 	oldDisplay := p.currentDisplay
 	p.currentDisplay = display
-	
+
 	// Fire state change event
 	p.fireStateChangeEvent("display", oldDisplay, display)
 }
@@ -2429,12 +2483,12 @@ func (p *TWXParser) SetCurrentDisplay(display DisplayType) {
 // SetEventBus sets the event bus for module communication
 func (p *TWXParser) SetEventBus(bus IEventBus) {
 	p.eventBus = bus
-	
+
 	// Update script interpreter with new event bus
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter = NewScriptInterpreter(bus)
 	}
-	
+
 }
 
 // GetEventBus returns the current event bus
@@ -2447,7 +2501,7 @@ func (p *TWXParser) FireTextEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.TextEvent(line, outbound)
 	}
-	
+
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
 		if err := p.scriptEventProcessor.FireTextEvent(line, false); err != nil {
@@ -2460,7 +2514,7 @@ func (p *TWXParser) FireTextLineEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.TextLineEvent(line, outbound)
 	}
-	
+
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
 		p.scriptEventProcessor.FireTextLineEvent(line, outbound)
@@ -2472,7 +2526,7 @@ func (p *TWXParser) ActivateTriggers() {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.ActivateTriggers()
 	}
-	
+
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
 		p.scriptEventProcessor.FireActivateTriggers()
@@ -2484,7 +2538,7 @@ func (p *TWXParser) FireAutoTextEvent(line string, outbound bool) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.AutoTextEvent(line, outbound)
 	}
-	
+
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
 		p.scriptEventProcessor.FireAutoTextEvent(line, outbound)
@@ -2503,11 +2557,11 @@ func (p *TWXParser) SetDatabase(db database.Database) {
 
 // ProcessOutBound processes outbound data and returns whether to continue sending
 func (p *TWXParser) ProcessOutBound(data string) bool {
-	
+
 	// Fire outbound text events
 	p.FireTextEvent(data, true)
 	p.FireTextLineEvent(data, true)
-	
+
 	// Fire outbound event to event bus
 	if p.eventBus != nil {
 		event := Event{
@@ -2520,7 +2574,7 @@ func (p *TWXParser) ProcessOutBound(data string) bool {
 		}
 		p.eventBus.Fire(event)
 	}
-	
+
 	// Always continue sending (return true means "continue")
 	return true
 }
@@ -2546,7 +2600,7 @@ func (p *TWXParser) Detach(observerID string) {
 
 // Notify notifies all observers of an event
 func (p *TWXParser) Notify(event Event) {
-	
+
 	for _, observer := range p.observers {
 		func() {
 			defer func() {
@@ -2565,17 +2619,17 @@ func (p *TWXParser) fireStateChangeEvent(property string, oldValue, newValue int
 	event := Event{
 		Type: EventStateChange,
 		Data: map[string]interface{}{
-			"property":  property,
-			"oldValue":  oldValue,
-			"newValue":  newValue,
-			"sector":    p.currentSectorIndex,
+			"property": property,
+			"oldValue": oldValue,
+			"newValue": newValue,
+			"sector":   p.currentSectorIndex,
 		},
 		Source: "TWXParser",
 	}
-	
+
 	// Notify observers
 	p.Notify(event)
-	
+
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
@@ -2592,10 +2646,10 @@ func (p *TWXParser) fireSectorCompleteEvent(sectorData SectorData) {
 		},
 		Source: "TWXParser",
 	}
-	
+
 	// Notify observers
 	p.Notify(event)
-	
+
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
@@ -2612,10 +2666,10 @@ func (p *TWXParser) fireParseCompleteEvent(line string) {
 		},
 		Source: "TWXParser",
 	}
-	
+
 	// Notify observers
 	p.Notify(event)
-	
+
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
@@ -2634,10 +2688,10 @@ func (p *TWXParser) fireMessageEvent(msgType MessageType, content, sender string
 		},
 		Source: "TWXParser",
 	}
-	
+
 	// Notify observers
 	p.Notify(event)
-	
+
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
@@ -2655,10 +2709,10 @@ func (p *TWXParser) fireDatabaseUpdateEvent(operation string, sectorNum int, dat
 		},
 		Source: "TWXParser",
 	}
-	
+
 	// Notify observers
 	p.Notify(event)
-	
+
 	// Fire to event bus
 	if p.eventBus != nil {
 		p.eventBus.Fire(event)
@@ -2679,7 +2733,7 @@ func (p *TWXParser) fireTraderDataEvent(sectorNumber int, traders []TraderInfo) 
 				Alignment: trader.Alignment,
 			}
 		}
-		
+
 		// Fire the event
 		p.tuiAPI.OnTraderDataUpdated(sectorNumber, apiTraders)
 	}
@@ -2690,7 +2744,7 @@ func (p *TWXParser) firePlayerStatsEvent(stats PlayerStats) {
 	if p.tuiAPI != nil {
 		// Convert internal PlayerStats to API PlayerStatsInfo using converter
 		apiStats := converter.ConvertPlayerStatsToPlayerStatsInfo(stats)
-		
+
 		// Fire the event
 		p.tuiAPI.OnPlayerStatsUpdated(apiStats)
 	}
