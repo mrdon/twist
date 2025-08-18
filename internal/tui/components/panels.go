@@ -431,6 +431,17 @@ func (pc *PanelComponent) UpdateSectorInfo(sector api.SectorInfo) {
 	}
 }
 
+// UpdateSectorData updates sector data in maps without changing the current sector focus
+func (pc *PanelComponent) UpdateSectorData(sector api.SectorInfo) {
+	if pc.useGraphviz && pc.graphvizMap != nil {
+		pc.graphvizMap.UpdateSectorData(sector)
+	} else if pc.sixelMap != nil {
+		pc.sixelMap.UpdateSectorData(sector)
+	} else if pc.sectorMap != nil {
+		pc.sectorMap.UpdateSectorData(sector)
+	}
+}
+
 // SetTraderInfoText sets custom text in the trader info panel
 func (pc *PanelComponent) SetTraderInfoText(text string) {
 	pc.leftView.SetText(text)

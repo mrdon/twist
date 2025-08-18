@@ -78,6 +78,14 @@ func (m *MockTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {
 	m.PlayerStatsEvents = append(m.PlayerStatsEvents, PlayerStatsEvent{Stats: stats})
 }
 
+func (m *MockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
+	// Mock implementation - could store port info if needed for tests
+}
+
+func (m *MockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
+	// Mock implementation - could store sector info if needed for tests
+}
+
 func TestTraderEventFiring(t *testing.T) {
 	// Create test database and mock TUI API
 	db := database.NewDatabase()

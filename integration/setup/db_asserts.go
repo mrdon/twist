@@ -292,3 +292,183 @@ func (a *DBAsserts) AssertPortStatus(sectorNum int, expectedDead bool, expectedB
 		a.t.Errorf("Expected port build time to be %d, got %d", expectedBuildTime, actualBuildTime)
 	}
 }
+
+// AssertPlayerFighters verifies that player has the expected number of fighters
+func (a *DBAsserts) AssertPlayerFighters(expectedFighters int) {
+	var actualFighters int
+	err := a.db.QueryRow("SELECT COALESCE(fighters, 0) FROM player_stats WHERE id = 1").Scan(&actualFighters)
+	if err != nil {
+		a.t.Fatalf("Failed to get player fighters: %v", err)
+	}
+	if actualFighters != expectedFighters {
+		a.t.Errorf("Expected player fighters to be %d, got %d", expectedFighters, actualFighters)
+	}
+}
+
+// AssertPlayerShields verifies that player has the expected number of shields
+func (a *DBAsserts) AssertPlayerShields(expectedShields int) {
+	var actualShields int
+	err := a.db.QueryRow("SELECT COALESCE(shields, 0) FROM player_stats WHERE id = 1").Scan(&actualShields)
+	if err != nil {
+		a.t.Fatalf("Failed to get player shields: %v", err)
+	}
+	if actualShields != expectedShields {
+		a.t.Errorf("Expected player shields to be %d, got %d", expectedShields, actualShields)
+	}
+}
+
+// AssertPlayerColonists verifies that player has the expected number of colonists
+func (a *DBAsserts) AssertPlayerColonists(expectedColonists int) {
+	var actualColonists int
+	err := a.db.QueryRow("SELECT COALESCE(col_holds, 0) FROM player_stats WHERE id = 1").Scan(&actualColonists)
+	if err != nil {
+		a.t.Fatalf("Failed to get player colonists: %v", err)
+	}
+	if actualColonists != expectedColonists {
+		a.t.Errorf("Expected player colonists to be %d, got %d", expectedColonists, actualColonists)
+	}
+}
+
+// AssertPlayerPhotons verifies that player has the expected number of photons
+func (a *DBAsserts) AssertPlayerPhotons(expectedPhotons int) {
+	var actualPhotons int
+	err := a.db.QueryRow("SELECT COALESCE(photons, 0) FROM player_stats WHERE id = 1").Scan(&actualPhotons)
+	if err != nil {
+		a.t.Fatalf("Failed to get player photons: %v", err)
+	}
+	if actualPhotons != expectedPhotons {
+		a.t.Errorf("Expected player photons to be %d, got %d", expectedPhotons, actualPhotons)
+	}
+}
+
+// AssertPlayerArmidMines verifies that player has the expected number of armid mines
+func (a *DBAsserts) AssertPlayerArmidMines(expectedArmids int) {
+	var actualArmids int
+	err := a.db.QueryRow("SELECT COALESCE(armids, 0) FROM player_stats WHERE id = 1").Scan(&actualArmids)
+	if err != nil {
+		a.t.Fatalf("Failed to get player armid mines: %v", err)
+	}
+	if actualArmids != expectedArmids {
+		a.t.Errorf("Expected player armid mines to be %d, got %d", expectedArmids, actualArmids)
+	}
+}
+
+// AssertPlayerLimpetMines verifies that player has the expected number of limpet mines
+func (a *DBAsserts) AssertPlayerLimpetMines(expectedLimpets int) {
+	var actualLimpets int
+	err := a.db.QueryRow("SELECT COALESCE(limpets, 0) FROM player_stats WHERE id = 1").Scan(&actualLimpets)
+	if err != nil {
+		a.t.Fatalf("Failed to get player limpet mines: %v", err)
+	}
+	if actualLimpets != expectedLimpets {
+		a.t.Errorf("Expected player limpet mines to be %d, got %d", expectedLimpets, actualLimpets)
+	}
+}
+
+// AssertPlayerGenesisDevices verifies that player has the expected number of genesis devices
+func (a *DBAsserts) AssertPlayerGenesisDevices(expectedGenTorps int) {
+	var actualGenTorps int
+	err := a.db.QueryRow("SELECT COALESCE(gen_torps, 0) FROM player_stats WHERE id = 1").Scan(&actualGenTorps)
+	if err != nil {
+		a.t.Fatalf("Failed to get player genesis devices: %v", err)
+	}
+	if actualGenTorps != expectedGenTorps {
+		a.t.Errorf("Expected player genesis devices to be %d, got %d", expectedGenTorps, actualGenTorps)
+	}
+}
+
+// AssertPlayerCloaks verifies that player has the expected number of cloaks
+func (a *DBAsserts) AssertPlayerCloaks(expectedCloaks int) {
+	var actualCloaks int
+	err := a.db.QueryRow("SELECT COALESCE(cloaks, 0) FROM player_stats WHERE id = 1").Scan(&actualCloaks)
+	if err != nil {
+		a.t.Fatalf("Failed to get player cloaks: %v", err)
+	}
+	if actualCloaks != expectedCloaks {
+		a.t.Errorf("Expected player cloaks to be %d, got %d", expectedCloaks, actualCloaks)
+	}
+}
+
+// AssertPlayerBeacons verifies that player has the expected number of beacons
+func (a *DBAsserts) AssertPlayerBeacons(expectedBeacons int) {
+	var actualBeacons int
+	err := a.db.QueryRow("SELECT COALESCE(beacons, 0) FROM player_stats WHERE id = 1").Scan(&actualBeacons)
+	if err != nil {
+		a.t.Fatalf("Failed to get player beacons: %v", err)
+	}
+	if actualBeacons != expectedBeacons {
+		a.t.Errorf("Expected player beacons to be %d, got %d", expectedBeacons, actualBeacons)
+	}
+}
+
+// AssertPlayerAtomicDetonators verifies that player has the expected number of atomic detonators
+func (a *DBAsserts) AssertPlayerAtomicDetonators(expectedAtomics int) {
+	var actualAtomics int
+	err := a.db.QueryRow("SELECT COALESCE(atomics, 0) FROM player_stats WHERE id = 1").Scan(&actualAtomics)
+	if err != nil {
+		a.t.Fatalf("Failed to get player atomic detonators: %v", err)
+	}
+	if actualAtomics != expectedAtomics {
+		a.t.Errorf("Expected player atomic detonators to be %d, got %d", expectedAtomics, actualAtomics)
+	}
+}
+
+// AssertPlayerCarbonite verifies that player has the expected amount of carbonite
+func (a *DBAsserts) AssertPlayerCarbonite(expectedCorbomite int) {
+	var actualCorbomite int
+	err := a.db.QueryRow("SELECT COALESCE(corbomite, 0) FROM player_stats WHERE id = 1").Scan(&actualCorbomite)
+	if err != nil {
+		a.t.Fatalf("Failed to get player carbonite: %v", err)
+	}
+	if actualCorbomite != expectedCorbomite {
+		a.t.Errorf("Expected player carbonite to be %d, got %d", expectedCorbomite, actualCorbomite)
+	}
+}
+
+// AssertPlayerEtherProbes verifies that player has the expected number of ether probes
+func (a *DBAsserts) AssertPlayerEtherProbes(expectedEprobes int) {
+	var actualEprobes int
+	err := a.db.QueryRow("SELECT COALESCE(eprobes, 0) FROM player_stats WHERE id = 1").Scan(&actualEprobes)
+	if err != nil {
+		a.t.Fatalf("Failed to get player ether probes: %v", err)
+	}
+	if actualEprobes != expectedEprobes {
+		a.t.Errorf("Expected player ether probes to be %d, got %d", expectedEprobes, actualEprobes)
+	}
+}
+
+// AssertPlayerMineDisruptors verifies that player has the expected number of mine disruptors
+func (a *DBAsserts) AssertPlayerMineDisruptors(expectedMineDisr int) {
+	var actualMineDisr int
+	err := a.db.QueryRow("SELECT COALESCE(mine_disr, 0) FROM player_stats WHERE id = 1").Scan(&actualMineDisr)
+	if err != nil {
+		a.t.Fatalf("Failed to get player mine disruptors: %v", err)
+	}
+	if actualMineDisr != expectedMineDisr {
+		a.t.Errorf("Expected player mine disruptors to be %d, got %d", expectedMineDisr, actualMineDisr)
+	}
+}
+
+// AssertPlayerAlignment verifies that player has the expected alignment
+func (a *DBAsserts) AssertPlayerAlignment(expectedAlignment int) {
+	var actualAlignment int
+	err := a.db.QueryRow("SELECT COALESCE(alignment, 0) FROM player_stats WHERE id = 1").Scan(&actualAlignment)
+	if err != nil {
+		a.t.Fatalf("Failed to get player alignment: %v", err)
+	}
+	if actualAlignment != expectedAlignment {
+		a.t.Errorf("Expected player alignment to be %d, got %d", expectedAlignment, actualAlignment)
+	}
+}
+
+// AssertPlayerShipNumber verifies that player has the expected ship number
+func (a *DBAsserts) AssertPlayerShipNumber(expectedShipNumber int) {
+	var actualShipNumber int
+	err := a.db.QueryRow("SELECT COALESCE(ship_number, 0) FROM player_stats WHERE id = 1").Scan(&actualShipNumber)
+	if err != nil {
+		a.t.Fatalf("Failed to get player ship number: %v", err)
+	}
+	if actualShipNumber != expectedShipNumber {
+		a.t.Errorf("Expected player ship number to be %d, got %d", expectedShipNumber, actualShipNumber)
+	}
+}

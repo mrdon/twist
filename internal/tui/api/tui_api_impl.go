@@ -17,6 +17,7 @@ type TwistApp interface {
 	HandlePortUpdated(portInfo coreapi.PortInfo)
 	HandleTraderDataUpdated(sectorNumber int, traders []coreapi.TraderInfo)
 	HandlePlayerStatsUpdated(stats coreapi.PlayerStatsInfo)
+	HandleSectorUpdated(sectorInfo coreapi.SectorInfo)
 }
 
 // TuiApiImpl implements TuiAPI as a thin orchestration layer
@@ -98,6 +99,11 @@ func (tui *TuiApiImpl) OnTraderDataUpdated(sectorNumber int, traders []coreapi.T
 // Player statistics event handler - called when player stats are updated
 func (tui *TuiApiImpl) OnPlayerStatsUpdated(stats coreapi.PlayerStatsInfo) {
 	go tui.app.HandlePlayerStatsUpdated(stats)
+}
+
+// Sector update event handler - called when sector data is updated (e.g. from etherprobe)
+func (tui *TuiApiImpl) OnSectorUpdated(sectorInfo coreapi.SectorInfo) {
+	go tui.app.HandleSectorUpdated(sectorInfo)
 }
 
 // processDataLoop runs in a single goroutine to process all terminal data sequentially

@@ -83,6 +83,14 @@ func (m *MockTwistApp) HandlePlayerStatsUpdated(stats api.PlayerStatsInfo) {
 	}
 }
 
+func (m *MockTwistApp) HandlePortUpdated(portInfo api.PortInfo) {
+	// Mock implementation for port updates
+}
+
+func (m *MockTwistApp) HandleSectorUpdated(sectorInfo api.SectorInfo) {
+	// Mock implementation for sector updates
+}
+
 // MockTuiAPI that integrates with MockTwistApp
 type FullMockTuiAPI struct {
 	App *MockTwistApp
@@ -111,6 +119,16 @@ func (m *FullMockTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.Tra
 func (m *FullMockTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {
 	// Simulate TuiApiImpl calling the app handler
 	m.App.HandlePlayerStatsUpdated(stats)
+}
+
+func (m *FullMockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
+	// Simulate TuiApiImpl calling the app handler
+	m.App.HandlePortUpdated(portInfo)
+}
+
+func (m *FullMockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
+	// Simulate TuiApiImpl calling the app handler
+	m.App.HandleSectorUpdated(sectorInfo)
 }
 
 func TestFullTUIIntegrationChain(t *testing.T) {

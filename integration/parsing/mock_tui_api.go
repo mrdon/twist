@@ -116,6 +116,26 @@ func (m *MockTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.TraderI
 	}
 }
 
+// OnPortUpdated implements TuiAPI interface
+func (m *MockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
+	call := fmt.Sprintf("OnPortUpdated(sector=%d, name=%s, class=%s)", 
+		portInfo.SectorID, portInfo.Name, portInfo.ClassType.String())
+	m.calls = append(m.calls, call)
+	if m.t != nil {
+		m.t.Logf("MockTuiAPI: %s", call)
+	}
+}
+
+// OnSectorUpdated implements TuiAPI interface
+func (m *MockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
+	call := fmt.Sprintf("OnSectorUpdated(sector=%d, visited=%t)", 
+		sectorInfo.Number, sectorInfo.Visited)
+	m.calls = append(m.calls, call)
+	if m.t != nil {
+		m.t.Logf("MockTuiAPI: %s", call)
+	}
+}
+
 // GetCallsAsString returns all calls as a single string for easy validation
 func (m *MockTuiAPI) GetCallsAsString() string {
 	return strings.Join(m.calls, "\n")

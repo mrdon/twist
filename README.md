@@ -5,6 +5,14 @@ scripting, and an interactive terminal interface.
 
 <img src="docs/2025-08-05_00-44.png" alt="Twist Interface" width="800">
 
+## Status
+
+**Early Alpha - Not for Production Use**
+
+- ⚠️ **Early alpha**: Has lots of bugs and shouldn't be used in a real game
+- 🐧 **Limited testing**: Only tested on Linux with modern terminals like Konsole
+- 🚧 **TWX compatibility incomplete**: See [@docs/twx-gaps.md](docs/twx-gaps.md) for detailed analysis
+
 ## Features
 
 - **Real-time Game Parsing**: Automatically parses Trade Wars 2002 game data including sectors, traders, ships, and ports
@@ -39,30 +47,16 @@ make test
 ./twist [options]
 ```
 
-The proxy will connect to Trade Wars 2002 servers and provide an enhanced interface with:
-
-- Real-time sector information display
-- Automated data collection and parsing
-- Script execution capabilities
-- Visual sector mapping
-- Game statistics tracking
-
 ## Development
 
-### Testing
-
-The project includes comprehensive tests:
-
-- Unit tests for core components
-- Integration tests for game parsing
-- Streaming tests for real-time data processing
+### Building and Testing
 
 ```bash
+# Build and run the application
+make run
+
 # Run all tests
 make test
-
-# Run integration tests
-go test -tags=integration ./integration/...
 ```
 
 ## Based on TWX Proxy

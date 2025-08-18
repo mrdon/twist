@@ -2,6 +2,7 @@ package streaming
 
 import (
 	"time"
+	"twist/internal/api"
 	"twist/internal/proxy/database"
 )
 
@@ -122,6 +123,96 @@ func (c *SectorConverter) convertPortFromDB(dbPort database.TPort) PortData {
 		OreAmount:    dbPort.ProductAmount[0],
 		OrgAmount:    dbPort.ProductAmount[1],
 		EquipAmount:  dbPort.ProductAmount[2],
+	}
+}
+
+// convertToAPIPortInfo converts parser port data to API PortInfo format
+func (c *SectorConverter) convertToAPIPortInfo(port PortData, sectorID int) api.PortInfo {
+	// Convert class index to PortClass enum
+	var classType api.PortClass
+	switch port.ClassIndex {
+	case 1:
+		classType = api.PortClassBBS
+	case 2:
+		classType = api.PortClassBSB
+	case 3:
+		classType = api.PortClassSBB
+	case 4:
+		classType = api.PortClassSSB
+	case 5:
+		classType = api.PortClassSBS
+	case 6:
+		classType = api.PortClassBSS
+	case 7:
+		classType = api.PortClassSSS
+	case 8:
+		classType = api.PortClassBBB
+	case 9:
+		classType = api.PortClassSTD
+	default:
+		classType = api.PortClass(0) // Unknown
+	}
+
+	// Build products array
+	var products []api.ProductInfo
+	
+	// FuelOre
+	var oreStatus api.ProductStatus
+	if port.BuyOre {
+		oreStatus = api.ProductStatusBuying
+	} else if port.OreAmount > 0 {
+		oreStatus = api.ProductStatusSelling
+	} else {
+		oreStatus = api.ProductStatusNone
+	}
+	products = append(products, api.ProductInfo{
+		Type:       api.ProductTypeFuelOre,
+		Status:     oreStatus,
+		Quantity:   port.OreAmount,
+		Percentage: port.OrePercent,
+	})
+
+	// Organics
+	var orgStatus api.ProductStatus
+	if port.BuyOrg {
+		orgStatus = api.ProductStatusBuying
+	} else if port.OrgAmount > 0 {
+		orgStatus = api.ProductStatusSelling
+	} else {
+		orgStatus = api.ProductStatusNone
+	}
+	products = append(products, api.ProductInfo{
+		Type:       api.ProductTypeOrganics,
+		Status:     orgStatus,
+		Quantity:   port.OrgAmount,
+		Percentage: port.OrgPercent,
+	})
+
+	// Equipment
+	var equipStatus api.ProductStatus
+	if port.BuyEquip {
+		equipStatus = api.ProductStatusBuying
+	} else if port.EquipAmount > 0 {
+		equipStatus = api.ProductStatusSelling
+	} else {
+		equipStatus = api.ProductStatusNone
+	}
+	products = append(products, api.ProductInfo{
+		Type:       api.ProductTypeEquipment,
+		Status:     equipStatus,
+		Quantity:   port.EquipAmount,
+		Percentage: port.EquipPercent,
+	})
+
+	return api.PortInfo{
+		SectorID:   sectorID,
+		Name:       port.Name,
+		Class:      port.ClassIndex,
+		ClassType:  classType,
+		BuildTime:  port.BuildTime,
+		Products:   products,
+		LastUpdate: time.Now(),
+		Dead:       port.Dead,
 	}
 }
 

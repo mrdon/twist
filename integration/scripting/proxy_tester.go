@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -270,6 +271,16 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 		connectOpts.ScriptName = scriptPath
 	}
 
+	// Handle database setup - create temporary database if no options provided
+	if connectOpts == nil {
+		// Create temporary database with random name to prevent test interference
+		tempDir := t.TempDir()
+		dbPath := filepath.Join(tempDir, fmt.Sprintf("test_%d.db", time.Now().UnixNano()))
+		connectOpts = &api.ConnectOptions{DatabasePath: dbPath}
+	}
+	// Note: If connectOpts exists but DatabasePath is empty, leave it empty
+	// This allows tests to explicitly request no database
+
 	// 2. PROXY: Create client expect engine and connect proxy
 	clientExpectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	baseTuiAPI := &TestTuiAPI{expectEngine: clientExpectEngine}
@@ -362,6 +373,14 @@ func (t *TrackingSectorChangeTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsI
 	t.PlayerStatsCallsMutex.Lock()
 	defer t.PlayerStatsCallsMutex.Unlock()
 	t.PlayerStatsCalls = append(t.PlayerStatsCalls, stats)
+}
+
+func (t *TrackingSectorChangeTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
+	// Mock implementation - could store port info if needed for tests
+}
+
+func (t *TrackingSectorChangeTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
+	// Mock implementation - could store sector info if needed for tests
 }
 
 // ExpectTelnetServer - Telnet server with server-side expect script support for black-box testing

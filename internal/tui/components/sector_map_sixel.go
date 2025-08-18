@@ -114,6 +114,28 @@ func (smc *SixelSectorMapComponent) UpdateCurrentSectorWithInfo(sectorInfo api.S
 	smc.refreshMap()
 }
 
+// UpdateSectorData updates sector data without changing the current sector focus
+func (smc *SixelSectorMapComponent) UpdateSectorData(sectorInfo api.SectorInfo) {
+	// Update the sector data in our cache
+	smc.sectorData[sectorInfo.Number] = sectorInfo
+	
+	// If this sector is connected to current sector or is the current sector, refresh the map
+	if smc.currentSector > 0 && (sectorInfo.Number == smc.currentSector || smc.isSectorConnected(sectorInfo.Number)) {
+		smc.refreshMap()
+	}
+}
+
+// isSectorConnected checks if a sector is connected to the current sector
+func (smc *SixelSectorMapComponent) isSectorConnected(sectorNumber int) bool {
+	connectedSectors := smc.getConnectedSectors(smc.currentSector)
+	for _, sector := range connectedSectors {
+		if sector == sectorNumber {
+			return true
+		}
+	}
+	return false
+}
+
 // refreshMap refreshes the entire map display
 func (smc *SixelSectorMapComponent) refreshMap() {
 	if smc.proxyAPI == nil {

@@ -67,6 +67,29 @@ func (psmc *ProperSixelSectorMapComponent) UpdateCurrentSectorWithInfo(sectorInf
 	psmc.needsRedraw = true
 }
 
+// UpdateSectorData updates sector data without changing the current sector focus
+func (psmc *ProperSixelSectorMapComponent) UpdateSectorData(sectorInfo api.SectorInfo) {
+	// Update the sector data in our cache
+	psmc.sectorData[sectorInfo.Number] = sectorInfo
+	
+	// If this sector is connected to current sector or is the current sector, trigger redraw
+	if psmc.currentSector > 0 && (sectorInfo.Number == psmc.currentSector || psmc.isSectorConnected(sectorInfo.Number)) {
+		psmc.needsRedraw = true
+	}
+}
+
+// isSectorConnected checks if a sector is connected to the current sector
+func (psmc *ProperSixelSectorMapComponent) isSectorConnected(sectorNumber int) bool {
+	if currentSectorInfo, exists := psmc.sectorData[psmc.currentSector]; exists {
+		for _, warp := range currentSectorInfo.Warps {
+			if warp == sectorNumber {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // LoadRealMapData loads real sector data from the API
 func (psmc *ProperSixelSectorMapComponent) LoadRealMapData() {
 	if psmc.proxyAPI == nil {

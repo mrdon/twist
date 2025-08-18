@@ -570,11 +570,16 @@ func (ta *TwistApp) HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
 	
 	ta.app.QueueUpdateDraw(func() {
-		// Update panel display with new port information
+		// Port updates should not change the current sector focus
+		// Only update the sector data (same as HandleSectorUpdated)
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			// If this is the current sector, refresh panels immediately  
-			// Note: GetCurrentSector method not yet implemented in Phase 2
-			ta.refreshPanelData(portInfo.SectorID)
+			// Create basic sector info for the port update
+			sectorInfo := coreapi.SectorInfo{
+				Number:  portInfo.SectorID,
+				HasPort: true,
+			}
+			debug.Log("TwistApp: Handling port update for sector %d", portInfo.SectorID)
+			ta.panelComponent.UpdateSectorData(sectorInfo)
 		}
 	})
 }
@@ -595,6 +600,17 @@ func (ta *TwistApp) HandlePlayerStatsUpdated(stats coreapi.PlayerStatsInfo) {
 		// Update trader panel with current player stats (for display context)
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
 			ta.panelComponent.UpdatePlayerStats(stats)
+		}
+	})
+}
+
+// HandleSectorUpdated processes sector data update events (e.g. from etherprobe)
+func (ta *TwistApp) HandleSectorUpdated(sectorInfo coreapi.SectorInfo) {
+	ta.app.QueueUpdateDraw(func() {
+		// Update sector data in maps without changing current sector focus
+		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
+			debug.Log("TwistApp: Handling sector data update for sector %d", sectorInfo.Number)
+			ta.panelComponent.UpdateSectorData(sectorInfo)
 		}
 	})
 }

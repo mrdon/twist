@@ -113,6 +113,7 @@ func (p *TWXParser) saveSectorToDatabase() error {
 	// Notify TUI API if available
 	if p.tuiAPI != nil {
 		sectorInfo := p.buildSectorInfo(sectorData)
+		debug.Log("DATABASE_INTEGRATION: Firing OnCurrentSectorChanged for sector %d [SOURCE: saveSectorToDatabase]", p.currentSectorIndex)
 		p.tuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}
 	
@@ -192,7 +193,20 @@ func (p *TWXParser) saveSectorBasicInfo() error {
 		`, p.currentSector.Constellation, p.currentSector.Beacon, p.currentSector.NavHaz, p.currentSectorIndex)
 	}
 	
-	return err
+	if err != nil {
+		return err
+	}
+	
+	// Fire sector update event after successful basic info save
+	if p.tuiAPI != nil {
+		// Build sector info from current parser data
+		sectorData := p.buildSectorData()
+		sectorInfo := p.buildSectorInfo(sectorData)
+		debug.Log("DATABASE: Firing OnSectorUpdated for basic info sector %d", p.currentSectorIndex)
+		p.tuiAPI.OnSectorUpdated(sectorInfo)
+	}
+	
+	return nil
 }
 
 // saveSectorWarps saves the parsed warps from currentSectorWarps to the database
@@ -315,7 +329,19 @@ func (p *TWXParser) saveSectorPort() error {
 	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
 		converter := NewSectorConverter()
 		dbPort := converter.convertPortData(p.currentSector.Port)
-		return p.ensureSectorExistsAndSavePort(dbPort, p.currentSectorIndex)
+		err := p.ensureSectorExistsAndSavePort(dbPort, p.currentSectorIndex)
+		if err != nil {
+			return err
+		}
+		
+		// Fire port update event after successful save
+		if p.tuiAPI != nil {
+			portInfo := converter.convertToAPIPortInfo(p.currentSector.Port, p.currentSectorIndex)
+			debug.Log("DATABASE: Firing OnPortUpdated for sector %d: %s", p.currentSectorIndex, p.currentSector.Port.Name)
+			p.tuiAPI.OnPortUpdated(portInfo)
+		}
+		
+		return nil
 	}
 	
 	// Do nothing if no port data - we don't know if sector has a port or not
@@ -370,7 +396,23 @@ func (p *TWXParser) saveSectorProbeData(sectorIndex int) error {
 		UPDATE sectors SET explored = 1 WHERE sector_index = ? AND explored < 1
 	`, sectorIndex, sectorIndex)
 	
-	return err
+	if err != nil {
+		return err
+	}
+	
+	// Fire sector update event after successful probe data save
+	if p.tuiAPI != nil {
+		// For probe data, we need to get the sector info from database since we don't have current parser data
+		// We'll create a minimal SectorInfo with what we know
+		sectorInfo := api.SectorInfo{
+			Number:  sectorIndex,
+			Visited: false, // This is probe data, not actually visited
+		}
+		debug.Log("DATABASE: Firing OnSectorUpdated for probe data sector %d", sectorIndex)
+		p.tuiAPI.OnSectorUpdated(sectorInfo)
+	}
+	
+	return nil
 }
 
 // buildSectorInfo converts SectorData to api.SectorInfo for TUI API

@@ -2014,15 +2014,16 @@ func (p *TWXParser) sectorCompleted() {
 		})
 	}
 
-	// Fire TUI current sector change event (but not for probe-discovered sectors)
+	// Fire TUI current sector change event (but not for probe-discovered sectors or probe mode)
 	isProbeDiscovered := p.probeDiscoveredSectors[p.currentSectorIndex]
-	if p.tuiAPI != nil && !isProbeDiscovered {
+	shouldSuppressEvent := p.probeMode || isProbeDiscovered
+	if p.tuiAPI != nil && !shouldSuppressEvent {
 		sectorData := p.buildSectorData()
 		sectorInfo := p.buildSectorInfo(sectorData)
-		debug.Log("PROBE: Firing OnCurrentSectorChanged for sector %d (probe-discovered=%t)", sectorInfo.Number, isProbeDiscovered)
+		debug.Log("TWX_PARSER: Firing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", sectorInfo.Number, p.probeMode, isProbeDiscovered)
 		p.tuiAPI.OnCurrentSectorChanged(sectorInfo)
 	} else if p.tuiAPI != nil {
-		debug.Log("PROBE: Suppressing OnCurrentSectorChanged for sector %d (probe-discovered=%t)", p.currentSectorIndex, isProbeDiscovered)
+		debug.Log("TWX_PARSER: Suppressing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", p.currentSectorIndex, p.probeMode, isProbeDiscovered)
 	}
 
 	// Fire sector complete event

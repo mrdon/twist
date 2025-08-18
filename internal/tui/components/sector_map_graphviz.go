@@ -13,6 +13,7 @@ import (
 	"image/png"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 	"twist/internal/api"
 	"twist/internal/debug"
@@ -355,18 +356,97 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 
 // UpdateCurrentSectorWithInfo updates the map with full sector information
 func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorInfo) {
+	oldSector := gsm.currentSector
+	currentHashKey := gsm.currentHashKey
+	
+	// Always update the sector data first
+	gsm.sectorData[sectorInfo.Number] = sectorInfo
+	
 	if gsm.currentSector != sectorInfo.Number {
+		// Current sector changed - force redraw
 		gsm.currentSector = sectorInfo.Number
 		gsm.needsRedraw = true
 		gsm.currentHashKey = "" // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
+		debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed from %d to %d, triggering redraw", 
+			oldSector, sectorInfo.Number)
+
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
 			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 		}
+	} else {
+		// Same sector but data might have changed - check if graph content would change
+		if newHash, err := gsm.generateDOTContentHash(); err == nil {
+			debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Hash comparison for sector %d: current='%s', new='%s'", 
+				sectorInfo.Number, currentHashKey, newHash)
+			if newHash != currentHashKey {
+				debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - DOT content changed for sector %d, triggering redraw (old hash: %s, new hash: %s)", 
+					sectorInfo.Number, currentHashKey, newHash)
+				gsm.needsRedraw = true
+				gsm.currentHashKey = "" // Clear current hash key to force regeneration
+			} else {
+				debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
+					sectorInfo.Number, currentHashKey)
+			}
+		} else {
+			// If we can't generate hash, fall back to always redrawing
+			debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Failed to generate DOT hash for sector %d, falling back to redraw: %v", 
+				sectorInfo.Number, err)
+			gsm.needsRedraw = true
+			gsm.currentHashKey = "" // Clear current hash key to force regeneration
+		}
 	}
+}
+
+// UpdateSectorData updates sector data without changing the current sector focus
+func (gsm *GraphvizSectorMap) UpdateSectorData(sectorInfo api.SectorInfo) {
+	// Update the sector data in our cache
 	gsm.sectorData[sectorInfo.Number] = sectorInfo
+	
+	// If this sector is part of the currently displayed map, check if we need a redraw
+	// but don't change the current sector focus
+	if gsm.currentSector > 0 {
+		// Only check for redraw if the updated sector is within our display range
+		// (current sector or connected sectors)
+		if sectorInfo.Number == gsm.currentSector || gsm.isSectorInDisplayRange(sectorInfo.Number) {
+			// If we don't have a current hash, we need to redraw regardless
+			if gsm.currentHashKey == "" {
+				debug.Log("GraphvizSectorMap: UpdateSectorData - No current hash for sector %d, triggering redraw", 
+					sectorInfo.Number)
+				gsm.needsRedraw = true
+			} else {
+				// Check if the graph would actually change by comparing DOT content hash
+				if newHash, err := gsm.generateDOTContentHash(); err == nil {
+					debug.Log("GraphvizSectorMap: UpdateSectorData - Hash comparison for sector %d: current='%s', new='%s'", 
+						sectorInfo.Number, gsm.currentHashKey, newHash)
+					if newHash != gsm.currentHashKey {
+						debug.Log("GraphvizSectorMap: UpdateSectorData - DOT content changed for sector %d, triggering redraw (old hash: %s, new hash: %s)", 
+							sectorInfo.Number, gsm.currentHashKey, newHash)
+						gsm.needsRedraw = true
+						gsm.currentHashKey = "" // Clear current hash key to force regeneration
+					} else {
+						debug.Log("GraphvizSectorMap: UpdateSectorData - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
+							sectorInfo.Number, gsm.currentHashKey)
+					}
+				} else {
+					// If we can't generate hash, fall back to always redrawing
+					debug.Log("GraphvizSectorMap: UpdateSectorData - Failed to generate DOT hash for sector %d, falling back to redraw: %v", 
+						sectorInfo.Number, err)
+					gsm.needsRedraw = true
+					gsm.currentHashKey = "" // Clear current hash key to force regeneration
+				}
+			}
+		}
+	}
+}
+
+// isSectorInDisplayRange checks if a sector is within the current display range
+func (gsm *GraphvizSectorMap) isSectorInDisplayRange(sectorNumber int) bool {
+	// Check if sector is in our current sector data (which means it's being displayed)
+	_, exists := gsm.sectorData[sectorNumber]
+	return exists
 }
 
 // LoadRealMapData loads real sector data from the API
@@ -641,8 +721,14 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		return nil, fmt.Errorf("failed to get adjacency map: %w", err)
 	}
 
-	// Create graphviz nodes for each vertex
+	// Create graphviz nodes for each vertex - sort for deterministic ordering
+	var sectors []int
 	for sector := range adjacencyMap {
+		sectors = append(sectors, sector)
+	}
+	sort.Ints(sectors)
+	
+	for _, sector := range sectors {
 		// Create node with sector information
 		sectorInfo, exists := gsm.sectorData[sector]
 
@@ -721,13 +807,21 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	edgeCount := 0
 	processedEdges := make(map[string]bool) // Track processed edge pairs
 
-	for source, targets := range adjacencyMap {
+	for _, source := range sectors {
+		targets := adjacencyMap[source]
 		sourceNode, sourceExists := gvNodes[source]
 		if !sourceExists {
 			continue
 		}
 
+		// Sort targets for deterministic edge ordering
+		var targetList []int
 		for target := range targets {
+			targetList = append(targetList, target)
+		}
+		sort.Ints(targetList)
+
+		for _, target := range targetList {
 			// Create a unique key for this edge pair (always smaller->larger to avoid duplicates)
 			var edgeKey string
 			if source < target {
@@ -830,14 +924,19 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	hash := md5.Sum(dotContent)
 	hashKey := fmt.Sprintf("%x", hash)
 
+	// Detailed logging for hash comparison debugging
+	debug.Log("GraphvizSectorMap: generateGraphvizImage - Generated hash %s for sector %d", hashKey, gsm.currentSector)
+	debug.Log("GraphvizSectorMap: generateGraphvizImage - DOT content length: %d bytes", len(dotContent))
+	debug.Log("GraphvizSectorMap: generateGraphvizImage - Previous currentHashKey: %s", gsm.currentHashKey)
+
 	// Check if we have cached data for this hash
 	if cached, found := gsm.graphCache.Get(hashKey); found {
-		debug.Log("GraphvizSectorMap: Using cached image for hash %s", hashKey)
+		debug.Log("GraphvizSectorMap: Using cached image for hash %s (cache hit)", hashKey)
 		gsm.currentHashKey = hashKey
 		return cached.ImageData, nil
 	}
 
-	debug.Log("GraphvizSectorMap: Generating new image for hash %s", hashKey)
+	debug.Log("GraphvizSectorMap: Generating new image for hash %s (cache miss)", hashKey)
 	gsm.currentHashKey = hashKey
 
 	// Save DOT file for debugging
@@ -1145,6 +1244,216 @@ func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, off
 			}
 		}
 	}
+}
+
+// generateDOTContentHash creates a DOT content hash without generating the full image
+func (gsm *GraphvizSectorMap) generateDOTContentHash() (string, error) {
+	if gsm.currentSector <= 0 || gsm.proxyAPI == nil {
+		return "", fmt.Errorf("no current sector or proxy API")
+	}
+
+	// Build the graph structure (same logic as buildSectorGraph)
+	g, err := gsm.buildSectorGraph()
+	if err != nil {
+		return "", err
+	}
+
+	// Create a lightweight graphviz context just for DOT generation
+	ctx := context.Background()
+	gv, err := graphviz.New(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer gv.Close()
+
+	// Create a new graphviz graph with same settings as generateGraphvizImage
+	gvGraph, err := gv.Graph()
+	if err != nil {
+		return "", err
+	}
+	defer gvGraph.Close()
+
+	// Apply same graph settings for consistent hashing
+	currentTheme := theme.Current()
+	defaultColors := currentTheme.DefaultColors()
+	
+	gvGraph.SetLayout("neato")
+	gvGraph.SetBackgroundColor(gsm.colorToString(defaultColors.Background))
+	gvGraph.SetDPI(150.0)
+	
+	gvGraph.Attr(int(cgraph.EDGE), "color", "white")
+	gvGraph.Attr(int(cgraph.NODE), "style", "filled,rounded")
+	gvGraph.Attr(int(cgraph.NODE), "penwidth", "3")
+	gvGraph.Attr(int(cgraph.NODE), "color", "white")
+	
+	gvGraph.SetOverlap(false)
+	gvGraph.SetSplines("true")
+	gvGraph.Set("center", "true")
+	gvGraph.Set("len", "3.0")
+	gvGraph.Set("sep", "1.0")
+	gvGraph.Set("defaultdist", "4.0")
+	gvGraph.Set("overlap_scaling", "2.0")
+
+	// Create nodes and edges (same logic as generateGraphvizImage)
+	gvNodes := make(map[int]*graphviz.Node)
+	adjacencyMap, err := g.AdjacencyMap()
+	if err != nil {
+		return "", err
+	}
+
+	// Create graphviz nodes - sort sectors for deterministic ordering
+	var sectors []int
+	for sector := range adjacencyMap {
+		sectors = append(sectors, sector)
+	}
+	sort.Ints(sectors)
+	
+	for _, sector := range sectors {
+		sectorInfo, exists := gsm.sectorData[sector]
+
+		var label, fillColor string
+		if sector == gsm.currentSector {
+			label = fmt.Sprintf("YOU\\\\n%d", sector)
+			fillColor = "yellow"
+		} else if exists && sectorInfo.Visited {
+			if sectorInfo.HasTraders > 0 {
+				var portType string
+				if sectorInfo.HasPort {
+					if gsm.proxyAPI != nil {
+						if portData, err := gsm.proxyAPI.GetPortInfo(sector); err == nil && portData != nil {
+							portType = portData.ClassType.String()
+						} else {
+							portType = "PORT"
+						}
+					} else {
+						portType = "PORT"
+					}
+				} else {
+					portType = fmt.Sprintf("T%d", sectorInfo.HasTraders)
+				}
+				label = fmt.Sprintf("%d\\\\n(%s)", sector, portType)
+				fillColor = "lightblue"
+			} else if sectorInfo.HasPort {
+				var portType string
+				if gsm.proxyAPI != nil {
+					if portData, err := gsm.proxyAPI.GetPortInfo(sector); err == nil && portData != nil {
+						portType = portData.ClassType.String()
+					} else {
+						portType = "PORT"
+					}
+				} else {
+					portType = "PORT"
+				}
+				label = fmt.Sprintf("%d\\\\n(%s)", sector, portType)
+				fillColor = "lightgreen"
+			} else {
+				label = fmt.Sprintf("%d", sector)
+				fillColor = "gray"
+			}
+		} else {
+			label = fmt.Sprintf("%d", sector)
+			fillColor = "lightcoral"
+		}
+
+		node, err := gvGraph.CreateNodeByName(fmt.Sprintf("s%d", sector))
+		if err != nil {
+			continue
+		}
+
+		node.SetLabel(label)
+		node.SetFillColor(fillColor)
+		node.SetShape("box")
+		node.SetFontSize(18.0)
+		node.SetFontColor("black")
+
+		if level, exists := gsm.sectorLevels[sector]; exists && level == 5 {
+			node.SetStyle("filled,rounded,dotted")
+		} else {
+			node.SetStyle("filled,rounded")
+		}
+
+		gvNodes[sector] = node
+	}
+
+	// Add edges - sort for deterministic ordering
+	processedEdges := make(map[string]bool)
+	for _, source := range sectors {
+		targets := adjacencyMap[source]
+		sourceNode, sourceExists := gvNodes[source]
+		if !sourceExists {
+			continue
+		}
+
+		// Sort targets for deterministic edge ordering
+		var targetList []int
+		for target := range targets {
+			targetList = append(targetList, target)
+		}
+		sort.Ints(targetList)
+
+		for _, target := range targetList {
+			var edgeKey string
+			if source < target {
+				edgeKey = fmt.Sprintf("%d-%d", source, target)
+			} else {
+				edgeKey = fmt.Sprintf("%d-%d", target, source)
+			}
+
+			if processedEdges[edgeKey] {
+				continue
+			}
+			processedEdges[edgeKey] = true
+
+			targetNode, targetExists := gvNodes[target]
+			if !targetExists {
+				continue
+			}
+
+			edge, err := gvGraph.CreateEdgeByName("", sourceNode, targetNode)
+			if err != nil {
+				continue
+			}
+
+			edge.SetPenWidth(1.5)
+			edge.SetStyle("solid")
+			edge.SetConstraint(true)
+			edge.SetArrowSize(0.8)
+
+			if reverseTargets, exists := adjacencyMap[target]; exists {
+				if _, isBidirectional := reverseTargets[source]; isBidirectional {
+					edge.SetDir("both")
+					edge.SetArrowHead("normal")
+					edge.SetArrowTail("normal")
+				} else {
+					edge.SetDir("forward")
+					edge.SetArrowHead("normal")
+				}
+			} else {
+				edge.SetDir("forward")
+				edge.SetArrowHead("normal")
+			}
+		}
+	}
+
+	// Generate DOT content
+	var dotBuf bytes.Buffer
+	err = gv.Render(ctx, gvGraph, "dot", &dotBuf)
+	if err != nil {
+		return "", err
+	}
+
+	// Create MD5 hash and save DOT content for debugging
+	dotContent := dotBuf.Bytes()
+	hash := md5.Sum(dotContent)
+	hashStr := fmt.Sprintf("%x", hash)
+	
+	// Save DOT content to temp file for debugging hash differences
+	debugPath := fmt.Sprintf("/tmp/sector_map_hash_%s.dot", hashStr[:8])
+	if err := os.WriteFile(debugPath, dotContent, 0644); err == nil {
+		debug.Log("GraphvizSectorMap: DOT hash %s saved to %s", hashStr, debugPath)
+	}
+	
+	return hashStr, nil
 }
 
 // colorToString converts tcell.Color to hex string for graphviz

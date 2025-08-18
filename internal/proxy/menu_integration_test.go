@@ -23,6 +23,8 @@ func (m *mockTuiAPI) OnDatabaseStateChanged(info api.DatabaseStateInfo) {}
 func (m *mockTuiAPI) OnCurrentSectorChanged(sector api.SectorInfo) {}
 func (m *mockTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.TraderInfo) {}
 func (m *mockTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {}
+func (m *mockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {}
+func (m *mockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {}
 
 func TestTerminalMenuIntegration(t *testing.T) {
 	// Create mock TuiAPI

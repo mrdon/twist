@@ -154,6 +154,12 @@ type TuiAPI interface {
 	// Trader and Player Info Events - called when trader data or player stats are updated
 	OnTraderDataUpdated(sectorNumber int, traders []TraderInfo) // Trader information captured from sector display
 	OnPlayerStatsUpdated(stats PlayerStatsInfo) // Player statistics updated from QuickStats or inventory commands
+	
+	// Port Events - called when port information is updated
+	OnPortUpdated(portInfo PortInfo) // Port information updated from parsing
+	
+	// Sector Events - called when sector data is updated (e.g. from etherprobe)
+	OnSectorUpdated(sectorInfo SectorInfo) // Sector information updated from parsing or probe data
 }
 
 // ConnectionStatus represents the current connection state
