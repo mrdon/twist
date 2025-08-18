@@ -3,7 +3,7 @@
 A modern text UI (TUI) client helper for Trade Wars 2002, featuring real-time game info, TWX-compatible 
 scripting, and an interactive terminal interface.
 
-<img src="docs/2025-08-05_00-44.png" alt="Twist Interface" width="800">
+<img src="docs/2025-08-18_00-19.png" alt="Twist Interface" width="800">
 
 ## Status
 
