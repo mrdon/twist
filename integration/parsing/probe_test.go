@@ -56,9 +56,9 @@ func TestProbeDataParsing(t *testing.T) {
 	result.Assert.AssertPortExists(510, "Aachen", 2)        // BSB port
 
 	// Verify probe movement created correct warp connections
-	// Based on actual probe path: 190 -> 274 -> 510 -> 493
+	// Based on actual probe path: 190 -> 274 -> 174 -> 66 -> 177 -> 946 -> 403 -> 328 -> 510 -> 493
 	result.Assert.AssertSectorWithWarps(190, []int{274}) // Should have warp to first probed sector
-	result.Assert.AssertSectorWithWarps(274, []int{510}) // Should have warp to next sector in path  
+	result.Assert.AssertSectorWithWarps(274, []int{174}) // Should have warp to next sector in path  
 	result.Assert.AssertSectorWithWarps(510, []int{493}) // Should have warp to final sector
 
 	// Verify that after ether probe + command prompt, current sector is set correctly

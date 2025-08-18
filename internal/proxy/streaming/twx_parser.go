@@ -331,6 +331,7 @@ func (p *TWXParser) setupDefaultHandlers() {
 	p.AddHandler("Engage the Autopilot?", p.handleStopPrompt)
 	// Sector data (must be before CIM detection to avoid false matches)
 	p.AddHandler("Sector  : ", p.handleSectorStart)
+	p.AddHandler("Sector  :", p.handleSectorStart) // Handle variant without space before colon
 	p.AddHandler("Warps to Sector(s) :", p.handleSectorWarps)
 	p.AddHandler("Beacon  : ", p.handleSectorBeacon)
 	p.AddHandler("Ports   : ", p.handleSectorPorts)
@@ -784,6 +785,8 @@ func (p *TWXParser) handleSectorStart(line string) {
 				constellation := strings.Join(parts[4:], " ")
 				// Remove trailing period if present
 				constellation = strings.TrimSuffix(constellation, ".")
+				// Remove exploration status suffixes like "(unexplored)"
+				constellation = strings.TrimSuffix(constellation, " (unexplored)")
 				p.currentSector.Constellation = constellation
 			}
 		}
@@ -1958,6 +1961,11 @@ func (p *TWXParser) sectorCompleted() {
 	p.errorRecoveryHandler("saveSectorBasicInfo", func() error {
 		return p.saveSectorBasicInfo()
 	})
+	
+	// Save the parsed warps from sector display
+	p.errorRecoveryHandler("saveSectorWarps", func() error {
+		return p.saveSectorWarps()
+	})
 
 	// Handle port data - save if we have it, clear if we parsed a complete sector without finding any
 	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
@@ -2749,3 +2757,4 @@ func (p *TWXParser) firePlayerStatsEvent(stats PlayerStats) {
 		p.tuiAPI.OnPlayerStatsUpdated(apiStats)
 	}
 }
+

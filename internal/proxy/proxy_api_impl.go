@@ -62,7 +62,7 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 	}
 	
 	// Log raw data chunks for debugging
-	debug.LogDataChunk("SendData", data)
+	debug.LogDataChunk(">>", data)
 	
 	p.proxy.SendInput(string(data))
 	return nil

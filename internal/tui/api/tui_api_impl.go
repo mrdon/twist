@@ -52,7 +52,7 @@ func (tui *TuiApiImpl) OnConnectionError(err error) {
 
 func (tui *TuiApiImpl) OnData(data []byte) {
 	// Log raw data chunks for debugging
-	debug.LogDataChunk("OnData", data)
+	debug.LogDataChunk("<", data)
 	
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))

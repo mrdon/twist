@@ -195,6 +195,68 @@ func (p *TWXParser) saveSectorBasicInfo() error {
 	return err
 }
 
+// saveSectorWarps saves the parsed warps from currentSectorWarps to the database
+func (p *TWXParser) saveSectorWarps() error {
+	if p.currentSectorIndex <= 0 {
+		return nil
+	}
+	
+	// Don't overwrite probe warps - those are handled by saveProbeWarp
+	if p.probeMode || p.probeDiscoveredSectors[p.currentSectorIndex] {
+		return nil
+	}
+	
+	// Never save all zeros - that means no warps were parsed
+	hasNonZeroWarp := false
+	for _, warp := range p.currentSectorWarps {
+		if warp > 0 {
+			hasNonZeroWarp = true
+			break
+		}
+	}
+	if !hasNonZeroWarp {
+		debug.Log("WARP: Skipping save of all-zero warps for sector %d", p.currentSectorIndex)
+		return nil
+	}
+	
+	db := p.database.GetDB()
+	if db == nil {
+		return fmt.Errorf("database connection is nil")
+	}
+	
+	// Check if sector exists first
+	var exists int
+	err := db.QueryRow("SELECT COUNT(*) FROM sectors WHERE sector_index = ?", p.currentSectorIndex).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("failed to check if sector exists: %w", err)
+	}
+	
+	if exists == 0 {
+		// Insert new sector with warps only (minimal data)
+		_, err = db.Exec(`
+			INSERT INTO sectors (sector_index, warp1, warp2, warp3, warp4, warp5, warp6)
+			VALUES (?, ?, ?, ?, ?, ?, ?)
+		`, p.currentSectorIndex, p.currentSectorWarps[0], p.currentSectorWarps[1], p.currentSectorWarps[2], 
+		   p.currentSectorWarps[3], p.currentSectorWarps[4], p.currentSectorWarps[5])
+	} else {
+		// Update warp data for existing sector
+		_, err = db.Exec(`
+			UPDATE sectors 
+			SET warp1 = ?, warp2 = ?, warp3 = ?, warp4 = ?, warp5 = ?, warp6 = ?
+			WHERE sector_index = ?
+		`, p.currentSectorWarps[0], p.currentSectorWarps[1], p.currentSectorWarps[2], 
+		   p.currentSectorWarps[3], p.currentSectorWarps[4], p.currentSectorWarps[5], 
+		   p.currentSectorIndex)
+	}
+	
+	if err != nil {
+		return fmt.Errorf("failed to save sector warps: %w", err)
+	}
+	
+	debug.Log("WARP: Saved warps for sector %d: %v", p.currentSectorIndex, p.currentSectorWarps)
+	return nil
+}
+
 // saveProbeWarp saves a single probe warp from one sector to another
 func (p *TWXParser) saveProbeWarp(fromSector, toSector int) error {
 	debug.Log("saveProbeWarp: adding warp %d -> %d", fromSector, toSector)

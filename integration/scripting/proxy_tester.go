@@ -21,7 +21,7 @@ import (
 
 // ScriptLine represents a single line in the raw script format
 type ScriptLine struct {
-	Direction string // "<" for server, ">" for client
+	Direction string // "<<" for raw server, "<" for processed TUI, ">>" for user input
 	Data      string // the raw data
 }
 
@@ -55,8 +55,8 @@ func LoadScriptFile(scriptFilePath string) ([]ScriptLine, error) {
 	var lines []ScriptLine
 	scanner := bufio.NewScanner(file)
 
-	// Regex to parse lines like: < data or > data
-	lineRegex := regexp.MustCompile(`^([<>])\s+(.+)$`)
+	// Regex to parse lines like: << data, < data, or >> data
+	lineRegex := regexp.MustCompile(`^(<<|>>|<)\s+(.+)$`)
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -92,12 +92,12 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 	var serverLines, clientLines []string
 
 	for i, line := range scriptLines {
-		if line.Direction == "<" {
-			// Server sends data (keep literal string format)
+		if line.Direction == "<<" {
+			// Server sends raw data (keep literal string format)
 			serverLines = append(serverLines, `send "`+line.Data+`"`)
 
 			// Generate client expect only if next line is client data
-			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == ">" {
+			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == ">>" {
 				// Generate expect pattern from last unique characters
 				expectPattern := generateExpectPattern(line.Data)
 				// Escape any actual ANSI sequences back to string literals for expect scripts
@@ -115,12 +115,33 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 				serverLines = append(serverLines, `send "`+syncToken+`"`)
 				clientLines = append(clientLines, `expect "`+syncToken+`"`)
 			}
-		} else if line.Direction == ">" {
+		} else if line.Direction == "<" {
+			// Client expects processed data (this is what the proxy outputs after processing raw server data)
+			// Generate client expect only if next line is client data  
+			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == ">>" {
+				// Generate expect pattern from last unique characters
+				expectPattern := generateExpectPattern(line.Data)
+				// Escape any actual ANSI sequences back to string literals for expect scripts
+				escapedPattern := escapeANSIForExpect(expectPattern)
+				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
+			} else if i == len(scriptLines)-1 {
+				// This is the last client message - always add sync mechanism
+				// Generate client expect for the last client message to ensure processing completes
+				expectPattern := generateExpectPattern(line.Data)
+				escapedPattern := escapeANSIForExpect(expectPattern)
+				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
+				
+				// Add sync token: server sends a unique marker, client expects it
+				syncToken := "\\x1b[0m<SYNC_COMPLETE>\\x1b[0m"
+				serverLines = append(serverLines, `send "`+syncToken+`"`)
+				clientLines = append(clientLines, `expect "`+syncToken+`"`)
+			}
+		} else if line.Direction == ">>" {
 			// Client sends data (keep literal string format)
 			clientLines = append(clientLines, `send "`+line.Data+`"`)
 
 			// Check if next line is server data - if so, generate server expect
-			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == "<" {
+			if i+1 < len(scriptLines) && (scriptLines[i+1].Direction == "<" || scriptLines[i+1].Direction == "<<") {
 				// Server expects exactly what client sends
 				serverLines = append(serverLines, `expect "`+line.Data+`"`)
 			}

@@ -159,3 +159,15 @@ func (a *DBAsserts) SetPlayerCredits(credits int) {
 		a.t.Fatalf("Failed to set player credits: %v", err)
 	}
 }
+
+// AssertSectorExplorationStatus verifies that a sector has the expected exploration status
+func (a *DBAsserts) AssertSectorExplorationStatus(sectorNum int, expectedExplored int) {
+	var actualExplored int
+	err := a.db.QueryRow("SELECT explored FROM sectors WHERE sector_index = ?", sectorNum).Scan(&actualExplored)
+	if err != nil {
+		a.t.Fatalf("Failed to get exploration status for sector %d: %v", sectorNum, err)
+	}
+	if actualExplored != expectedExplored {
+		a.t.Errorf("Expected sector %d exploration status to be %d, got %d", sectorNum, expectedExplored, actualExplored)
+	}
+}

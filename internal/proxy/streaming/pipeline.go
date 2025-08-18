@@ -8,6 +8,7 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/api"
+	"twist/internal/debug"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/interfaces"
 	"twist/internal/telnet"
@@ -214,6 +215,7 @@ func (p *Pipeline) batchProcessor() {
 	for {
 		select {
 		case rawData := <-p.rawDataChan:
+			debug.LogDataChunk("<<", rawData)
 			// Process telnet commands immediately
 			cleanData := p.telnetHandler.ProcessData(rawData)
 
