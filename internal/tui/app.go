@@ -570,16 +570,12 @@ func (ta *TwistApp) HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
 	
 	ta.app.QueueUpdateDraw(func() {
-		// Port updates should not change the current sector focus
-		// Only update the sector data (same as HandleSectorUpdated)
+		// Port updates don't affect map visualization (which only cares about warps)
+		// Skip calling UpdateSectorData to avoid triggering unnecessary map redraws
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			// Create basic sector info for the port update
-			sectorInfo := coreapi.SectorInfo{
-				Number:  portInfo.SectorID,
-				HasPort: true,
-			}
-			debug.Log("TwistApp: Handling port update for sector %d", portInfo.SectorID)
-			ta.panelComponent.UpdateSectorData(sectorInfo)
+			debug.Log("TwistApp: Handling port update for sector %d - skipping map update (port info doesn't affect warp display)", portInfo.SectorID)
+			// TODO: If we need to update port information in other components, do it here
+			// without calling UpdateSectorData which triggers map redraws
 		}
 	})
 }

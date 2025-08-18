@@ -62,6 +62,28 @@ make test
 
 This project is based on the [TWX Proxy](http://wiki.classictw.com/index.php/Application:TWX_Proxy), specifically the recent fork at https://github.com/TW2002/twxp. TWX Proxy is a well-established tool in the Trade Wars 2002 community that provides scripting and automation capabilities for the game.
 
+## FAQ
+
+### Q: The screen jumps up and down when running in tmux - how do I fix this?
+
+This is a compatibility issue between the TUI framework (tview) and tmux's terminal emulation. The problem occurs when the terminal content starts scrolling.
+
+**Solution**: Set tmux to use the xterm terminal database instead of screen:
+
+```bash
+# Option 1: Run with environment variable
+TERM=xterm-256color tmux
+
+# Option 2: Add to your ~/.tmux.conf (permanent fix)
+set -g default-terminal "xterm-256color"
+```
+
+After changing `.tmux.conf`, restart tmux for the change to take effect.
+
+**Why this happens**: Tmux's default TERM setting (`screen` or `screen-256color`) interprets certain scrolling escape sequences differently than standard terminals, causing display issues with TUI applications. Using `xterm-256color` provides more standardized terminal behavior.
+
+**Alternative**: If you prefer not to change tmux settings, you can run Twist directly in your terminal outside of tmux.
+
 ## Contributing
 
 1. Fork the repository

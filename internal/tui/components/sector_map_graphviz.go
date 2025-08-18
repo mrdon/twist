@@ -926,8 +926,6 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 
 	// Detailed logging for hash comparison debugging
 	debug.Log("GraphvizSectorMap: generateGraphvizImage - Generated hash %s for sector %d", hashKey, gsm.currentSector)
-	debug.Log("GraphvizSectorMap: generateGraphvizImage - DOT content length: %d bytes", len(dotContent))
-	debug.Log("GraphvizSectorMap: generateGraphvizImage - Previous currentHashKey: %s", gsm.currentHashKey)
 
 	// Check if we have cached data for this hash
 	if cached, found := gsm.graphCache.Get(hashKey); found {
@@ -1150,7 +1148,6 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	}
 	gsm.graphCache.Put(hashKey, cachedData)
 
-	debug.Log("GraphvizSectorMap: Cached new image with hash %s", hashKey)
 	return finalImageData, nil
 }
 
@@ -1447,11 +1444,6 @@ func (gsm *GraphvizSectorMap) generateDOTContentHash() (string, error) {
 	hash := md5.Sum(dotContent)
 	hashStr := fmt.Sprintf("%x", hash)
 	
-	// Save DOT content to temp file for debugging hash differences
-	debugPath := fmt.Sprintf("/tmp/sector_map_hash_%s.dot", hashStr[:8])
-	if err := os.WriteFile(debugPath, dotContent, 0644); err == nil {
-		debug.Log("GraphvizSectorMap: DOT hash %s saved to %s", hashStr, debugPath)
-	}
 	
 	return hashStr, nil
 }
