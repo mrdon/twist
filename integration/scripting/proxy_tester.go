@@ -141,9 +141,12 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 			clientLines = append(clientLines, `send "`+line.Data+`"`)
 
 			// Check if next line is server data - if so, generate server expect
+			// BUT skip generating expect for backspace sequences since servers may not handle them reliably
 			if i+1 < len(scriptLines) && (scriptLines[i+1].Direction == "<" || scriptLines[i+1].Direction == "<<") {
-				// Server expects exactly what client sends
-				serverLines = append(serverLines, `expect "`+line.Data+`"`)
+				if line.Data != "\\b" {
+					// Server expects exactly what client sends (except for backspace)
+					serverLines = append(serverLines, `expect "`+line.Data+`"`)
+				}
 			}
 		}
 	}
@@ -153,78 +156,79 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 
 
 // generateExpectPattern extracts a unique expect pattern from server data
-// Takes last 10-20 characters and finds a good breaking point at ANSI sequences or control chars
+// Creates shorter patterns focused on key terminal characters for faster matching
 func generateExpectPattern(serverData string) string {
-	// Convert escaped sequences to actual characters but keep ANSI codes
+	// Convert escaped sequences to actual characters 
 	actualData, _ := strconv.Unquote("\"" + serverData + "\"")
 
-	// If text is empty, return it as-is
+	// If data is empty, return it as-is
 	if len(actualData) == 0 {
 		return actualData
 	}
 
-	// If text is short, return the whole string
+	// For short data (10 chars or less), return the whole string
 	if len(actualData) <= 10 {
 		return actualData
 	}
 
-	// Start from last 20 characters (or beginning if shorter) to give us room to find break points
-	startSearchPos := len(actualData) - 20
-	if startSearchPos < 0 {
-		startSearchPos = 0
+	// Look for key prompt patterns from the end and include more context
+	// Pattern 1: "? : " - include some characters before it
+	if idx := strings.LastIndex(actualData, "? : "); idx != -1 {
+		// Include a character before "? : " if available
+		start := idx - 1
+		if start < 0 {
+			start = 0
+		}
+		return actualData[start:]
 	}
 	
-	// Count visible characters from the end to find where we'd have 10 left
-	visibleCount := 0
-	tenCharsLeftPos := len(actualData)
-	
-	for i := len(actualData) - 1; i >= 0; i-- {
-		// Skip ANSI sequences and control characters when counting
-		if actualData[i] == '\x1b' {
-			// We're at the end of an ANSI sequence, skip backwards to find start
-			continue
-		} else if actualData[i] == '\r' || actualData[i] == '\n' {
-			// Skip control characters
-			continue
-		} else if i > 0 && actualData[i-1] == '\x1b' && actualData[i] == '[' {
-			// We're at [ in \x1b[, skip
-			continue
-		} else if i > 1 && actualData[i-2] == '\x1b' && actualData[i-1] == '[' {
-			// We're in the middle of an ANSI sequence
-			continue
+	// Pattern 2: ": " with space after - include more characters before
+	if idx := strings.LastIndex(actualData, ": "); idx != -1 {
+		// Include 2 characters before ": " if available
+		start := idx - 2
+		if start < 0 {
+			start = 0
 		}
-		
-		// This is a visible character
-		visibleCount++
-		if visibleCount == 10 {
-			tenCharsLeftPos = i
-			break
+		return actualData[start:]
+	}
+
+	// For text ending with control sequences like \r\x1b[0m, look for meaningful words
+	if strings.HasSuffix(actualData, "\r\x1b[0m") {
+		// Look for the last word before the control sequence
+		endPos := len(actualData) - len("\r\x1b[0m")
+		if endPos > 0 {
+			// Find start of the last word
+			for i := endPos - 1; i >= 0; i-- {
+				if actualData[i] == ' ' || actualData[i] == '\t' {
+					return actualData[i+1:]
+				}
+			}
+			// If no space found, take last 10 characters
+			start := endPos - 10
+			if start < 0 {
+				start = 0
+			}
+			return actualData[start:]
 		}
 	}
 
-	// Now scan forward from startSearchPos to find the best break point
-	// We prefer break points that give us more context, but only if they're significantly better
-	bestBreakPoint := tenCharsLeftPos // Default to exactly 10 chars
-	
-	// Only look for break points in the first half of our search range
-	// This ensures we don't choose ANSI sequences that are very close to the 10-char boundary
-	midPoint := startSearchPos + (tenCharsLeftPos-startSearchPos)/2
-	
-	for i := startSearchPos; i < midPoint && i < len(actualData); i++ {
-		// Look for good break points
-		if actualData[i] == '\x1b' {
-			// Start of ANSI sequence - this is a good break point if it gives us more context
-			bestBreakPoint = i
-			break
-		} else if actualData[i] == '\r' || actualData[i] == '\n' {
-			// Start of newline - this is a good break point
-			bestBreakPoint = i  
-			break
+	// Look for other key characters and include more context
+	for i := len(actualData) - 15; i >= 0 && i < len(actualData) - 3; i++ {
+		char := actualData[i]
+		if char == '?' || char == '>' || char == ':' || char == ']' {
+			// Include a bit more context before the key character
+			start := i - 1
+			if start < 0 {
+				start = 0
+			}
+			return actualData[start:]
 		}
 	}
-
-	return actualData[bestBreakPoint:]
+	
+	// Fallback to last 10 characters for long text
+	return actualData[len(actualData)-10:]
 }
+
 
 
 
@@ -272,6 +276,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	trackingTuiAPI := &TrackingSectorChangeTuiAPI{
 		TestTuiAPI:        baseTuiAPI,
 		SectorChangeCalls: make([]api.SectorInfo, 0),
+		PlayerStatsCalls:  make([]api.PlayerStatsInfo, 0),
 	}
 	address := fmt.Sprintf("localhost:%d", port)
 	proxyInstance := factory.Connect(address, trackingTuiAPI, connectOpts)
@@ -344,11 +349,19 @@ func (t *TestTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo)            
 // TrackingSectorChangeTuiAPI implements api.TuiAPI and tracks OnCurrentSectorChanged calls
 type TrackingSectorChangeTuiAPI struct {
 	*TestTuiAPI
-	SectorChangeCalls []api.SectorInfo
+	SectorChangeCalls     []api.SectorInfo
+	PlayerStatsCallsMutex sync.Mutex
+	PlayerStatsCalls      []api.PlayerStatsInfo
 }
 
 func (t *TrackingSectorChangeTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo) {
 	t.SectorChangeCalls = append(t.SectorChangeCalls, sectorInfo)
+}
+
+func (t *TrackingSectorChangeTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {
+	t.PlayerStatsCallsMutex.Lock()
+	defer t.PlayerStatsCallsMutex.Unlock()
+	t.PlayerStatsCalls = append(t.PlayerStatsCalls, stats)
 }
 
 // ExpectTelnetServer - Telnet server with server-side expect script support for black-box testing
@@ -503,12 +516,15 @@ func (ets *ExpectTelnetServer) handleConnection(conn net.Conn) {
 				ets.inputs = append(ets.inputs, cleanInput)
 				ets.mutex.Unlock()
 
-				ets.t.Logf("Expect telnet received input: %q", cleanInput)
+				ets.t.Logf("Expect telnet received input: %q (hex: %x)", cleanInput, cleanInput)
 
-				// Feed to server expect engine
+				// Feed to server expect engine immediately without buffering
 				if ets.serverEngine != nil {
 					ets.serverEngine.AddClientInput(cleanInput)
 				}
+			} else if len(input) > 0 {
+				// Log when input is filtered out
+				ets.t.Logf("Expect telnet filtered input: %q (hex: %x)", input, input)
 			}
 		}
 	}

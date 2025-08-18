@@ -171,3 +171,124 @@ func (a *DBAsserts) AssertSectorExplorationStatus(sectorNum int, expectedExplore
 		a.t.Errorf("Expected sector %d exploration status to be %d, got %d", sectorNum, expectedExplored, actualExplored)
 	}
 }
+
+// AssertPortCommodity verifies that a port has the expected commodity information
+func (a *DBAsserts) AssertPortCommodity(sectorNum int, commodityType string, expectedAmount int, expectedPercent int, expectedBuying bool) {
+	var actualAmount, actualPercent int
+	var actualBuying bool
+	
+	var query string
+	switch commodityType {
+	case "fuel_ore":
+		query = "SELECT amount_fuel_ore, percent_fuel_ore, buy_fuel_ore FROM ports WHERE sector_index = ?"
+	case "organics":
+		query = "SELECT amount_organics, percent_organics, buy_organics FROM ports WHERE sector_index = ?"
+	case "equipment":
+		query = "SELECT amount_equipment, percent_equipment, buy_equipment FROM ports WHERE sector_index = ?"
+	default:
+		a.t.Fatalf("Invalid commodity type: %s", commodityType)
+		return
+	}
+	
+	err := a.db.QueryRow(query, sectorNum).Scan(&actualAmount, &actualPercent, &actualBuying)
+	if err != nil {
+		a.t.Fatalf("Failed to get %s commodity info for port in sector %d: %v", commodityType, sectorNum, err)
+	}
+	
+	if actualAmount != expectedAmount {
+		a.t.Errorf("Expected port %s amount to be %d, got %d", commodityType, expectedAmount, actualAmount)
+	}
+	if actualPercent != expectedPercent {
+		a.t.Errorf("Expected port %s percent to be %d, got %d", commodityType, expectedPercent, actualPercent)
+	}
+	if actualBuying != expectedBuying {
+		a.t.Errorf("Expected port %s buying status to be %t, got %t", commodityType, expectedBuying, actualBuying)
+	}
+}
+
+// AssertPlayerCargo verifies that player has the expected cargo amounts
+func (a *DBAsserts) AssertPlayerCargo(expectedOre, expectedOrganics, expectedEquipment int) {
+	var actualOre, actualOrganics, actualEquipment int
+	err := a.db.QueryRow("SELECT COALESCE(ore_holds, 0), COALESCE(org_holds, 0), COALESCE(equ_holds, 0) FROM player_stats WHERE id = 1").Scan(&actualOre, &actualOrganics, &actualEquipment)
+	if err != nil {
+		a.t.Fatalf("Failed to get player cargo: %v", err)
+	}
+	
+	if actualOre != expectedOre {
+		a.t.Errorf("Expected player ore holds to be %d, got %d", expectedOre, actualOre)
+	}
+	if actualOrganics != expectedOrganics {
+		a.t.Errorf("Expected player organics holds to be %d, got %d", expectedOrganics, actualOrganics)
+	}
+	if actualEquipment != expectedEquipment {
+		a.t.Errorf("Expected player equipment holds to be %d, got %d", expectedEquipment, actualEquipment)
+	}
+}
+
+// AssertPlayerEmptyHolds verifies that player has the expected number of empty cargo holds
+func (a *DBAsserts) AssertPlayerEmptyHolds(expectedEmpty int) {
+	var totalHolds, oreHolds, orgHolds, equHolds int
+	err := a.db.QueryRow("SELECT COALESCE(total_holds, 0), COALESCE(ore_holds, 0), COALESCE(org_holds, 0), COALESCE(equ_holds, 0) FROM player_stats WHERE id = 1").Scan(&totalHolds, &oreHolds, &orgHolds, &equHolds)
+	if err != nil {
+		a.t.Fatalf("Failed to get player cargo holds: %v", err)
+	}
+	
+	actualEmpty := totalHolds - oreHolds - orgHolds - equHolds
+	if actualEmpty != expectedEmpty {
+		a.t.Errorf("Expected player empty holds to be %d, got %d (total: %d, ore: %d, org: %d, equ: %d)", 
+			expectedEmpty, actualEmpty, totalHolds, oreHolds, orgHolds, equHolds)
+	}
+}
+
+// AssertPlayerTotalHolds verifies that player has the expected total number of cargo holds
+func (a *DBAsserts) AssertPlayerTotalHolds(expectedTotal int) {
+	var actualTotal int
+	err := a.db.QueryRow("SELECT COALESCE(total_holds, 0) FROM player_stats WHERE id = 1").Scan(&actualTotal)
+	if err != nil {
+		a.t.Fatalf("Failed to get player total holds: %v", err)
+	}
+	if actualTotal != expectedTotal {
+		a.t.Errorf("Expected player total holds to be %d, got %d", expectedTotal, actualTotal)
+	}
+}
+
+// AssertPlayerExperience verifies that player has the expected experience points
+func (a *DBAsserts) AssertPlayerExperience(expectedExperience int) {
+	var actualExperience int
+	err := a.db.QueryRow("SELECT COALESCE(experience, 0) FROM player_stats WHERE id = 1").Scan(&actualExperience)
+	if err != nil {
+		a.t.Fatalf("Failed to get player experience: %v", err)
+	}
+	if actualExperience != expectedExperience {
+		a.t.Errorf("Expected player experience to be %d, got %d", expectedExperience, actualExperience)
+	}
+}
+
+// AssertPlayerTurns verifies that player has the expected number of turns
+func (a *DBAsserts) AssertPlayerTurns(expectedTurns int) {
+	var actualTurns int
+	err := a.db.QueryRow("SELECT COALESCE(turns, 0) FROM player_stats WHERE id = 1").Scan(&actualTurns)
+	if err != nil {
+		a.t.Fatalf("Failed to get player turns: %v", err)
+	}
+	if actualTurns != expectedTurns {
+		a.t.Errorf("Expected player turns to be %d, got %d", expectedTurns, actualTurns)
+	}
+}
+
+// AssertPortStatus verifies port status information (dead status, build time)
+func (a *DBAsserts) AssertPortStatus(sectorNum int, expectedDead bool, expectedBuildTime int) {
+	var actualDead bool
+	var actualBuildTime int
+	err := a.db.QueryRow("SELECT dead, build_time FROM ports WHERE sector_index = ?", sectorNum).Scan(&actualDead, &actualBuildTime)
+	if err != nil {
+		a.t.Fatalf("Failed to get port status for sector %d: %v", sectorNum, err)
+	}
+	
+	if actualDead != expectedDead {
+		a.t.Errorf("Expected port dead status to be %t, got %t", expectedDead, actualDead)
+	}
+	if actualBuildTime != expectedBuildTime {
+		a.t.Errorf("Expected port build time to be %d, got %d", expectedBuildTime, actualBuildTime)
+	}
+}

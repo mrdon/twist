@@ -16,12 +16,12 @@ func TestGenerateExpectPattern(t *testing.T) {
 		{
 			name:     "command prompt with ANSI",
 			input:    `\x1b[35mCommand [\x1b[1;33mTL\x1b[0;33m=\x1b[1m00:00:00\x1b[0;35m]? : `,
-			expected: "0\x1b[0;35m]? : ",
+			expected: "]? : ",
 		},
 		{
 			name:     "probe destination prompt",
 			input:    `\x1b[32mSubSpace Ether Probe loaded\x1b[0m\n\x1b[35mPlease enter a destination for this probe\x1b[1;33m: \x1b[36m `,
-			expected: "e\x1b[1;33m: \x1b[36m ",
+			expected: "3m: \x1b[36m ",
 		},
 		{
 			name:     "probe self destruct message",
@@ -31,12 +31,12 @@ func TestGenerateExpectPattern(t *testing.T) {
 		{
 			name:     "question mark colon pattern",
 			input:    `Some text here? : `,
-			expected: "t here? : ",
+			expected: "e? : ",
 		},
 		{
 			name:     "colon space pattern",
 			input:    `Enter value: `,
-			expected: "er value: ",
+			expected: "ue: ",
 		},
 		{
 			name:     "short text - use whole string",

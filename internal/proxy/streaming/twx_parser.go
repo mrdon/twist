@@ -201,7 +201,9 @@ type TWXParser struct {
 	currentDisplay         DisplayType
 	sectorPosition         SectorPosition
 	currentSectorIndex     int
-	portSectorIndex        int
+	portSectorIndex         int
+	currentPortName         string      // Name of the current port being parsed  
+	currentTradingCommodity ProductType // Currently trading commodity (port-specific state)
 	figScanSector          int
 	lastWarp               int
 	sectorSaved            bool
@@ -940,11 +942,20 @@ func (p *TWXParser) handlePortDocking(line string) {
 }
 
 func (p *TWXParser) handlePortReport(line string) {
+	debug.Log("PORT: handlePortReport called with line: %s", line)
+	
+	// Set display mode to Port Commerce Report
+	p.currentDisplay = DisplayPortCR
+	p.portSectorIndex = p.currentSectorIndex
+	
 	// Extract port name from "Commerce report for PORT_NAME:"
 	colonPos := strings.Index(line, ":")
 	if colonPos > 20 {
 		portName := strings.TrimSpace(line[20:colonPos])
-		_ = portName // Use portName to avoid unused variable error
+		debug.Log("PORT: Extracted port name: %s", portName)
+		
+		// Initialize port data for current sector
+		p.initializePortData(portName)
 	}
 }
 

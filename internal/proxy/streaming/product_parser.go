@@ -132,35 +132,10 @@ func (p *TWXParser) parseAlternateProductFormat(line string, product *ProductInf
 	}
 }
 
-// processPortLine handles port commerce lines (enhanced version)
+// processPortLine handles port commerce lines using state-dependent parsing
 func (p *TWXParser) processPortLine(line string) {
-	
-	// Check if this is a product line
-	if p.isProductLine(line) {
-		p.parseProductLine(line)
-		return
-	}
-	
-	// Handle other port-specific lines
-	if strings.Contains(line, "What do you want to") {
-		return
-	}
-	
-	if strings.Contains(line, "holds left") {
-		return
-	}
-	
-	// Default product type detection (fallback to simpler logic)
-	lineLower := strings.ToLower(line)
-	if strings.Contains(lineLower, "fuel ore") {
-		p.extractProductInfo(line, ProductFuelOre)
-	} else if strings.Contains(lineLower, "organics") {
-		p.extractProductInfo(line, ProductOrganics)
-	} else if strings.Contains(lineLower, "equipment") {
-		p.extractProductInfo(line, ProductEquipment)
-		// Equipment is typically the last product, so port is complete
-		p.currentDisplay = DisplayNone
-	}
+	// Use the comprehensive state-dependent port parsing from port_parser.go
+	p.processLineInPortContext(line)
 }
 
 // isProductLine determines if a line contains product information

@@ -120,8 +120,8 @@ Equipment    Selling       10,000 units at 100%
 		}
 	}
 	
-	if parser.GetDisplayState() != DisplayPort {
-		t.Errorf("Expected DisplayPort state, got %v", parser.GetDisplayState())
+	if parser.GetDisplayState() != DisplayPortCR {
+		t.Errorf("Expected DisplayPortCR state, got %v", parser.GetDisplayState())
 	}
 }
 

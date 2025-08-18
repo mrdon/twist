@@ -29,7 +29,7 @@ func NewSimpleExpectEngine(t *testing.T, inputSender func(string), starReplaceme
 	return &SimpleExpectEngine{
 		t:               t,
 		inputSender:     inputSender,
-		timeout:         5 * time.Second,
+		timeout:         500 * time.Millisecond,
 		starReplacement: starReplacement,
 		outputCapture:   make([]string, 0),
 	}
@@ -134,7 +134,7 @@ func (e *SimpleExpectEngine) expect(args []string) error {
 			return nil
 		}
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(100 * time.Microsecond)
 	}
 
 	output := strings.Join(e.outputCapture, "")
@@ -234,6 +234,9 @@ func processEscapeSequences(input string) string {
 			case 't':
 				result.WriteByte('\t') // tab (ASCII 9)
 				i++                    // skip the 't'
+			case 'b':
+				result.WriteByte('\b') // backspace (ASCII 8)
+				i++                    // skip the 'b'
 			case 'x':
 				// Handle hex sequences like \x1b
 				if i+3 < len(input) {
