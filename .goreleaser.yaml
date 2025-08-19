@@ -17,7 +17,7 @@ before:
 
 builds:
   - env:
-      - CGO_ENABLED=1  # Required for sqlite3
+      - CGO_ENABLED=0  # Pure Go build - no CGO needed with modernc.org/sqlite
     goos:
       - linux
       - windows  
@@ -27,7 +27,7 @@ builds:
       - arm64
     ignore:
       - goos: windows
-        goarch: arm64  # Windows ARM64 can be problematic with CGO
+        goarch: arm64  # Skip Windows ARM64 for now
     ldflags:
       - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
     binary: twist
@@ -82,13 +82,28 @@ release:
     
     Download the appropriate binary for your platform from the assets above.
     
+    **Supported Platforms:**
+    - Linux (AMD64, ARM64)
+    - macOS (AMD64, ARM64/Apple Silicon)
+    - Windows (AMD64)
+    
     ### Quick Install (Linux/macOS)
     ```bash
     # Linux AMD64
     curl -L -o twist.tar.gz https://github.com/mrdon/twist/releases/download/{{ .Tag }}/twist_Linux_x86_64.tar.gz
-    tar -xzf twist.tar.gz
-    chmod +x twist
-    sudo mv twist /usr/local/bin/
+    tar -xzf twist.tar.gz && chmod +x twist && sudo mv twist /usr/local/bin/
+    
+    # Linux ARM64
+    curl -L -o twist.tar.gz https://github.com/mrdon/twist/releases/download/{{ .Tag }}/twist_Linux_arm64.tar.gz
+    tar -xzf twist.tar.gz && chmod +x twist && sudo mv twist /usr/local/bin/
+    
+    # macOS Intel
+    curl -L -o twist.tar.gz https://github.com/mrdon/twist/releases/download/{{ .Tag }}/twist_Darwin_x86_64.tar.gz
+    tar -xzf twist.tar.gz && chmod +x twist && sudo mv twist /usr/local/bin/
+    
+    # macOS Apple Silicon
+    curl -L -o twist.tar.gz https://github.com/mrdon/twist/releases/download/{{ .Tag }}/twist_Darwin_arm64.tar.gz
+    tar -xzf twist.tar.gz && chmod +x twist && sudo mv twist /usr/local/bin/
     ```
     
     ---

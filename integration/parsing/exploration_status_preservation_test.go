@@ -4,7 +4,7 @@ import (
 	"testing"
 	"twist/integration/scripting"
 	"twist/internal/api"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 

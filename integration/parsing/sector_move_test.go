@@ -6,7 +6,7 @@ import (
 	"twist/integration/scripting"
 	"twist/internal/api"
 	
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // TestSectorMove demonstrates sector movement parsing and database storage
@@ -19,7 +19,7 @@ func TestSectorMove(t *testing.T) {
 	testCredits := 374999
 	
 	// Pre-setup the database with test credits
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open database for pre-setup: %v", err)
 	}

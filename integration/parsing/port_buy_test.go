@@ -6,7 +6,7 @@ import (
 	"twist/integration/scripting"
 	"twist/internal/api"
 	
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // TestPortBuy demonstrates port trading parsing and database storage
@@ -21,7 +21,7 @@ func TestPortBuy(t *testing.T) {
 	testTurns := 19994  // Will be decremented to 19993 after docking
 	
 	// Pre-setup the database with test values
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open database for pre-setup: %v", err)
 	}

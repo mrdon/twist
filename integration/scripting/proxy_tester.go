@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"twist/integration/setup"
 	"twist/internal/api"
 	"twist/internal/api/factory"
@@ -314,7 +314,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	var sqlDB *sql.DB
 	var dbAsserts *setup.DBAsserts
 	if connectOpts != nil && connectOpts.DatabasePath != "" {
-		sqlDB, err = sql.Open("sqlite3", connectOpts.DatabasePath)
+		sqlDB, err = sql.Open("sqlite", connectOpts.DatabasePath)
 		if err != nil {
 			t.Fatalf("Failed to open database: %v", err)
 		}

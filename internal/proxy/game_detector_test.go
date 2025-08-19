@@ -598,3 +598,43 @@ Command [TL=00:00:00]:[2142] (?=Help)? : `
 		t.Errorf("Game should still be active after config screen, got %v", gd.GetState())
 	}
 }
+
+// TestGameDetector_InactivityDisconnect tests detection of inactivity-based disconnects
+func TestGameDetector_InactivityDisconnect(t *testing.T) {
+	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	gd := NewGameDetector(connInfo)
+	defer gd.Close()
+
+	// Set up an active game session
+	gd.ProcessLine("Select a game :")
+	gd.ProcessLine("<A> Trade Wars 2002\n")
+	gd.ProcessUserInput("A")
+	gd.ProcessLine("Show today's log? (Y/N)")
+	
+	// Verify we're in an active game
+	if gd.GetState() != StateGameActive {
+		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
+	}
+
+	// Test inactivity warnings (these should not change game state)
+	gd.ProcessLine("\x1b[1;31mINACTIVITY WARNING:\r\x1b[0m\n")
+	gd.ProcessLine("\x1b[1;36m  Your session will be terminated in \x1b[5;31mSixty \x1b[0m\x1b[1;36mseconds.\r\x1b[0m\n")
+	
+	// Game should still be active after warnings
+	if gd.GetState() != StateGameActive {
+		t.Errorf("Expected StateGameActive after inactivity warning, got %v", gd.GetState())
+	}
+
+	// Test final inactivity termination
+	gd.ProcessLine("\x1b[1;31mCRITICAL INACTIVITY:  \x1b[5mYour session has been terminated.\r\x1b[0m\n")
+	
+	// Game should be idle after termination
+	if gd.GetState() != StateIdle {
+		t.Errorf("Expected StateIdle after inactivity termination, got %v", gd.GetState())
+	}
+	
+	// Game name should be cleared
+	if gd.GetCurrentGame() != "" {
+		t.Errorf("Expected empty game name after termination, got %q", gd.GetCurrentGame())
+	}
+}

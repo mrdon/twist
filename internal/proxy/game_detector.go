@@ -146,6 +146,7 @@ func (l *GameDetector) initializePatterns() {
 		"Connection terminated":     TokenGameExit,
 		"Disconnected":             TokenGameExit,
 		"session has been terminated": TokenGameExit,  // More specific termination signal
+		"CRITICAL INACTIVITY:":        TokenGameExit,  // Inactivity disconnect termination
 		"...Now leaving Trade Wars": TokenGameExit,  // Game exit via menu
 		"TWGS v":                   TokenMainMenu,
 		"TradeWars Game Server":    TokenMainMenu,
@@ -239,6 +240,8 @@ func (l *GameDetector) processCharacter(char rune) {
 	l.checkPattern("Thank you for playing", char)
 	l.checkPattern("Connection terminated", char)
 	l.checkPattern("Disconnected", char)
+	l.checkPattern("session has been terminated", char)
+	l.checkPattern("CRITICAL INACTIVITY:", char)
 	l.checkPattern("...Now leaving Trade Wars", char)
 	l.checkPattern("TWGS v", char)
 	l.checkPattern("TradeWars Game Server", char)

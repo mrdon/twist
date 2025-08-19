@@ -7,7 +7,7 @@ import (
 	"time"
 	"twist/internal/debug"
 
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 )
 
 // Database interface matching TWX IModDatabase
@@ -82,7 +82,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	}
 	
 	var err error
-	d.db, err = sql.Open("sqlite3", filename+"?_foreign_keys=on")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on")
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -123,7 +123,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	
 	var err error
-	d.db, err = sql.Open("sqlite3", filename+"?_foreign_keys=on")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on")
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
