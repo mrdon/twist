@@ -197,13 +197,18 @@ func (p *TWXParser) saveSectorBasicInfo() error {
 		return err
 	}
 	
-	// Fire sector update event after successful basic info save
+	// Fire sector update event only if data actually changed after successful save
 	if p.tuiAPI != nil {
-		// Build sector info from current parser data
-		sectorData := p.buildSectorData()
-		sectorInfo := p.buildSectorInfo(sectorData)
-		debug.Log("DATABASE: Firing OnSectorUpdated for basic info sector %d", p.currentSectorIndex)
-		p.tuiAPI.OnSectorUpdated(sectorInfo)
+		// Check if sector data actually changed by comparing with database
+		if p.hasSectorDataChanged(p.currentSectorIndex) {
+			// Build sector info from current parser data
+			sectorData := p.buildSectorData()
+			sectorInfo := p.buildSectorInfo(sectorData)
+			debug.Log("DATABASE: Firing OnSectorUpdated for basic info sector %d", p.currentSectorIndex)
+			p.tuiAPI.OnSectorUpdated(sectorInfo)
+		} else {
+			debug.Log("DATABASE: Skipping OnSectorUpdated for sector %d - no data changes detected", p.currentSectorIndex)
+		}
 	}
 	
 	return nil
@@ -400,16 +405,21 @@ func (p *TWXParser) saveSectorProbeData(sectorIndex int) error {
 		return err
 	}
 	
-	// Fire sector update event after successful probe data save
+	// Fire sector update event only if data actually changed after successful probe data save
 	if p.tuiAPI != nil {
-		// For probe data, we need to get the sector info from database since we don't have current parser data
-		// We'll create a minimal SectorInfo with what we know
-		sectorInfo := api.SectorInfo{
-			Number:  sectorIndex,
-			Visited: false, // This is probe data, not actually visited
+		// Check if sector data actually changed by comparing with database
+		if p.hasSectorDataChanged(sectorIndex) {
+			// For probe data, we need to get the sector info from database since we don't have current parser data
+			// We'll create a minimal SectorInfo with what we know
+			sectorInfo := api.SectorInfo{
+				Number:  sectorIndex,
+				Visited: false, // This is probe data, not actually visited
+			}
+			debug.Log("DATABASE: Firing OnSectorUpdated for probe data sector %d", sectorIndex)
+			p.tuiAPI.OnSectorUpdated(sectorInfo)
+		} else {
+			debug.Log("DATABASE: Skipping OnSectorUpdated for probe data sector %d - no data changes detected", sectorIndex)
 		}
-		debug.Log("DATABASE: Firing OnSectorUpdated for probe data sector %d", sectorIndex)
-		p.tuiAPI.OnSectorUpdated(sectorInfo)
 	}
 	
 	return nil
@@ -443,4 +453,72 @@ func (p *TWXParser) buildSectorInfo(sectorData SectorData) api.SectorInfo {
 	}
 	
 	return sectorInfo
+}
+
+// hasSectorDataChanged checks if the sector data in memory differs from what's stored in the database
+func (p *TWXParser) hasSectorDataChanged(sectorIndex int) bool {
+	if p.database == nil {
+		return true // Assume changed if no database connection
+	}
+	
+	db := p.database.GetDB()
+	if db == nil {
+		return true // Assume changed if no database connection
+	}
+	
+	// Load current database values for comparison
+	var dbConstellation, dbBeacon sql.NullString
+	var dbNavHaz sql.NullInt64
+	var dbWarp1, dbWarp2, dbWarp3, dbWarp4, dbWarp5, dbWarp6 sql.NullInt64
+	var dbExplored sql.NullInt64
+	
+	row := db.QueryRow(`
+		SELECT constellation, beacon, nav_haz, warp1, warp2, warp3, warp4, warp5, warp6, explored
+		FROM sectors WHERE sector_index = ?
+	`, sectorIndex)
+	
+	err := row.Scan(&dbConstellation, &dbBeacon, &dbNavHaz, &dbWarp1, &dbWarp2, &dbWarp3, &dbWarp4, &dbWarp5, &dbWarp6, &dbExplored)
+	if err == sql.ErrNoRows {
+		return true // New sector, definitely changed
+	} else if err != nil {
+		return true // Error reading, assume changed
+	}
+	
+	// Compare constellation
+	currentConstellation := p.currentSector.Constellation
+	if (dbConstellation.Valid && dbConstellation.String != currentConstellation) || 
+	   (!dbConstellation.Valid && currentConstellation != "") {
+		return true
+	}
+	
+	// Compare beacon
+	currentBeacon := p.currentSector.Beacon
+	if (dbBeacon.Valid && dbBeacon.String != currentBeacon) || 
+	   (!dbBeacon.Valid && currentBeacon != "") {
+		return true
+	}
+	
+	// Compare nav haz
+	currentNavHaz := int64(p.currentSector.NavHaz)
+	if (dbNavHaz.Valid && dbNavHaz.Int64 != currentNavHaz) || 
+	   (!dbNavHaz.Valid && currentNavHaz != 0) {
+		return true
+	}
+	
+	// Compare warps (only if we have current sector warp data and aren't in probe mode)
+	if sectorIndex == p.currentSectorIndex && !p.probeMode {
+		dbWarps := []sql.NullInt64{dbWarp1, dbWarp2, dbWarp3, dbWarp4, dbWarp5, dbWarp6}
+		for i, currentWarp := range p.currentSectorWarps {
+			if i < len(dbWarps) {
+				dbWarp := dbWarps[i]
+				currentWarpInt64 := int64(currentWarp)
+				if (dbWarp.Valid && dbWarp.Int64 != currentWarpInt64) || 
+				   (!dbWarp.Valid && currentWarp != 0) {
+					return true
+				}
+			}
+		}
+	}
+	
+	return false // No changes detected
 }

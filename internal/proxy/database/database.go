@@ -82,7 +82,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	}
 	
 	var err error
-	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -90,6 +90,11 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	// Test the connection
 	if err = d.db.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
+	}
+	
+	// Explicitly set busy timeout via PRAGMA to ensure it's applied
+	if _, err = d.db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 	
 	// Create schema (handles IF NOT EXISTS)
@@ -123,7 +128,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	
 	var err error
-	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=5000")
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
@@ -199,6 +204,8 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	sector := NULLSector()
 	
 	// Load main sector data (Phase 2: port data removed from sectors table)
+	// Add timing debug to check if busy timeout is working
+	startTime := time.Now()
 	row := d.loadSectorStmt.QueryRow(index)
 	
 	var upDate sql.NullTime
@@ -213,6 +220,12 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 		&sector.MinesArmid.Quantity, &sector.MinesArmid.Owner,
 		&sector.MinesLimpet.Quantity, &sector.MinesLimpet.Owner,
 	)
+	
+	// Log timing for database lock analysis
+	elapsed := time.Since(startTime)
+	if err != nil && strings.Contains(err.Error(), "database is locked") {
+		debug.Log("TIMING: LoadSector(%d) failed with database lock after %v", index, elapsed)
+	}
 	
 	if err == sql.ErrNoRows {
 		// Sector doesn't exist, return blank sector (like TWX)

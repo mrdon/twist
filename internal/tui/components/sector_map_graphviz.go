@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 	"twist/internal/api"
 	"twist/internal/debug"
 	"twist/internal/theme"
@@ -111,6 +112,12 @@ type GraphvizSectorMap struct {
 	sixelLayer    *SixelLayer
 	regionID      string
 	isGenerating  bool        // Track when image generation is in progress
+	
+	// Debouncing for rapid sector updates (e.g., during probe processing)
+	lastUpdateTime    time.Time
+	debounceTimer     *time.Timer
+	pendingRedraw     bool
+	debounceDelay     time.Duration
 }
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
@@ -140,6 +147,7 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 		hasBorder:    false,  // No border, just background
 		sixelLayer:   sixelLayer,
 		regionID:     "sector_map", // Unique ID for this component
+		debounceDelay: 200 * time.Millisecond, // 200ms debounce delay for rapid updates
 	}
 	gsm.SetBorder(false).SetTitle("")
 	return gsm
@@ -170,9 +178,9 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	}
 
 	// Generate map image and sixel if needed
-	needsGeneration := gsm.needsRedraw
-	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t), isGenerating=%t", 
-		needsGeneration, gsm.needsRedraw, gsm.isGenerating)
+	needsGeneration := gsm.needsRedraw || gsm.pendingRedraw
+	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, pendingRedraw=%t), isGenerating=%t", 
+		needsGeneration, gsm.needsRedraw, gsm.pendingRedraw, gsm.isGenerating)
 	
 	
 	if needsGeneration {
@@ -195,6 +203,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 					debug.Log("GraphvizSectorMap.Draw: Image generated successfully")
 					// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
 					gsm.needsRedraw = false
+					gsm.pendingRedraw = false
 					gsm.isGenerating = false  // Mark generation complete
 				} else {
 					debug.Log("GraphvizSectorMap.Draw: Error generating image: %v", err)
@@ -359,7 +368,6 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 // UpdateCurrentSectorWithInfo updates the map with full sector information
 func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorInfo) {
 	oldSector := gsm.currentSector
-	currentHashKey := gsm.currentHashKey
 	
 	// Always update the sector data first
 	gsm.sectorData[sectorInfo.Number] = sectorInfo
@@ -379,26 +387,8 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 		}
 	} else {
-		// Same sector but data might have changed - check if graph content would change
-		if newHash, err := gsm.generateDOTContentHash(); err == nil {
-			debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Hash comparison for sector %d: current='%s', new='%s'", 
-				sectorInfo.Number, currentHashKey, newHash)
-			if newHash != currentHashKey {
-				debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - DOT content changed for sector %d, triggering redraw (old hash: %s, new hash: %s)", 
-					sectorInfo.Number, currentHashKey, newHash)
-				gsm.needsRedraw = true
-				gsm.currentHashKey = "" // Clear current hash key to force regeneration
-			} else {
-				debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
-					sectorInfo.Number, currentHashKey)
-			}
-		} else {
-			// If we can't generate hash, fall back to always redrawing
-			debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Failed to generate DOT hash for sector %d, falling back to redraw: %v", 
-				sectorInfo.Number, err)
-			gsm.needsRedraw = true
-			gsm.currentHashKey = "" // Clear current hash key to force regeneration
-		}
+		// Same sector but data might have changed - use debounced update
+		gsm.scheduleRedrawWithDebounce(sectorInfo.Number, "UpdateCurrentSectorWithInfo")
 	}
 }
 
@@ -413,35 +403,66 @@ func (gsm *GraphvizSectorMap) UpdateSectorData(sectorInfo api.SectorInfo) {
 		// Only check for redraw if the updated sector is within our display range
 		// (current sector or connected sectors)
 		if sectorInfo.Number == gsm.currentSector || gsm.isSectorInDisplayRange(sectorInfo.Number) {
-			// If we don't have a current hash, we need to redraw regardless
-			if gsm.currentHashKey == "" {
-				debug.Log("GraphvizSectorMap: UpdateSectorData - No current hash for sector %d, triggering redraw", 
-					sectorInfo.Number)
-				gsm.needsRedraw = true
-			} else {
-				// Check if the graph would actually change by comparing DOT content hash
-				if newHash, err := gsm.generateDOTContentHash(); err == nil {
-					debug.Log("GraphvizSectorMap: UpdateSectorData - Hash comparison for sector %d: current='%s', new='%s'", 
-						sectorInfo.Number, gsm.currentHashKey, newHash)
-					if newHash != gsm.currentHashKey {
-						debug.Log("GraphvizSectorMap: UpdateSectorData - DOT content changed for sector %d, triggering redraw (old hash: %s, new hash: %s)", 
-							sectorInfo.Number, gsm.currentHashKey, newHash)
-						gsm.needsRedraw = true
-						gsm.currentHashKey = "" // Clear current hash key to force regeneration
-					} else {
-						debug.Log("GraphvizSectorMap: UpdateSectorData - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
-							sectorInfo.Number, gsm.currentHashKey)
-					}
-				} else {
-					// If we can't generate hash, fall back to always redrawing
-					debug.Log("GraphvizSectorMap: UpdateSectorData - Failed to generate DOT hash for sector %d, falling back to redraw: %v", 
-						sectorInfo.Number, err)
-					gsm.needsRedraw = true
-					gsm.currentHashKey = "" // Clear current hash key to force regeneration
-				}
-			}
+			gsm.scheduleRedrawWithDebounce(sectorInfo.Number, "UpdateSectorData")
 		}
 	}
+}
+
+// scheduleRedrawWithDebounce schedules a redraw with debouncing to prevent rapid-fire updates
+func (gsm *GraphvizSectorMap) scheduleRedrawWithDebounce(sectorNumber int, source string) {
+	now := time.Now()
+	gsm.lastUpdateTime = now
+	
+	// If we don't have a current hash, we need to redraw regardless
+	needsImmediate := gsm.currentHashKey == ""
+	
+	if !needsImmediate {
+		// Check if the graph would actually change by comparing DOT content hash
+		if newHash, err := gsm.generateDOTContentHash(); err == nil {
+			debug.Log("GraphvizSectorMap: %s - Hash comparison for sector %d: current='%s', new='%s'", 
+				source, sectorNumber, gsm.currentHashKey, newHash)
+			if newHash != gsm.currentHashKey {
+				debug.Log("GraphvizSectorMap: %s - DOT content changed for sector %d, scheduling debounced redraw (old hash: %s, new hash: %s)", 
+					source, sectorNumber, gsm.currentHashKey, newHash)
+				needsImmediate = true
+				gsm.currentHashKey = "" // Clear current hash key to force regeneration
+			} else {
+				debug.Log("GraphvizSectorMap: %s - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
+					source, sectorNumber, gsm.currentHashKey)
+				return // No change needed
+			}
+		} else {
+			// If we can't generate hash, fall back to always redrawing
+			debug.Log("GraphvizSectorMap: %s - Failed to generate DOT hash for sector %d, scheduling debounced redraw: %v", 
+				source, sectorNumber, err)
+			needsImmediate = true
+			gsm.currentHashKey = "" // Clear current hash key to force regeneration
+		}
+	} else {
+		debug.Log("GraphvizSectorMap: %s - No current hash for sector %d, scheduling debounced redraw", 
+			source, sectorNumber)
+	}
+	
+	if !needsImmediate {
+		return
+	}
+	
+	// Cancel any existing timer
+	if gsm.debounceTimer != nil {
+		gsm.debounceTimer.Stop()
+	}
+	
+	// Mark that we have a pending redraw
+	gsm.pendingRedraw = true
+	
+	// Set up new timer
+	gsm.debounceTimer = time.AfterFunc(gsm.debounceDelay, func() {
+		if gsm.pendingRedraw {
+			debug.Log("GraphvizSectorMap: Debounce timer fired, triggering redraw for sector %d", sectorNumber)
+			gsm.needsRedraw = true
+			gsm.pendingRedraw = false
+		}
+	})
 }
 
 // isSectorInDisplayRange checks if a sector is within the current display range
