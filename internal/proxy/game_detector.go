@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"twist/internal/ansi"
 	"twist/internal/debug"
@@ -79,6 +80,14 @@ type PatternMatcher struct {
 // stateFn represents the state of the scanner as a function that returns the next state
 type stateFn func(*GameDetector) stateFn
 
+// gameDetectorState represents the immutable state that can be atomically swapped
+type gameDetectorState struct {
+	currentState       GameDetectionState
+	selectedGame       string
+	gameOptions        map[string]string
+	expectingUserInput bool
+}
+
 // GameDetector is a streaming lexer for game detection
 type GameDetector struct {
 	mu                    sync.RWMutex
@@ -95,11 +104,8 @@ type GameDetector struct {
 	// ANSI stripping for streaming content
 	ansiStripper          *ansi.StreamingStripper
 	
-	// Detection state
-	currentState          GameDetectionState
-	selectedGame          string
-	gameOptions           map[string]string
-	expectingUserInput    bool    // Track when we're expecting user input after a prompt
+	// Detection state - atomic pointer to immutable state
+	state                 atomic.Pointer[gameDetectorState]
 	
 	// Token channel
 	tokens                chan Token
@@ -122,18 +128,62 @@ func NewGameDetector(connInfo ConnectionInfo) *GameDetector {
 	l := &GameDetector{
 		serverHost:       connInfo.Host,
 		serverPort:       connInfo.Port,
-		currentState:     StateIdle,
-		gameOptions:      make(map[string]string),
 		tokens:           make(chan Token, 100), // Buffered channel
 		detectionTimeout: time.Minute * 5,
 		patternMatchers:  make(map[string]*PatternMatcher),
 		ansiStripper:     ansi.NewStreamingStripper(),
 	}
 	
+	// Initialize atomic state
+	initialState := &gameDetectorState{
+		currentState:       StateIdle,
+		selectedGame:       "",
+		gameOptions:        make(map[string]string),
+		expectingUserInput: false,
+	}
+	l.state.Store(initialState)
+	
 	// Initialize pattern matchers
 	l.initializePatterns()
 	
 	return l
+}
+
+// updateState atomically updates the game detector state
+func (l *GameDetector) updateState(updateFn func(*gameDetectorState) *gameDetectorState) {
+	for {
+		oldState := l.state.Load()
+		newState := updateFn(oldState)
+		if l.state.CompareAndSwap(oldState, newState) {
+			break
+		}
+		// Retry if CAS failed due to concurrent update
+	}
+}
+
+// copyState creates a copy of the current state for modification
+func copyState(s *gameDetectorState) *gameDetectorState {
+	if s == nil {
+		return &gameDetectorState{
+			currentState:       StateIdle,
+			selectedGame:       "",
+			gameOptions:        make(map[string]string),
+			expectingUserInput: false,
+		}
+	}
+	
+	// Deep copy the map
+	gameOptionsCopy := make(map[string]string, len(s.gameOptions))
+	for k, v := range s.gameOptions {
+		gameOptionsCopy[k] = v
+	}
+	
+	return &gameDetectorState{
+		currentState:       s.currentState,
+		selectedGame:       s.selectedGame,
+		gameOptions:        gameOptionsCopy,
+		expectingUserInput: s.expectingUserInput,
+	}
 }
 
 // initializePatterns sets up all the pattern matchers
@@ -189,12 +239,13 @@ func (l *GameDetector) ProcessUserInput(input string) {
 	l.lastActivity = time.Now()
 	
 	// Process isolated letters from user input in game menu state
-	if l.currentState == StateGameMenuVisible && len(input) == 1 {
+	currentState := l.state.Load()
+	if currentState.currentState == StateGameMenuVisible && len(input) == 1 {
 		// Extract the character and convert to uppercase
 		char := rune(input[0])
 		if (char >= 'A' && char <= 'Z') || (char >= 'a' && char <= 'z') {
 			letterStr := strings.ToUpper(string(char))
-			if _, exists := l.gameOptions[letterStr]; exists {
+			if _, exists := currentState.gameOptions[letterStr]; exists {
 				l.emitIsolatedLetterToken(letterStr)
 				l.processTokens()
 			}
@@ -247,7 +298,8 @@ func (l *GameDetector) processCharacter(char rune) {
 	l.checkPattern("TradeWars Game Server", char)
 	
 	// Always check for user prompt patterns in game menu states
-	if l.currentState == StateGameMenuVisible {
+	currentState := l.state.Load()
+	if currentState.currentState == StateGameMenuVisible {
 		l.checkPattern("Your choice: ", char)
 		l.checkPattern("Enter selection: ", char)
 		l.checkPattern("Choice: ", char)
@@ -257,7 +309,7 @@ func (l *GameDetector) processCharacter(char rune) {
 	}
 	
 	// State-specific pattern matching
-	switch l.currentState {
+	switch currentState.currentState {
 	case StateIdle:
 		// Look for game menu pattern AND game options (some servers send options first)
 		l.checkPattern("Select a game :", char)
@@ -465,7 +517,8 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 	iLetterState.prevChar = char
 	
 	// Only process if we're in game menu state and have game options
-	if l.currentState != StateGameMenuVisible || len(l.gameOptions) == 0 {
+	currentState := l.state.Load()
+	if currentState.currentState != StateGameMenuVisible || len(currentState.gameOptions) == 0 {
 		return
 	}
 	
@@ -480,7 +533,7 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 		letterStr := string(char)
 		
 		// Check if this letter corresponds to a game option
-		if _, exists := l.gameOptions[letterStr]; exists {
+		if _, exists := currentState.gameOptions[letterStr]; exists {
 			// Only accept isolated letters with appropriate context
 			// This helps avoid false positives from letters embedded in text
 			if l.isValidIsolatedLetterContext(currentPrevChar) {
@@ -572,13 +625,18 @@ func (l *GameDetector) emitGameOptionToken(letter, gameName string) {
 	cleanGameName := strings.TrimSpace(gameName)
 	
 	// Auto-transition to game menu state if we detect game options while idle
-	if l.currentState == StateIdle {
-		l.currentState = StateGameMenuVisible
-		// Only initialize gameOptions if it's nil/empty to preserve existing options
-		if l.gameOptions == nil {
-			l.gameOptions = make(map[string]string)
+	l.updateState(func(s *gameDetectorState) *gameDetectorState {
+		if s.currentState == StateIdle {
+			newState := copyState(s)
+			newState.currentState = StateGameMenuVisible
+			// Only initialize gameOptions if it's nil/empty to preserve existing options
+			if newState.gameOptions == nil {
+				newState.gameOptions = make(map[string]string)
+			}
+			return newState
 		}
-	}
+		return s
+	})
 	
 	token := Token{
 		Type:     TokenGameOption,
@@ -617,39 +675,64 @@ func (l *GameDetector) handleToken(token Token) {
 	switch token.Type {
 	case TokenGameMenu:
 		// Detect game menu regardless of current state (could be returning from a game)
-		l.currentState = StateGameMenuVisible
-		// Only reset gameOptions if we don't already have options (preserve auto-detected ones)
-		if len(l.gameOptions) == 0 {
-			l.gameOptions = make(map[string]string)
-		}
+		l.updateState(func(s *gameDetectorState) *gameDetectorState {
+			newState := copyState(s)
+			newState.currentState = StateGameMenuVisible
+			// Only reset gameOptions if we don't already have options (preserve auto-detected ones)
+			if len(newState.gameOptions) == 0 {
+				newState.gameOptions = make(map[string]string)
+			}
+			return newState
+		})
 		
 	case TokenGameOption:
-		if l.currentState == StateGameMenuVisible {
-			l.gameOptions[token.Letter] = token.GameName
-		}
+		l.updateState(func(s *gameDetectorState) *gameDetectorState {
+			if s.currentState == StateGameMenuVisible {
+				newState := copyState(s)
+				newState.gameOptions[token.Letter] = token.GameName
+				return newState
+			}
+			return s
+		})
 		
 	case TokenIsolatedLetter:
-		if l.currentState == StateGameMenuVisible {
-			if gameName, exists := l.gameOptions[token.Value]; exists {
-				l.selectedGame = gameName
-				l.currentState = StateGameSelected
+		l.updateState(func(s *gameDetectorState) *gameDetectorState {
+			if s.currentState == StateGameMenuVisible {
+				if gameName, exists := s.gameOptions[token.Value]; exists {
+					newState := copyState(s)
+					newState.selectedGame = gameName
+					newState.currentState = StateGameSelected
+					return newState
+				}
 			}
-		}
+			return s
+		})
 		
 	case TokenGameStart:
-		if l.currentState == StateGameSelected {
-			l.currentState = StateGameActive
+		l.updateState(func(s *gameDetectorState) *gameDetectorState {
+			if s.currentState == StateGameSelected {
+				newState := copyState(s)
+				newState.currentState = StateGameActive
+				return newState
+			}
+			return s
+		})
+		// Load database after state update
+		currentState := l.state.Load()
+		if currentState.currentState == StateGameActive {
 			if err := l.loadGameDatabase(); err != nil {
 			}
 		}
 		
 	case TokenGameExit:
-		if l.currentState == StateGameActive || l.currentState == StateGameSelected {
+		currentState := l.state.Load()
+		if currentState.currentState == StateGameActive || currentState.currentState == StateGameSelected {
 			l.resetGameState()
 		}
 		
 	case TokenMainMenu:
-		if l.currentState == StateGameActive {
+		currentState := l.state.Load()
+		if currentState.currentState == StateGameActive {
 			// TWGS patterns can appear in game content (like config screens)
 			// Only reset if this appears to be an actual return to main menu
 			// Heuristic: if we see "TWGS v" or "TradeWars Game Server" in game content,
@@ -662,16 +745,23 @@ func (l *GameDetector) handleToken(token Token) {
 		
 	case TokenUserPrompt:
 		// A user prompt was detected - we're now expecting user input
-		l.expectingUserInput = true
+		l.updateState(func(s *gameDetectorState) *gameDetectorState {
+			newState := copyState(s)
+			newState.expectingUserInput = true
+			return newState
+		})
 	}
 }
 
 // resetGameState clears current game state
+// This method assumes the caller already holds the mutex lock for non-atomic operations
 func (l *GameDetector) resetGameState() {
+	// Get current state for database cleanup
+	oldState := l.state.Load()
 	
 	// Notify about database being unloaded if one is currently loaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
-		currentGame := l.selectedGame
+		currentGame := oldState.selectedGame
 		if currentGame == "" {
 			currentGame = "Unknown Game"
 		}
@@ -681,10 +771,16 @@ func (l *GameDetector) resetGameState() {
 		}()
 	}
 	
-	l.currentState = StateIdle
-	l.selectedGame = ""
-	l.gameOptions = make(map[string]string)
-	l.expectingUserInput = false
+	// Atomically reset the state
+	newState := &gameDetectorState{
+		currentState:       StateIdle,
+		selectedGame:       "",
+		gameOptions:        make(map[string]string),
+		expectingUserInput: false,
+	}
+	l.state.Store(newState)
+	
+	// Reset non-atomic state (assumes caller holds mutex)
 	l.recentContent = "" // Clear recent content buffer
 	
 	// Reset pattern matchers
@@ -703,6 +799,7 @@ func (l *GameDetector) resetGameState() {
 	// Reset ANSI stripper state
 	l.ansiStripper.Reset()
 }
+
 
 // Helper functions
 
@@ -776,7 +873,8 @@ func (l *GameDetector) CheckTimeoutManual() {
 func (l *GameDetector) loadGameDatabase() error {
 	// Notify about database being unloaded if one is currently loaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
-		currentGame := l.selectedGame
+		currentState := l.state.Load()
+		currentGame := currentState.selectedGame
 		if currentGame == "" {
 			// If we're replacing a database, use the previous game name if available
 			currentGame = "Unknown Game"
@@ -795,9 +893,10 @@ func (l *GameDetector) loadGameDatabase() error {
 		l.currentScriptManager.Stop()
 	}
 	
-	dbName := l.createDatabaseName(l.selectedGame)
+	currentState := l.state.Load()
+	dbName := l.createDatabaseName(currentState.selectedGame)
 	
-	debug.Log("GAME DETECTOR: Loading database at %s for game %s", dbName, l.selectedGame)
+	debug.Log("GAME DETECTOR: Loading database at %s for game %s", dbName, currentState.selectedGame)
 	
 	db := database.NewDatabase()
 	
@@ -817,7 +916,7 @@ func (l *GameDetector) loadGameDatabase() error {
 	// Notify about database state change (loaded)
 	if l.onDatabaseStateChanged != nil {
 		go func() {
-			l.onDatabaseStateChanged(l.selectedGame, l.serverHost, l.serverPort, dbName, true)
+			l.onDatabaseStateChanged(currentState.selectedGame, l.serverHost, l.serverPort, dbName, true)
 		}()
 	} else {
 	}
@@ -859,6 +958,8 @@ func sanitizeForFilename(input string) string {
 
 // reset is an alias for resetGameState for test compatibility
 func (l *GameDetector) reset() {
+	l.mu.Lock()
+	defer l.mu.Unlock()
 	l.resetGameState()
 }
 
@@ -884,21 +985,27 @@ func (l *GameDetector) SetDatabaseStateChangedCallback(callback func(gameName, s
 
 
 func (l *GameDetector) GetCurrentGame() string {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.selectedGame
+	state := l.state.Load()
+	if state == nil {
+		return ""
+	}
+	return state.selectedGame
 }
 
 func (l *GameDetector) GetState() GameDetectionState {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.currentState
+	state := l.state.Load()
+	if state == nil {
+		return StateIdle
+	}
+	return state.currentState
 }
 
 func (l *GameDetector) IsGameActive() bool {
-	l.mu.RLock()
-	defer l.mu.RUnlock()
-	return l.currentState == StateGameActive
+	state := l.state.Load()
+	if state == nil {
+		return false
+	}
+	return state.currentState == StateGameActive
 }
 
 func (l *GameDetector) GetCurrentDatabase() database.Database {
@@ -928,7 +1035,8 @@ func (l *GameDetector) Close() error {
 	
 	// Notify about database being unloaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
-		currentGame := l.selectedGame
+		currentState := l.state.Load()
+		currentGame := currentState.selectedGame
 		if currentGame == "" {
 			currentGame = "Unknown Game"
 		}

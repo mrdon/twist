@@ -83,17 +83,7 @@ expect "Command"
 expect "Relative Density Scan"
 expect "Sector  3212  ==>"` 
 
-	// Use ConnectOptions with database path to enable game context
-	dbPath := t.TempDir() + "/test.db"
-	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
-	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
-
-	// Verify game context was created
-	if result.Database == nil {
-		t.Fatal("Expected database instance")
-	}
-	defer result.Database.Close()
+	result := scripting.Execute(t, serverScript, clientScript, nil)
 
 	var explored int
 	err := result.Database.QueryRow("SELECT explored FROM sectors WHERE sector_index = ?", 3212).Scan(&explored)

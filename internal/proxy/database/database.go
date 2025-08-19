@@ -186,6 +186,12 @@ func (d *SQLiteDatabase) CloseDatabase() error {
 		return nil
 	}
 	
+	// Close any active transaction
+	if d.tx != nil {
+		d.tx.Rollback() // Rollback any uncommitted transaction
+		d.tx = nil
+	}
+	
 	// Close prepared statements
 	if d.loadSectorStmt != nil {
 		d.loadSectorStmt.Close()
@@ -196,6 +202,10 @@ func (d *SQLiteDatabase) CloseDatabase() error {
 	
 	// Close database
 	if d.db != nil {
+		// Force WAL checkpoint to ensure all data is written to main database file
+		// This helps prevent locking issues when another connection opens the database
+		d.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
+		
 		if err := d.db.Close(); err != nil {
 			return fmt.Errorf("failed to close database: %w", err)
 		}

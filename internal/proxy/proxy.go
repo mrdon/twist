@@ -497,6 +497,10 @@ func (p *Proxy) Disconnect() error {
 		return nil
 	}
 
+	// Transition to disconnected state first - this closes the connection
+	// and causes handleOutput() to exit naturally
+	p.setState(NewDisconnectedState())
+
 	// Stop all scripts
 	if p.scriptManager != nil {
 		p.scriptManager.Stop()
@@ -514,9 +518,6 @@ func (p *Proxy) Disconnect() error {
 			debug.Log("Error closing database during disconnect: %v", err)
 		}
 	}
-
-	// Transition to disconnected state (this will close resources)
-	p.setState(NewDisconnectedState())
 
 	return nil
 }
