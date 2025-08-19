@@ -307,6 +307,8 @@ func (ta *TwistApp) animatePanels(show bool) {
 			// Try to get the last known sector from sector change events, or use a default
 			// This is a workaround until GetPlayerInfo() is fixed
 			ta.app.QueueUpdateDraw(func() {
+				// Restore map component after animation completes
+				ta.panelComponent.RestoreMapComponent()
 				ta.panelComponent.LoadRealData()
 			})
 		} else {
@@ -573,10 +575,7 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 			
 			// Show/hide panels based on database loading state
 			if info.IsLoaded {
-				// Restore map component when game loads
-				if ta.panelComponent != nil {
-					ta.panelComponent.RestoreMapComponent()
-				}
+				// Don't restore map component here - wait for animation to complete
 				ta.showPanels()
 			} else {
 				// Remove map component when game unloads
