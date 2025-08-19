@@ -146,6 +146,7 @@ func (l *GameDetector) initializePatterns() {
 		"Connection terminated":     TokenGameExit,
 		"Disconnected":             TokenGameExit,
 		"session has been terminated": TokenGameExit,  // More specific termination signal
+		"...Now leaving Trade Wars": TokenGameExit,  // Game exit via menu
 		"TWGS v":                   TokenMainMenu,
 		"TradeWars Game Server":    TokenMainMenu,
 		"Your choice: ":            TokenUserPrompt,
@@ -211,6 +212,7 @@ func (l *GameDetector) ProcessLine(text string) {
 	// Strip ANSI codes before processing using streaming stripper
 	cleanText := l.ansiStripper.StripChunk(text)
 	
+	
 	// Maintain recent content buffer for context analysis (keep last ~500 chars)
 	l.recentContent += cleanText
 	if len(l.recentContent) > 500 {
@@ -237,6 +239,7 @@ func (l *GameDetector) processCharacter(char rune) {
 	l.checkPattern("Thank you for playing", char)
 	l.checkPattern("Connection terminated", char)
 	l.checkPattern("Disconnected", char)
+	l.checkPattern("...Now leaving Trade Wars", char)
 	l.checkPattern("TWGS v", char)
 	l.checkPattern("TradeWars Game Server", char)
 	

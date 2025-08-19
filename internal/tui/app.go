@@ -470,14 +470,6 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 				ta.menuComponent.SetDisconnectedMenu()
 				ta.statusComponent.SetConnectionStatus(false, "")
 				
-				// Remove map component immediately to clear graphics
-				if ta.panelComponent != nil {
-					ta.panelComponent.RemoveMapComponent()
-				}
-				
-				// Hide panels with animation when disconnecting
-				ta.hidePanels()
-				
 				// Clear ProxyAPI from UI components to prevent stale references
 				ta.statusComponent.SetProxyAPI(nil)
 				ta.panelComponent.SetProxyAPI(nil)
@@ -505,14 +497,6 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 			ta.serverAddress = ""
 			ta.menuComponent.SetDisconnectedMenu()
 			ta.statusComponent.SetConnectionStatus(false, "")
-			
-			// Remove map component immediately to clear graphics
-			if ta.panelComponent != nil {
-				ta.panelComponent.RemoveMapComponent()
-			}
-			
-			// Hide panels with animation when connection fails
-			ta.hidePanels()
 			
 			// Clear ProxyAPI from UI components to prevent stale references
 			ta.statusComponent.SetProxyAPI(nil)

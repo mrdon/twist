@@ -95,8 +95,8 @@ func (p *ProxyApiImpl) monitorConnection() {
 			// Got error from channel
 			// Check if proxy is still connected after the error
 			if !p.proxy.IsConnected() {
-				// Proxy not connected, calling OnConnectionStatusChanged
-				// Connection was lost - call disconnection callback
+				// Connection was lost - clean up and notify
+				p.proxy.Disconnect() // Ensure proper cleanup including game state
 				p.tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusDisconnected, "")
 				return
 			}

@@ -868,7 +868,6 @@ func (p *Proxy) onDatabaseStateChanged(gameName, serverHost, serverPort, dbName 
 	// Notify TUI about database state change
 	if p.tuiAPI != nil {
 		p.tuiAPI.OnDatabaseStateChanged(info)
-	} else {
 	}
 }
 
