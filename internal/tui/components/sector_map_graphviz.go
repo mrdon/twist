@@ -215,12 +215,10 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		debug.Log("GraphvizSectorMap.Draw: Registering sixel region")
 		gsm.registerSixelRegion(x, y, width, height)
 	} else {
-		debug.Log("GraphvizSectorMap.Draw: Showing status text - currentHashKey=%s, sixelLayer!=nil=%t", 
+		debug.Log("GraphvizSectorMap.Draw: No image ready - currentHashKey=%s, sixelLayer!=nil=%t", 
 			gsm.currentHashKey, gsm.sixelLayer != nil)
 		
-		// Show status text
-		gsm.drawStatusText(screen, x, y, width, height, "Generating sector map...")
-		// Hide sixel region when not ready
+		// Hide sixel region when not ready (no status text shown)
 		if gsm.sixelLayer != nil {
 			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 		}
@@ -483,19 +481,14 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 	// Create a new directed graph with proper hash function
 	g := graph.New(func(i int) int { return i }, graph.Directed())
 
-	// Get current sector info
-	currentInfo, hasCurrentInfo := gsm.sectorData[gsm.currentSector]
-	if !hasCurrentInfo {
-		var err error
-		currentInfo, err = gsm.proxyAPI.GetSectorInfo(gsm.currentSector)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get current sector info: %w", err)
-		}
-		gsm.sectorData[gsm.currentSector] = currentInfo
+	// Always get fresh current sector info for consistent graph building
+	currentInfo, err := gsm.proxyAPI.GetSectorInfo(gsm.currentSector)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get current sector info: %w", err)
 	}
+	gsm.sectorData[gsm.currentSector] = currentInfo
 
 	// Add current sector as vertex
-	var err error
 	err = g.AddVertex(gsm.currentSector)
 	if err != nil {
 		return nil, fmt.Errorf("failed to add current sector vertex: %w", err)
@@ -928,27 +921,23 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	hash := md5.Sum(dotContent)
 	hashKey := fmt.Sprintf("%x", hash)
 
-	// Detailed logging for hash comparison debugging
-	debug.Log("GraphvizSectorMap: generateGraphvizImage - Generated hash %s for sector %d", hashKey, gsm.currentSector)
 
 	// Check if we have cached data for this hash
 	if cached, found := gsm.graphCache.Get(hashKey); found {
-		debug.Log("GraphvizSectorMap: Using cached image for hash %s (cache hit)", hashKey)
-		gsm.currentHashKey = hashKey
+			gsm.currentHashKey = hashKey
 		return cached.ImageData, nil
 	}
 
-	debug.Log("GraphvizSectorMap: Generating new image for hash %s (cache miss)", hashKey)
 	gsm.currentHashKey = hashKey
 
 	// Save DOT file for debugging
-	if err := os.WriteFile("/tmp/sector_map.dot", dotContent, 0644); err != nil {
-	} else {
+	dotFileName := "/tmp/sector_map.dot"
+	if err := os.WriteFile(dotFileName, dotContent, 0644); err != nil {
 	}
 
 	// Use command line graphviz as the primary approach since it renders borders properly
 	// The go-graphviz library's WASM backend doesn't render borders correctly
-	cmd := exec.Command("neato", "-Tpng", "/tmp/sector_map.dot")
+	cmd := exec.Command("neato", "-Tpng", dotFileName)
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
