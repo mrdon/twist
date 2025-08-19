@@ -1613,7 +1613,7 @@ func (p *TWXParser) processDensityLine(line string) {
 
 	// Pascal: TWXDatabase.SaveSector(Sect, I, nil, nil, nil);
 	if err := p.database.SaveSector(sector, sectorNum); err != nil {
-		return
+		panic(fmt.Sprintf("Critical database error in processDensityLine SaveSector for sector %d: %v", sectorNum, err))
 	}
 }
 
@@ -1983,24 +1983,18 @@ func (p *TWXParser) sectorCompleted() {
 	// Validate all collected data before saving
 	p.validateCollectedSectorData()
 
-	// Save sector data to database with error recovery using specific save functions
+	// Save sector data to database - database methods will panic on errors
 	// This prevents overwriting probe warps that were saved separately
-	p.errorRecoveryHandler("saveSectorBasicInfo", func() error {
-		return p.saveSectorBasicInfo()
-	})
+	p.saveSectorBasicInfo()
 	
 	// Save the parsed warps from sector display
-	p.errorRecoveryHandler("saveSectorWarps", func() error {
-		return p.saveSectorWarps()
-	})
+	p.saveSectorWarps()
 
 	// Handle port data - save if we have it, clear if we parsed a complete sector without finding any
 	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
 		// We found port data, save it
 		debug.Log("PORT: Saving port data for sector %d: %s (Class %d)", p.currentSectorIndex, p.currentSector.Port.Name, p.currentSector.Port.ClassIndex)
-		p.errorRecoveryHandler("saveSectorPort", func() error {
-			return p.saveSectorPort()
-		})
+		p.saveSectorPort()
 	} else {
 		// Only clear port data if we've finished parsing a complete sector AND we have no other sector features
 		// This prevents clearing ports for sectors with planets/citadels that might have special properties
@@ -2008,9 +2002,7 @@ func (p *TWXParser) sectorCompleted() {
 		if !hasOtherFeatures {
 			// We've completed parsing a basic sector without any features, clear any existing port data
 			debug.Log("PORT: Clearing port data for sector %d (basic sector with no features)", p.currentSectorIndex)
-			p.errorRecoveryHandler("clearSectorPort", func() error {
-				return p.clearSectorPort()
-			})
+			p.clearSectorPort()
 		} else {
 			debug.Log("PORT: Sector %d has other features (%d ships, %d traders, %d planets, %d mines), not clearing port data",
 				p.currentSectorIndex, len(p.currentShips), len(p.currentTraders), len(p.currentPlanets), len(p.currentMines))
@@ -2020,14 +2012,10 @@ func (p *TWXParser) sectorCompleted() {
 	// Mark sector exploration status based on context
 	if p.probeMode {
 		// Mark as probe data (EtCalc) when discovered by probes
-		p.errorRecoveryHandler("saveSectorProbeData", func() error {
-			return p.saveSectorProbeData(p.currentSectorIndex)
-		})
+		p.saveSectorProbeData(p.currentSectorIndex)
 	} else {
 		// Mark current sector as visited by player (EtHolo)
-		p.errorRecoveryHandler("saveSectorVisited", func() error {
-			return p.saveSectorVisited(p.currentSectorIndex)
-		})
+		p.saveSectorVisited(p.currentSectorIndex)
 	}
 
 	// Fire TUI current sector change event (but not for probe-discovered sectors or probe mode)
@@ -2451,9 +2439,7 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 	debug.Log("PROBE WARP: Successfully saved probe warp %d -> %d", fromSector, toSector)
 
 	// Mark target sector as having probe data
-	p.errorRecoveryHandler("saveSectorProbeData", func() error {
-		return p.saveSectorProbeData(toSector)
-	})
+	p.saveSectorProbeData(toSector)
 }
 
 // addReverseWarp adds a reverse warp connection (mirrors Pascal AddWarp method)

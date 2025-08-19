@@ -363,46 +363,44 @@ func (p *TWXParser) clearSectorPort() error {
 }
 
 // saveSectorVisited marks a sector as actually visited by the player (EtHolo)
-func (p *TWXParser) saveSectorVisited(sectorIndex int) error {
+func (p *TWXParser) saveSectorVisited(sectorIndex int) {
 	if sectorIndex <= 0 {
-		return nil
+		return
 	}
 	
 	db := p.database.GetDB()
 	if db == nil {
-		return fmt.Errorf("database connection is nil")
+		panic(fmt.Sprintf("Database connection is nil when saving sector %d as visited", sectorIndex))
 	}
 	
 	// Use INSERT OR IGNORE to create sector if it doesn't exist, then UPDATE to mark as EtHolo (3)
-	_, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", sectorIndex)
-	if err != nil {
-		return err
+	if _, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", sectorIndex); err != nil {
+		panic(fmt.Sprintf("Failed to insert sector %d: %v", sectorIndex, err))
 	}
 	
-	_, err = db.Exec("UPDATE sectors SET explored = 3 WHERE sector_index = ?", sectorIndex) // EtHolo = 3
-	return err
+	if _, err := db.Exec("UPDATE sectors SET explored = 3 WHERE sector_index = ?", sectorIndex); err != nil {
+		panic(fmt.Sprintf("Failed to mark sector %d as visited: %v", sectorIndex, err))
+	}
 }
 
 // saveSectorProbeData marks a sector as having probe/calculated data (EtCalc)
-func (p *TWXParser) saveSectorProbeData(sectorIndex int) error {
+func (p *TWXParser) saveSectorProbeData(sectorIndex int) {
 	if sectorIndex <= 0 {
-		return nil
+		return
 	}
 	
 	db := p.database.GetDB()
 	if db == nil {
-		return fmt.Errorf("database connection is nil")
+		panic(fmt.Sprintf("Database connection is nil when saving sector %d probe data", sectorIndex))
 	}
 	
 	// Only update exploration status if sector doesn't exist or has lower exploration status
 	// Don't downgrade EtHolo (3) or EtDensity (2) to EtCalc (1)
-	_, err := db.Exec(`
+	if _, err := db.Exec(`
 		INSERT OR IGNORE INTO sectors (sector_index, explored) VALUES (?, 1);
 		UPDATE sectors SET explored = 1 WHERE sector_index = ? AND explored < 1
-	`, sectorIndex, sectorIndex)
-	
-	if err != nil {
-		return err
+	`, sectorIndex, sectorIndex); err != nil {
+		panic(fmt.Sprintf("Failed to save probe data for sector %d: %v", sectorIndex, err))
 	}
 	
 	// Fire sector update event only if data actually changed after successful probe data save
@@ -421,8 +419,6 @@ func (p *TWXParser) saveSectorProbeData(sectorIndex int) error {
 			debug.Log("DATABASE: Skipping OnSectorUpdated for probe data sector %d - no data changes detected", sectorIndex)
 		}
 	}
-	
-	return nil
 }
 
 // buildSectorInfo converts SectorData to api.SectorInfo for TUI API

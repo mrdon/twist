@@ -82,7 +82,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	}
 	
 	var err error
-	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=5000")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=0")
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
@@ -93,8 +93,13 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	}
 	
 	// Explicitly set busy timeout via PRAGMA to ensure it's applied
-	if _, err = d.db.Exec("PRAGMA busy_timeout = 5000"); err != nil {
+	if _, err = d.db.Exec("PRAGMA busy_timeout = 0"); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
+	}
+	
+	// Enable WAL mode for better concurrent access
+	if _, err = d.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		return fmt.Errorf("failed to set WAL mode: %w", err)
 	}
 	
 	// Create schema (handles IF NOT EXISTS)
@@ -128,7 +133,7 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	
 	var err error
-	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=5000")
+	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=0")
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
@@ -136,6 +141,16 @@ func (d *SQLiteDatabase) CreateDatabase(filename string) error {
 	// Test the connection
 	if err = d.db.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
+	}
+	
+	// Enable WAL mode for better concurrent access
+	if _, err = d.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
+		return fmt.Errorf("failed to set WAL mode: %w", err)
+	}
+	
+	// Set zero busy timeout for immediate failures
+	if _, err = d.db.Exec("PRAGMA busy_timeout = 0"); err != nil {
+		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
 	
 	// Create complete schema (no migrations for new app)
