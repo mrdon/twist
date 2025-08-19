@@ -48,7 +48,7 @@ vet:
 # Run tests (including integration tests)
 test:
 	@echo "Running all tests..."
-	@go test -timeout=5s -tags=integration ./... -p=4 -json 2>&1 | tee test_output.json | jq -r 'select(.Action == "pass" or .Action == "fail" or .Action == "skip" or .Action == "build-output") | if .Action == "build-output" then ("BUILD ERROR: " + .Output) else (select(.Test) | "\(.Action | ascii_upcase): \(.Test)") end' 2>/dev/null | grep -v "^$$" | grep -E "FAIL|SKIP|BUILD ERROR" || echo "Tests completed"
+	@go test -timeout=5s -tags=integration -v -short -race ./... -p=4 -json 2>&1 | tee test_output.json | jq -r 'select(.Action == "pass" or .Action == "fail" or .Action == "skip" or .Action == "build-output") | if .Action == "build-output" then ("BUILD ERROR: " + .Output) else (select(.Test) | "\(.Action | ascii_upcase): \(.Test)") end' 2>/dev/null | grep -v "^$$" | grep -E "FAIL|SKIP|BUILD ERROR" || echo "Tests completed"
 	@if grep -q '"Action":"fail"' test_output.json 2>/dev/null || grep -q "panic: test timed out" test_output.json 2>/dev/null; then \
 		if grep -q "panic: test timed out" test_output.json; then \
 			echo "TIMEOUTS:"; \
@@ -67,12 +67,12 @@ test-integration:
 # Run scripting engine tests only (unit tests)
 test-scripting:
 	@echo "Running scripting engine unit tests..."
-	@go test -v ./internal/scripting/... ./internal/scripting/vm/commands/...
+	@go test -v -short -race ./internal/scripting/... ./internal/scripting/vm/commands/...
 
 # Run tests with coverage
 test-coverage-scripting:
 	@echo "Running scripting tests with coverage..."
-	@go test -v -coverprofile=coverage-scripting.out ./internal/scripting/... ./internal/scripting/vm/commands/...
+	@go test -v -short -race -coverprofile=coverage-scripting.out ./internal/scripting/... ./internal/scripting/vm/commands/...
 	@go tool cover -html=coverage-scripting.out -o coverage-scripting.html
 	@echo "Scripting coverage report generated: coverage-scripting.html"
 
@@ -80,7 +80,7 @@ test-coverage-scripting:
 test-run:
 	@echo "Usage: make test-run TEST=TestName"
 	@if [ -z "$(TEST)" ]; then echo "Please specify TEST=TestName"; exit 1; fi
-	@go test -v -run $(TEST) ./internal/scripting/...
+	@go test -v -short -race -run $(TEST) ./internal/scripting/...
 
 # Benchmark scripting performance  
 bench-scripting:
@@ -113,9 +113,9 @@ test-script: build-test-harness
 # Run tests with coverage
 test-coverage:
 	@echo "Running unit tests with coverage..."
-	@go test -v -coverprofile=coverage.out ./...
+	@go test -v -short -race -coverprofile=coverage.out ./...
 	@echo "Running integration tests with coverage..."
-	@go test -tags=integration -v -coverprofile=coverage-integration.out ./integration/...
+	@go test -tags=integration -v -short -race -coverprofile=coverage-integration.out ./integration/...
 	@go tool cover -html=coverage.out -o coverage.html
 	@go tool cover -html=coverage-integration.out -o coverage-integration.html
 	@echo "Coverage reports generated: coverage.html, coverage-integration.html"

@@ -2,7 +2,6 @@ package streaming
 
 import (
 	"strings"
-	"time"
 	"twist/internal/debug"
 )
 
@@ -296,14 +295,7 @@ func (p *TWXParser) handleInfoCredits(line string) {
 		p.playerStats.Credits = credits
 		
 		// Credits is typically the last field in info display, so trigger completion
-		// We'll defer this to allow any remaining fields to be parsed first
-		go func() {
-			// Small delay to allow any remaining lines to be processed
-			time.Sleep(10 * time.Millisecond)
-			if p.infoDisplay.Active {
-				p.completeInfoDisplay()
-			}
-		}()
+		p.completeInfoDisplay()
 	}
 }
 

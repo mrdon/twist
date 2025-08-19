@@ -3,6 +3,7 @@ package parsing
 import (
 	"testing"
 	"twist/integration/scripting"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestInfo demonstrates parsing of the 'i' (info) command display and database storage
@@ -74,46 +75,25 @@ func TestInfo(t *testing.T) {
 	// Verify that OnPlayerStatsUpdated was called during info command
 	// The info command should trigger player stats updates
 	playerStatsCalls := result.TuiAPI.PlayerStatsCalls
-	if len(playerStatsCalls) == 0 {
-		t.Errorf("Expected OnPlayerStatsUpdated to be called during info command, but got no calls")
-	} else {
+	assert.NotEmpty(t, playerStatsCalls, "Expected OnPlayerStatsUpdated to be called during info command")
+	
+	if len(playerStatsCalls) > 0 {
 		t.Logf("OnPlayerStatsUpdated called %d times during info command", len(playerStatsCalls))
 		
 		// Check that the player stats call has the expected values
 		finalStats := playerStatsCalls[len(playerStatsCalls)-1]
-		if finalStats.Credits != expectedCredits {
-			t.Errorf("Expected final stats credits to be %d, got %d", expectedCredits, finalStats.Credits)
-		}
-		if finalStats.Turns != expectedTurns {
-			t.Errorf("Expected final stats turns to be %d, got %d", expectedTurns, finalStats.Turns)
-		}
-		if finalStats.Experience != expectedExperience {
-			t.Errorf("Expected final stats experience to be %d, got %d", expectedExperience, finalStats.Experience)
-		}
-		if finalStats.Fighters != expectedFighters {
-			t.Errorf("Expected final stats fighters to be %d, got %d", expectedFighters, finalStats.Fighters)
-		}
-		if finalStats.Shields != expectedShields {
-			t.Errorf("Expected final stats shields to be %d, got %d", expectedShields, finalStats.Shields)
-		}
+		assert.Equal(t, expectedCredits, finalStats.Credits, "Final stats credits")
+		assert.Equal(t, expectedTurns, finalStats.Turns, "Final stats turns")
+		assert.Equal(t, expectedExperience, finalStats.Experience, "Final stats experience")
+		assert.Equal(t, expectedFighters, finalStats.Fighters, "Final stats fighters")
+		assert.Equal(t, expectedShields, finalStats.Shields, "Final stats shields")
+		
 		// Verify cargo in player stats events
-		if finalStats.OreHolds != expectedOreHolds {
-			t.Errorf("Expected final stats ore holds to be %d, got %d", expectedOreHolds, finalStats.OreHolds)
-		}
-		if finalStats.OrgHolds != expectedOrgHolds {
-			t.Errorf("Expected final stats org holds to be %d, got %d", expectedOrgHolds, finalStats.OrgHolds)
-		}
-		if finalStats.EquHolds != expectedEquHolds {
-			t.Errorf("Expected final stats equ holds to be %d, got %d", expectedEquHolds, finalStats.EquHolds)
-		}
-		if finalStats.TotalHolds != expectedTotalHolds {
-			t.Errorf("Expected final stats total holds to be %d, got %d", expectedTotalHolds, finalStats.TotalHolds)
-		}
-		if finalStats.Alignment != expectedAlignment {
-			t.Errorf("Expected final stats alignment to be %d, got %d", expectedAlignment, finalStats.Alignment)
-		}
-		if finalStats.Eprobes != expectedEprobes {
-			t.Errorf("Expected final stats ether probes to be %d, got %d", expectedEprobes, finalStats.Eprobes)
-		}
+		assert.Equal(t, expectedOreHolds, finalStats.OreHolds, "Final stats ore holds")
+		assert.Equal(t, expectedOrgHolds, finalStats.OrgHolds, "Final stats org holds")
+		assert.Equal(t, expectedEquHolds, finalStats.EquHolds, "Final stats equ holds")
+		assert.Equal(t, expectedTotalHolds, finalStats.TotalHolds, "Final stats total holds")
+		assert.Equal(t, expectedAlignment, finalStats.Alignment, "Final stats alignment")
+		assert.Equal(t, expectedEprobes, finalStats.Eprobes, "Final stats ether probes")
 	}
 }
