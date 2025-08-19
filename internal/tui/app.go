@@ -54,6 +54,11 @@ type TwistApp struct {
 
 	// Initial script to load on connection
 	initialScript string
+	
+	// Version information
+	version string
+	commit  string
+	date    string
 }
 
 // NewApplication creates and configures the tview application
@@ -93,6 +98,9 @@ func NewApplication() *TwistApp {
 		sixelLayer:         sixelLayer,
 		panelsVisible:      false, // Start with panels hidden
 		animating:          false,
+		version:            "dev", // Default version
+		commit:             "none",
+		date:               "unknown",
 	}
 
 	// Create API layer - proxy instances created per connection via static Connect()
@@ -373,6 +381,18 @@ func (ta *TwistApp) registerMenuShortcuts() {
 // SetInitialScript sets the script to load on connection
 func (ta *TwistApp) SetInitialScript(scriptName string) {
 	ta.initialScript = scriptName
+}
+
+// SetVersionInfo sets the version information for display
+func (ta *TwistApp) SetVersionInfo(version, commit, date string) {
+	ta.version = version
+	ta.commit = commit
+	ta.date = date
+	
+	// Update status component with version info
+	if ta.statusComponent != nil {
+		ta.statusComponent.SetVersionInfo(version, commit, date)
+	}
 }
 
 // Run starts the TUI application

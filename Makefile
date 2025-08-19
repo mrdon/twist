@@ -13,7 +13,7 @@ all: build
 build:
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
-	@go build -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
+	@go build -ldflags="-X main.version=dev-$(shell git rev-parse --short HEAD) -X main.commit=$(shell git rev-parse HEAD) -X main.date=$(shell date -u '+%Y-%m-%dT%H:%M:%SZ')" -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PACKAGE)
 	@echo "Built $(BINARY_NAME) in $(BUILD_DIR)/ directory"
 
 # Build and run the application
@@ -145,15 +145,21 @@ build-debug:
 	@go build -gcflags="all=-N -l" -o $(BUILD_DIR)/$(BINARY_NAME)-debug $(MAIN_PACKAGE)
 	@echo "Debug build complete: $(BUILD_DIR)/$(BINARY_NAME)-debug"
 
-# Build for multiple platforms
+# Build for multiple platforms using GoReleaser (development snapshots)
 build-all:
-	@echo "Building for multiple platforms..."
-	@mkdir -p $(BUILD_DIR)
-	@GOOS=linux GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-linux-amd64 $(MAIN_PACKAGE)
-	@GOOS=darwin GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-amd64 $(MAIN_PACKAGE)
-	@GOOS=darwin GOARCH=arm64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-darwin-arm64 $(MAIN_PACKAGE)
-	@GOOS=windows GOARCH=amd64 go build -o $(BUILD_DIR)/$(BINARY_NAME)-windows-amd64.exe $(MAIN_PACKAGE)
-	@echo "Multi-platform builds complete"
+	@echo "Building for multiple platforms with GoReleaser..."
+	@~/go/bin/goreleaser build --snapshot --clean
+	@echo "Multi-platform builds complete in dist/ directory"
+
+# Release using GoReleaser (requires git tag)
+release:
+	@echo "Creating release with GoReleaser..."
+	@~/go/bin/goreleaser release --clean
+
+# Check GoReleaser configuration
+release-check:
+	@echo "Checking GoReleaser configuration..."
+	@~/go/bin/goreleaser check
 
 # Show help
 help:
@@ -171,7 +177,9 @@ help:
 	@echo "  install       - Install binary to GOPATH/bin"
 	@echo "  check         - Run fmt, vet, and test"
 	@echo "  build-debug   - Build with debug flags"
-	@echo "  build-all     - Build for multiple platforms"
+	@echo "  build-all     - Build for multiple platforms using GoReleaser"
+	@echo "  release       - Create release with GoReleaser (requires git tag)"
+	@echo "  release-check - Check GoReleaser configuration"
 	@echo "  build-test-harness - Build the script test harness"  
 	@echo "  test-scripts  - Run basic script tests"
 	@echo "  test-all-scripts - Test all TWX scripts in twx-scripts/"

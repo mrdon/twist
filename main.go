@@ -9,6 +9,12 @@ import (
 	"twist/internal/tui"
 )
 
+var (
+	version = "dev"
+	commit  = "none"
+	date    = "unknown"
+)
+
 func main() {
 	// Check if we have a proper TTY
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
@@ -26,6 +32,7 @@ func main() {
 
 	// Initialize and run the tview application
 	app := tui.NewApplication()
+	app.SetVersionInfo(version, commit, date)
 	app.SetInitialScript(scriptName)
 	if err := app.Run(); err != nil {
 		fmt.Printf("Error running program: %v\n", err)

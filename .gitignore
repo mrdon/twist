@@ -6,3 +6,15 @@ twx-scripts
 *.db
 *.log
 
+# Added by goreleaser init:
+dist/
+
+# Coverage reports
+coverage.out
+coverage-*.out
+coverage*.html
+test_output.json
+
+# IDE files
+.vscode/
+.idea/

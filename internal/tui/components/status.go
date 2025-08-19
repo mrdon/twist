@@ -18,6 +18,11 @@ type StatusComponent struct {
 	gameInfo      *GameInfo // Current active game information
 	lastWidth     int       // Track the last known width for padding
 	menuComponent *MenuComponent // Reference to menu component for width coordination
+	
+	// Version information
+	version string
+	commit  string
+	date    string
 }
 
 // GameInfo holds information about the currently active game
@@ -137,6 +142,11 @@ func (sc *StatusComponent) UpdateStatus() {
 		statusText.WriteString(" | Scripts: Not available")
 	}
 	
+	// Add version information if available
+	if sc.version != "" {
+		statusText.WriteString(" | v")
+		statusText.WriteString(sc.version)
+	}
 	
 	statusText.WriteString(" | F1=Help")
 	
@@ -206,4 +216,12 @@ func (sc *StatusComponent) GetLastWidth() int {
 // SetMenuComponent sets the menu component reference for width coordination
 func (sc *StatusComponent) SetMenuComponent(menuComponent *MenuComponent) {
 	sc.menuComponent = menuComponent
+}
+
+// SetVersionInfo sets the version information for display
+func (sc *StatusComponent) SetVersionInfo(version, commit, date string) {
+	sc.version = version
+	sc.commit = commit
+	sc.date = date
+	sc.UpdateStatus()
 }
