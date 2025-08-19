@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -12,6 +13,7 @@ import (
 type SimpleExpectEngine struct {
 	t               *testing.T
 	outputCapture   []string
+	outputMutex     sync.RWMutex
 	inputSender     func(string)
 	timeout         time.Duration
 	starReplacement string // What to replace "*" with (e.g., "\r" for client, "\r\n" for server)
@@ -127,7 +129,9 @@ func (e *SimpleExpectEngine) expect(args []string) error {
 	deadline := time.Now().Add(e.timeout)
 
 	for time.Now().Before(deadline) {
+		e.outputMutex.RLock()
 		output := strings.Join(e.outputCapture, "")
+		e.outputMutex.RUnlock()
 
 		// Use only literal string matching to avoid regex interpretation issues
 		if strings.Contains(output, pattern) {
@@ -205,16 +209,22 @@ func (e *SimpleExpectEngine) log(args []string) error {
 
 // AddOutput feeds output to the engine
 func (e *SimpleExpectEngine) AddOutput(output string) {
+	e.outputMutex.Lock()
+	defer e.outputMutex.Unlock()
 	e.outputCapture = append(e.outputCapture, output)
 }
 
 // GetAllOutput returns all captured output as a single string
 func (e *SimpleExpectEngine) GetAllOutput() string {
+	e.outputMutex.RLock()
+	defer e.outputMutex.RUnlock()
 	return strings.Join(e.outputCapture, "")
 }
 
 // ClearOutput clears the output capture buffer
 func (e *SimpleExpectEngine) ClearOutput() {
+	e.outputMutex.Lock()
+	defer e.outputMutex.Unlock()
 	e.outputCapture = e.outputCapture[:0]
 }
 

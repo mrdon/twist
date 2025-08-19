@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -9,9 +10,40 @@ import (
 	"twist/internal/proxy/scripting"
 )
 
+// newTestGameDetector creates a GameDetector with unique database isolation for testing.
+// It returns the GameDetector instance and a cleanup function that should be deferred.
+// This prevents database file conflicts when tests run in parallel.
+func newTestGameDetector(t *testing.T) (*GameDetector, func()) {
+	// Create temporary directory for database files
+	tempDir := t.TempDir()
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+	
+	// Change to temp directory so database files are created there
+	if err := os.Chdir(tempDir); err != nil {
+		t.Fatalf("Failed to change to temp directory: %v", err)
+	}
+	
+	// Use unique identifier to ensure no conflicts with other tests
+	uniqueID := fmt.Sprintf("%d_%s", time.Now().UnixNano(), strings.ReplaceAll(t.Name(), "/", "_"))
+	connInfo := ConnectionInfo{Host: "localhost", Port: uniqueID}
+	gd := NewGameDetector(connInfo)
+	
+	// Return cleanup function that restores directory and closes GameDetector
+	cleanup := func() {
+		gd.Close()
+		os.Chdir(originalDir)
+		// Database files will be automatically cleaned up when tempDir is removed
+	}
+	
+	return gd, cleanup
+}
+
 // TestGameDetector_BasicFlow tests the complete game detection flow
 func TestGameDetector_BasicFlow(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	connInfo := ConnectionInfo{Host: "localhost", Port: t.Name()}
 	gd := NewGameDetector(connInfo)
 	defer gd.Close()
 
@@ -58,7 +90,7 @@ func TestGameDetector_BasicFlow(t *testing.T) {
 
 // TestGameDetector_ChunkSplitting tests streaming across chunk boundaries
 func TestGameDetector_ChunkSplitting(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	connInfo := ConnectionInfo{Host: "localhost", Port: t.Name()}
 	gd := NewGameDetector(connInfo)
 	defer gd.Close()
 
@@ -118,9 +150,8 @@ func TestGameDetector_ChunkSplitting(t *testing.T) {
 
 // TestGameDetector_ANSISequences tests handling of ANSI codes
 func TestGameDetector_ANSISequences(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	// Test with ANSI sequences mixed in
 	gd.ProcessLine("\x1b[36mSelect a game :\x1b[37m")
@@ -141,7 +172,7 @@ func TestGameDetector_ANSISequences(t *testing.T) {
 
 // TestGameDetector_ProcessChunk tests raw byte processing
 func TestGameDetector_ProcessChunk(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	connInfo := ConnectionInfo{Host: "localhost", Port: t.Name()}
 	gd := NewGameDetector(connInfo)
 	defer gd.Close()
 
@@ -169,7 +200,7 @@ func TestGameDetector_ProcessChunk(t *testing.T) {
 
 // TestGameDetector_StateProtection tests state-based pattern filtering
 func TestGameDetector_StateProtection(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	connInfo := ConnectionInfo{Host: "localhost", Port: t.Name()}
 	gd := NewGameDetector(connInfo)
 	defer gd.Close()
 
@@ -205,9 +236,8 @@ func TestGameDetector_StateProtection(t *testing.T) {
 
 // TestGameDetector_MainMenuReturn tests main menu detection
 func TestGameDetector_MainMenuReturn(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	// Set up active game
 	gd.ProcessLine("Select a game :")
@@ -246,9 +276,8 @@ func TestGameDetector_MainMenuReturn(t *testing.T) {
 
 // TestGameDetector_Timeout tests timeout functionality
 func TestGameDetector_Timeout(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	// Set detection timeout to very short for testing
 	gd.SetDetectionTimeout(time.Millisecond * 10)
@@ -272,13 +301,12 @@ func TestGameDetector_Timeout(t *testing.T) {
 
 // TestGameDetector_DatabaseLoading tests database creation
 func TestGameDetector_DatabaseLoading(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
-	var callbackCalled bool
+	callbackDone := make(chan bool, 1)
 	gd.SetDatabaseLoadedCallback(func(db database.Database, sm *scripting.ScriptManager) error {
-		callbackCalled = true
+		callbackDone <- true
 		return nil
 	})
 
@@ -288,11 +316,12 @@ func TestGameDetector_DatabaseLoading(t *testing.T) {
 	gd.ProcessLine("A")
 	gd.ProcessLine("Show today's log? (Y/N)")
 
-	// Give callback time to execute
-	time.Sleep(time.Millisecond * 10)
-
-	if !callbackCalled {
-		t.Error("Database loaded callback was not called")
+	// Wait for callback to be called
+	select {
+	case <-callbackDone:
+		// Callback was called successfully
+	case <-time.After(time.Second):
+		t.Error("Database loaded callback was not called within timeout")
 	}
 
 	// Verify database was created
@@ -304,13 +333,12 @@ func TestGameDetector_DatabaseLoading(t *testing.T) {
 		t.Error("Expected script manager to be created")
 	}
 
-	// Clean up database file
-	os.Remove("localhost_23_test_game.db")
+	// Database files are automatically cleaned up by the helper function
 }
 
 // TestGameDetector_ConcurrentAccess tests thread safety
 func TestGameDetector_ConcurrentAccess(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
+	connInfo := ConnectionInfo{Host: "localhost", Port: t.Name()}
 	gd := NewGameDetector(connInfo)
 	defer gd.Close()
 
@@ -368,9 +396,8 @@ func TestGameDetector_ConcurrentAccess(t *testing.T) {
 
 // TestGameDetector_EdgeCases tests various edge cases
 func TestGameDetector_EdgeCases(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	testCases := []struct {
 		name     string
@@ -533,9 +560,8 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 // TestGameDetector_ConfigScreenBug tests the specific bug where 'v' config screen
 // contains "TWGS v" text that incorrectly triggers game exit detection
 func TestGameDetector_ConfigScreenBug(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	// First, set up an active game session
 	gd.ProcessLine("Select a game :")
@@ -601,9 +627,8 @@ Command [TL=00:00:00]:[2142] (?=Help)? : `
 
 // TestGameDetector_InactivityDisconnect tests detection of inactivity-based disconnects
 func TestGameDetector_InactivityDisconnect(t *testing.T) {
-	connInfo := ConnectionInfo{Host: "localhost", Port: "23"}
-	gd := NewGameDetector(connInfo)
-	defer gd.Close()
+	gd, cleanup := newTestGameDetector(t)
+	defer cleanup()
 
 	// Set up an active game session
 	gd.ProcessLine("Select a game :")

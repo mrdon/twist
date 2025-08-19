@@ -89,6 +89,9 @@ func (m *MockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
 func TestTraderEventFiring(t *testing.T) {
 	// Create test database and mock TUI API
 	db := database.NewDatabase()
+	if err := db.CreateDatabase(":memory:"); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
 	mockAPI := &MockTuiAPI{}
 	parser := NewTWXParser(db, mockAPI)
 
@@ -199,6 +202,9 @@ func TestTraderEventFiring(t *testing.T) {
 func TestPlayerStatsEventFiring(t *testing.T) {
 	// Create test database and mock TUI API
 	db := database.NewDatabase()
+	if err := db.CreateDatabase(":memory:"); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
 	mockAPI := &MockTuiAPI{}
 	parser := NewTWXParser(db, mockAPI)
 
@@ -319,6 +325,9 @@ func TestPlayerStatsEventFiring(t *testing.T) {
 func TestEventIntegrationWithParsing(t *testing.T) {
 	// Test that events are fired during actual parsing scenarios
 	db := database.NewDatabase()
+	if err := db.CreateDatabase(":memory:"); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
 	mockAPI := &MockTuiAPI{}
 	parser := NewTWXParser(db, mockAPI)
 
@@ -408,6 +417,9 @@ func TestEventIntegrationWithParsing(t *testing.T) {
 func TestEventDataIntegrity(t *testing.T) {
 	// Test that event data maintains integrity during conversion
 	db := database.NewDatabase()
+	if err := db.CreateDatabase(":memory:"); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
 	mockAPI := &MockTuiAPI{}
 	parser := NewTWXParser(db, mockAPI)
 

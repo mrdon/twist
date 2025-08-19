@@ -137,6 +137,9 @@ func TestFullTUIIntegrationChain(t *testing.T) {
 	t.Run("CompleteTraderDataFlow", func(t *testing.T) {
 		// Create full mock chain
 		db := database.NewDatabase()
+		if err := db.CreateDatabase(":memory:"); err != nil {
+			t.Fatalf("Failed to create test database: %v", err)
+		}
 		mockTuiAPI := NewFullMockTuiAPI()
 		parser := NewTWXParser(db, mockTuiAPI)
 
@@ -197,6 +200,9 @@ func TestFullTUIIntegrationChain(t *testing.T) {
 	t.Run("CompletePlayerStatsFlow", func(t *testing.T) {
 		// Create full mock chain
 		db := database.NewDatabase()
+		if err := db.CreateDatabase(":memory:"); err != nil {
+			t.Fatalf("Failed to create test database: %v", err)
+		}
 		mockTuiAPI := NewFullMockTuiAPI()
 		parser := NewTWXParser(db, mockTuiAPI)
 
@@ -239,6 +245,9 @@ func TestFullTUIIntegrationChain(t *testing.T) {
 	t.Run("MultipleTraderFlow", func(t *testing.T) {
 		// Test multiple traders in the same sector
 		db := database.NewDatabase()
+		if err := db.CreateDatabase(":memory:"); err != nil {
+			t.Fatalf("Failed to create test database: %v", err)
+		}
 		mockTuiAPI := NewFullMockTuiAPI()
 		parser := NewTWXParser(db, mockTuiAPI)
 
@@ -294,6 +303,9 @@ func TestRealWorldParsingWithTUIEvents(t *testing.T) {
 	// Test with more realistic sector data that includes multiple types of information
 	
 	db := database.NewDatabase()
+	if err := db.CreateDatabase(":memory:"); err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
 	mockTuiAPI := NewFullMockTuiAPI()
 	parser := NewTWXParser(db, mockTuiAPI)
 
