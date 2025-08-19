@@ -508,6 +508,13 @@ func (p *Proxy) Disconnect() error {
 		p.gameDetector = nil
 	}
 
+	// Close database to properly release resources
+	if p.db != nil {
+		if err := p.db.CloseDatabase(); err != nil {
+			debug.Log("Error closing database during disconnect: %v", err)
+		}
+	}
+
 	// Transition to disconnected state (this will close resources)
 	p.setState(NewDisconnectedState())
 

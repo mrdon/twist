@@ -18,24 +18,13 @@ func TestSectorMove(t *testing.T) {
 	// Set up test credits BEFORE running the script
 	testCredits := 374999
 	
-	// Pre-setup the database with test credits
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("Failed to open database for pre-setup: %v", err)
-	}
-	defer db.Close()
-	
-	// Create the database schema first by attempting to connect
-	tempResult := scripting.ExecuteScriptFile(t, "sector_move.script", connectOpts)
-	if tempResult.Database != nil {
-		tempResult.Database.Close()
-	}
-	
-	// Now set up the test credits
-	_, err = db.Exec("INSERT OR REPLACE INTO player_stats (id, credits) VALUES (1, ?)", testCredits)
-	if err != nil {
-		t.Fatalf("Failed to set up test credits: %v", err)
-	}
+	// Set up database schema and initial data before running the script
+	scripting.SetupTestDatabase(t, dbPath, func(db *sql.DB) {
+		_, err := db.Exec("INSERT OR REPLACE INTO player_stats (id, credits) VALUES (1, ?)", testCredits)
+		if err != nil {
+			t.Fatalf("Failed to set up test credits: %v", err)
+		}
+	})
 
 	// Execute test using script file
 	result := scripting.ExecuteScriptFile(t, "sector_move.script", connectOpts)

@@ -18,6 +18,7 @@ import (
 	"twist/integration/setup"
 	"twist/internal/api"
 	"twist/internal/api/factory"
+	"twist/internal/proxy/database"
 )
 
 // ScriptLine represents a single line in the raw script format
@@ -243,6 +244,28 @@ func escapeANSIForExpect(text string) string {
 	return text
 }
 
+// SetupTestDatabase creates the database schema and allows test setup
+// This function is idempotent and safe to call multiple times
+func SetupTestDatabase(t *testing.T, dbPath string, setupFunc func(*sql.DB)) {
+	if dbPath == "" {
+		return // No database requested
+	}
+	
+	// Create database with schema
+	db := database.NewDatabase()
+	err := db.CreateDatabase(dbPath)
+	if err != nil {
+		t.Fatalf("Failed to create test database: %v", err)
+	}
+	defer db.CloseDatabase()
+	
+	// Allow test to set up initial data
+	if setupFunc != nil {
+		sqlDB := db.GetDB()
+		setupFunc(sqlDB)
+	}
+}
+
 // Execute runs server and client scripts using the API for complete black-box testing
 //
 // Flow:
@@ -284,14 +307,28 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	// 2. PROXY: Create client expect engine and connect proxy
 	clientExpectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	baseTuiAPI := &TestTuiAPI{expectEngine: clientExpectEngine}
+	
+	// Create channels to wait for connection and disconnection completion
+	connectionReady := make(chan bool, 1)
+	disconnectionReady := make(chan bool, 1)
+	
 	trackingTuiAPI := &TrackingSectorChangeTuiAPI{
-		TestTuiAPI:        baseTuiAPI,
-		SectorChangeCalls: make([]api.SectorInfo, 0),
-		PlayerStatsCalls:  make([]api.PlayerStatsInfo, 0),
+		TestTuiAPI:         baseTuiAPI,
+		SectorChangeCalls:  make([]api.SectorInfo, 0),
+		PlayerStatsCalls:   make([]api.PlayerStatsInfo, 0),
+		ConnectionReady:    connectionReady,
+		DisconnectionReady: disconnectionReady,
 	}
 	address := fmt.Sprintf("localhost:%d", port)
 	proxyInstance := factory.Connect(address, trackingTuiAPI, connectOpts)
-	defer proxyInstance.Disconnect()
+	
+	// Wait for connection to actually complete
+	select {
+	case <-connectionReady:
+		// Connection successful
+	case <-time.After(2 * time.Second):
+		t.Fatalf("Timeout waiting for proxy connection")
+	}
 
 	// Set the input sender for client expect engine - this simulates user typing
 	clientExpectEngine.inputSender = func(input string) {
@@ -307,7 +344,19 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	t.Logf("CLIENT SCRIPT SET:\n%s", clientScript)
 	err = clientExpectEngine.Run(clientScript)
 	if err != nil {
+		proxyInstance.Disconnect() // Clean up on error
 		t.Fatalf("Client script failed: %v", err)
+	}
+
+	// Disconnect proxy before opening database to avoid lock contention
+	proxyInstance.Disconnect()
+	
+	// Wait for disconnection to actually complete (database closure, etc.)
+	select {
+	case <-disconnectionReady:
+		// Disconnection successful
+	case <-time.After(2 * time.Second):
+		t.Logf("Warning: Timeout waiting for proxy disconnection")
 	}
 
 	// Open database for return if path was specified
@@ -326,6 +375,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 		if err := sqlDB.Ping(); err != nil {
 			t.Fatalf("Database connection failed: %v", err)
 		}
+		
 		// Create database assertion helper
 		dbAsserts = setup.NewDBAsserts(t, sqlDB)
 	}
@@ -363,6 +413,24 @@ type TrackingSectorChangeTuiAPI struct {
 	SectorChangeCalls     []api.SectorInfo
 	PlayerStatsCallsMutex sync.Mutex
 	PlayerStatsCalls      []api.PlayerStatsInfo
+	ConnectionReady       chan bool
+	DisconnectionReady    chan bool
+}
+
+func (t *TrackingSectorChangeTuiAPI) OnConnectionStatusChanged(status api.ConnectionStatus, address string) {
+	if status == api.ConnectionStatusConnected && t.ConnectionReady != nil {
+		select {
+		case t.ConnectionReady <- true:
+		default:
+			// Channel already signaled or closed
+		}
+	} else if status == api.ConnectionStatusDisconnected && t.DisconnectionReady != nil {
+		select {
+		case t.DisconnectionReady <- true:
+		default:
+			// Channel already signaled or closed
+		}
+	}
 }
 
 func (t *TrackingSectorChangeTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo) {
@@ -588,7 +656,6 @@ func (ets *ExpectTelnetServer) cleanTelnetInput(input string) string {
 
 // sendResponse sends response to client
 func (ets *ExpectTelnetServer) sendResponse(conn net.Conn, response string) {
-	time.Sleep(10 * time.Millisecond)
 	ets.t.Logf("Expect telnet sending response: %q", response)
 	conn.Write([]byte(response))
 }
@@ -625,8 +692,6 @@ func (s *ServerExpectEngine) sendToClient(data string) {
 	if s.conn != nil {
 		// Process escape sequences to convert string literals to actual control characters
 		processedData := processEscapeSequences(data)
-		// Add small delay to simulate network latency
-		time.Sleep(10 * time.Millisecond)
 		s.conn.Write([]byte(processedData))
 	}
 }

@@ -20,24 +20,13 @@ func TestPortBuy(t *testing.T) {
 	testExperience := 0
 	testTurns := 19994  // Will be decremented to 19993 after docking
 	
-	// Pre-setup the database with test values
-	db, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("Failed to open database for pre-setup: %v", err)
-	}
-	defer db.Close()
-	
-	// Create the database schema first by attempting to connect
-	tempResult := scripting.ExecuteScriptFile(t, "port-buy.script", connectOpts)
-	if tempResult.Database != nil {
-		tempResult.Database.Close()
-	}
-	
-	// Now set up the test initial values
-	_, err = db.Exec("INSERT OR REPLACE INTO player_stats (id, credits, experience, turns) VALUES (1, ?, ?, ?)", testCredits, testExperience, testTurns)
-	if err != nil {
-		t.Fatalf("Failed to set up test initial values: %v", err)
-	}
+	// Set up database schema and initial data before running the script
+	scripting.SetupTestDatabase(t, dbPath, func(db *sql.DB) {
+		_, err := db.Exec("INSERT OR REPLACE INTO player_stats (id, credits, experience, turns) VALUES (1, ?, ?, ?)", testCredits, testExperience, testTurns)
+		if err != nil {
+			t.Fatalf("Failed to set up test initial values: %v", err)
+		}
+	})
 
 	// Execute test using script file
 	result := scripting.ExecuteScriptFile(t, "port-buy.script", connectOpts)
