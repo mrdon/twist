@@ -23,6 +23,7 @@ type PanelComponent struct {
 	sixelLayer   *SixelLayer              // Sixel rendering layer
 	lastContentHeight int                 // Track last calculated content height
 	lastPlayerStats   *api.PlayerStatsInfo // Store last received player stats
+	mapRemoved   bool                     // Track if map has been removed to prevent redundant clearing
 }
 
 // NewPanelComponent creates new panel components
@@ -127,6 +128,39 @@ func (pc *PanelComponent) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	if proxyAPI != nil {
 		pc.setWaitingMessage()
 	}
+}
+
+// RemoveMapComponent removes the map component and replaces it with a blank view
+func (pc *PanelComponent) RemoveMapComponent() {
+	// Prevent redundant clearing
+	if pc.mapRemoved {
+		return
+	}
+	
+	// Use the aggressive clearing that actually worked
+	if pc.sixelLayer != nil {
+		pc.sixelLayer.ClearAllRegions()
+	}
+	
+	// Replace with blank view
+	pc.rightWrapper.Clear()
+	blankView := tview.NewTextView().SetText("")
+	pc.rightWrapper.AddItem(blankView, 0, 1, false)
+	pc.mapRemoved = true
+}
+
+// RestoreMapComponent restores the map component
+func (pc *PanelComponent) RestoreMapComponent() {
+	// Just restore the original map
+	pc.rightWrapper.Clear()
+	var activeMapView tview.Primitive
+	if pc.useGraphviz {
+		activeMapView = pc.graphvizMap
+	} else {
+		activeMapView = pc.sectorMap.GetView()
+	}
+	pc.rightWrapper.AddItem(activeMapView, 0, 1, false)
+	pc.mapRemoved = false // Reset the flag
 }
 
 // LoadRealData loads real player and sector data from the database (like TWX)

@@ -467,6 +467,19 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 				ta.serverAddress = ""
 				ta.menuComponent.SetDisconnectedMenu()
 				ta.statusComponent.SetConnectionStatus(false, "")
+				
+				// Remove map component immediately to clear graphics
+				if ta.panelComponent != nil {
+					ta.panelComponent.RemoveMapComponent()
+				}
+				
+				// Hide panels with animation when disconnecting
+				ta.hidePanels()
+				
+				// Clear ProxyAPI from UI components to prevent stale references
+				ta.statusComponent.SetProxyAPI(nil)
+				ta.panelComponent.SetProxyAPI(nil)
+				
 				// Show disconnect message in terminal
 				disconnectMsg := "\r\x1b[K\x1b[31;1m*** DISCONNECTED ***\x1b[0m\n"
 				ta.terminalComponent.Write([]byte(disconnectMsg))
@@ -490,6 +503,18 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 			ta.serverAddress = ""
 			ta.menuComponent.SetDisconnectedMenu()
 			ta.statusComponent.SetConnectionStatus(false, "")
+			
+			// Remove map component immediately to clear graphics
+			if ta.panelComponent != nil {
+				ta.panelComponent.RemoveMapComponent()
+			}
+			
+			// Hide panels with animation when connection fails
+			ta.hidePanels()
+			
+			// Clear ProxyAPI from UI components to prevent stale references
+			ta.statusComponent.SetProxyAPI(nil)
+			ta.panelComponent.SetProxyAPI(nil)
 			
 			// Ensure modal is closed if it's still open
 			if ta.modalVisible {
@@ -548,8 +573,16 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 			
 			// Show/hide panels based on database loading state
 			if info.IsLoaded {
+				// Restore map component when game loads
+				if ta.panelComponent != nil {
+					ta.panelComponent.RestoreMapComponent()
+				}
 				ta.showPanels()
 			} else {
+				// Remove map component when game unloads
+				if ta.panelComponent != nil {
+					ta.panelComponent.RemoveMapComponent()
+				}
 				ta.hidePanels()
 			}
 		})

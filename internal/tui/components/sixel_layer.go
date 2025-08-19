@@ -110,6 +110,31 @@ func (sl *SixelLayer) ClearRegion(id string) {
 	}
 }
 
+// ClearAllRegions clears all regions and removes them from the layer
+func (sl *SixelLayer) ClearAllRegions() {
+	sl.mutex.Lock()
+	defer sl.mutex.Unlock()
+	
+	// Remove all regions from the map
+	sl.regions = make(map[string]*SixelRegion)
+	
+	// Only use the aggressive terminal clearing that actually works
+	sl.forceTerminalRefresh()
+}
+
+// forceTerminalRefresh sends terminal sequences to force a complete refresh
+func (sl *SixelLayer) forceTerminalRefresh() {
+	output := sl.tty
+	if output == nil {
+		output = os.Stdout
+	}
+	
+	// Clear the screen without resetting terminal capabilities
+	fmt.Fprint(output, "\x1b[2J")    // Clear entire screen
+	fmt.Fprint(output, "\x1b[H")     // Move cursor to home position
+	fmt.Fprint(output, "\x1b[0m")    // Reset text attributes only
+}
+
 // ResetRegionMaxDimensions resets the max dimensions tracking for a region
 func (sl *SixelLayer) ResetRegionMaxDimensions(id string) {
 	sl.mutex.Lock()
@@ -147,6 +172,9 @@ func (sl *SixelLayer) Clear() {
 
 // clearRegionArea clears a rectangular area on the terminal using max dimensions
 func (sl *SixelLayer) clearRegionArea(region *SixelRegion) {
+	// Skip individual region clearing - it causes flickering
+	// Only use aggressive clearing via ClearAllRegions on disconnect
+	return
 	output := sl.tty
 	if output == nil {
 		output = os.Stdout
@@ -179,7 +207,7 @@ func (sl *SixelLayer) clearRegionArea(region *SixelRegion) {
 		startY = startY - 1  // Start one row earlier if possible
 	}
 	
-	// Clear the region by overwriting with spaces
+	// Clear the region by overwriting with spaces (keep simple for normal operation)
 	// This uses ANSI escape sequences to clear the area
 	for row := 0; row < clearHeight; row++ {
 		// Position cursor at the start of each row in the region

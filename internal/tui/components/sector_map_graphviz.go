@@ -152,9 +152,13 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	// LRU cache will handle eviction automatically
 }
 
+
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
-	debug.Log("GraphvizSectorMap.Draw: Starting draw")
+	// Don't draw if ProxyAPI is nil (disconnected state)
+	if gsm.proxyAPI == nil {
+		return
+	}
 	
 	// Get the component area
 	x, y, width, height := gsm.GetRect()
