@@ -214,6 +214,9 @@ type TWXParser struct {
 	// Player statistics (mirrors TWX Pascal FCurrentXXX variables)
 	playerStats PlayerStats
 
+	// Info display parsing state
+	infoDisplay InfoDisplay
+
 	// Current game data
 	currentSector      CurrentSector
 	currentSectorWarps [6]int // Temporary storage for parsed warps
@@ -298,8 +301,12 @@ func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 	parser.eventBus = NewEventBus()
 	parser.scriptInterpreter = NewScriptInterpreter(parser.eventBus)
 
+	// Initialize info display
+	parser.initInfoDisplay()
+
 	// Set up default handlers
 	parser.setupDefaultHandlers()
+	parser.setupInfoHandlers()
 	return parser
 }
 
@@ -468,6 +475,12 @@ func (p *TWXParser) Finalize() {
 		p.processPrompt(p.currentLine)
 	}
 
+	// Complete any pending info display
+	if p.infoDisplay.Active {
+		debug.Log("INFO_PARSER: Finalize() completing active info display")
+		p.completeInfoDisplay()
+	}
+
 	// Complete any pending sector
 	if !p.sectorSaved && p.currentSectorIndex > 0 {
 		p.sectorCompleted()
@@ -541,6 +554,9 @@ func (p *TWXParser) processLine(line string) {
 		debug.Log("Processing QuickStats line: %q", line)
 		p.processQuickStats(line)
 	}
+
+	// Check for info display end before other processing
+	p.checkInfoDisplayEnd(line)
 
 	// Fire TextLineEvent as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.TextLineEvent)
 	p.FireTextLineEvent(line, false)
