@@ -48,8 +48,13 @@ func (p *TWXParser) handleInfoDisplayStart(line string) {
 	p.infoDisplay.Active = true
 	p.infoDisplay.Complete = false
 	
-	// Don't reset player stats - preserve existing data from quick stats, etc.
-	// Info display will update/overwrite specific fields as they're parsed
+	// Reset incomplete tracker from previous session
+	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
+		debug.Log("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
+	}
+	
+	// Start new discovered field session
+	p.playerStatsTracker = NewPlayerStatsTracker()
 }
 
 // checkInfoDisplayEnd checks if we've reached the end of info display
@@ -75,11 +80,27 @@ func (p *TWXParser) completeInfoDisplay() {
 	p.infoDisplay.Active = false
 	p.infoDisplay.Complete = true
 	
-	// Save player stats to database
-	p.savePlayerStats()
-	
-	// Fire player stats event
-	p.firePlayerStatsEvent(p.playerStats)
+	// Execute SQL update with ONLY discovered fields
+	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
+		err := p.playerStatsTracker.Execute(p.database.GetDB())
+		if err != nil {
+			debug.Log("INFO_PARSER: Failed to update player stats: %v", err)
+			return
+		}
+		
+		// Read complete, fresh data from database for API event
+		if p.tuiAPI != nil {
+			fullPlayerStats, err := p.database.GetPlayerStatsInfo()
+			if err == nil {
+				p.firePlayerStatsEventDirect(fullPlayerStats)
+			} else {
+				debug.Log("INFO_PARSER: Failed to read player stats info for API event: %v", err)
+			}
+		}
+		
+		// Reset tracker for next parsing session
+		p.playerStatsTracker = nil
+	}
 }
 
 // handleInfoTraderName parses trader name from info display
@@ -115,7 +136,9 @@ func (p *TWXParser) handleInfoRankExp(line string) {
 		if pointsPos > 0 {
 			expStr := strings.TrimSpace(rankExpInfo[:pointsPos])
 			experience := p.parseIntSafe(expStr)
-			p.playerStats.Experience = experience
+			if p.playerStatsTracker != nil {
+				p.playerStatsTracker.SetExperience(experience)
+			}
 		}
 		
 		// Extract alignment
@@ -130,7 +153,9 @@ func (p *TWXParser) handleInfoRankExp(line string) {
 			if alignEnd > 0 {
 				alignStr := rankExpInfo[alignStart : alignStart+alignEnd]
 				alignment := p.parseIntSafe(alignStr)
-				p.playerStats.Alignment = alignment
+				if p.playerStatsTracker != nil {
+					p.playerStatsTracker.SetAlignment(alignment)
+				}
 			}
 		}
 	}
@@ -151,8 +176,8 @@ func (p *TWXParser) handleInfoShipInfo(line string) {
 		// Just preserve existing ShipClass and set defaults for other fields
 		
 		// Ship number defaults to 1 if not specified elsewhere
-		if p.playerStats.ShipNumber == 0 {
-			p.playerStats.ShipNumber = 1
+		if p.playerStatsTracker != nil {
+			p.playerStatsTracker.SetShipNumber(1)
 		}
 	}
 }
@@ -171,7 +196,9 @@ func (p *TWXParser) handleInfoTurnsLeft(line string) {
 		// Remove commas like TWX does
 		turnsStr = strings.ReplaceAll(turnsStr, ",", "")
 		turns := p.parseIntSafe(turnsStr)
-		p.playerStats.Turns = turns
+		if p.playerStatsTracker != nil {
+			p.playerStatsTracker.SetTurns(turns)
+		}
 	}
 }
 
@@ -192,7 +219,9 @@ func (p *TWXParser) handleInfoTotalHolds(line string) {
 		if dashPos > 0 {
 			totalStr := strings.TrimSpace(holdsInfo[:dashPos])
 			totalHolds := p.parseIntSafe(totalStr)
-			p.playerStats.TotalHolds = totalHolds
+			if p.playerStatsTracker != nil {
+				p.playerStatsTracker.SetTotalHolds(totalHolds)
+			}
 			
 			// Parse cargo breakdown
 			cargoInfo := strings.TrimSpace(holdsInfo[dashPos+2:]) // After " - "
@@ -217,7 +246,9 @@ func (p *TWXParser) parseCargoHolds(cargoInfo string) {
 		if oreEnd > 0 {
 			oreStr := cargoInfo[oreStart : oreStart+oreEnd]
 			oreHolds := p.parseIntSafe(oreStr)
-			p.playerStats.OreHolds = oreHolds
+			if p.playerStatsTracker != nil {
+				p.playerStatsTracker.SetOreHolds(oreHolds)
+			}
 		}
 	}
 	
@@ -231,15 +262,17 @@ func (p *TWXParser) parseCargoHolds(cargoInfo string) {
 		if orgEnd > 0 {
 			orgStr := cargoInfo[orgStart : orgStart+orgEnd]
 			orgHolds := p.parseIntSafe(orgStr)
-			p.playerStats.OrgHolds = orgHolds
+			if p.playerStatsTracker != nil {
+				p.playerStatsTracker.SetOrgHolds(orgHolds)
+			}
 		}
 	}
 	
-	// Equipment holds would be parsed similarly if present
-	p.playerStats.EquHolds = 0 // Default as not shown in this format
-	
-	// Colonist holds would be parsed similarly if present  
-	p.playerStats.ColHolds = 0 // Default as not shown in this format
+	// Equipment and Colonist holds set to 0 as defaults (not shown in this format)
+	if p.playerStatsTracker != nil {
+		p.playerStatsTracker.SetEquHolds(0)
+		p.playerStatsTracker.SetColHolds(0)
+	}
 }
 
 // handleInfoFighters parses fighters from info display
@@ -256,7 +289,9 @@ func (p *TWXParser) handleInfoFighters(line string) {
 		// Remove commas like TWX does
 		fightersStr = strings.ReplaceAll(fightersStr, ",", "")
 		fighters := p.parseIntSafe(fightersStr)
-		p.playerStats.Fighters = fighters
+		if p.playerStatsTracker != nil {
+			p.playerStatsTracker.SetFighters(fighters)
+		}
 	}
 }
 
@@ -274,7 +309,9 @@ func (p *TWXParser) handleInfoEtherProbes(line string) {
 		// Remove commas like TWX does
 		eprobesStr = strings.ReplaceAll(eprobesStr, ",", "")
 		eprobes := p.parseIntSafe(eprobesStr)
-		p.playerStats.Eprobes = eprobes
+		if p.playerStatsTracker != nil {
+			p.playerStatsTracker.SetEprobes(eprobes)
+		}
 	}
 }
 
@@ -292,7 +329,9 @@ func (p *TWXParser) handleInfoCredits(line string) {
 		// Remove commas like TWX does
 		creditsStr = strings.ReplaceAll(creditsStr, ",", "")
 		credits := p.parseIntSafe(creditsStr)
-		p.playerStats.Credits = credits
+		if p.playerStatsTracker != nil {
+			p.playerStatsTracker.SetCredits(credits)
+		}
 		
 		// Credits is typically the last field in info display, so trigger completion
 		p.completeInfoDisplay()
@@ -314,24 +353,10 @@ func (p *TWXParser) handleInfoCurrentSector(line string) {
 		// Update current sector if valid
 		if sectorNum > 0 {
 			p.currentSectorIndex = sectorNum
+			if p.playerStatsTracker != nil {
+				p.playerStatsTracker.SetCurrentSector(sectorNum)
+			}
 		}
 	}
 }
 
-// savePlayerStats saves the parsed player stats to the database
-func (p *TWXParser) savePlayerStats() {
-	defer p.recoverFromPanic("savePlayerStats")
-	
-	if p.database == nil {
-		return
-	}
-	
-	// Convert to database format and save using existing converter
-	converter := NewPlayerStatsConverter()
-	dbPlayerStats := converter.ToDatabase(p.playerStats)
-	
-	err := p.database.SavePlayerStats(dbPlayerStats)
-	if err != nil {
-		debug.Log("INFO_PARSER: Error saving player stats: %v", err)
-	}
-}

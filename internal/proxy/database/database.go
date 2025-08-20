@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"twist/internal/api"
 	"twist/internal/debug"
 
 	_ "modernc.org/sqlite"
@@ -42,6 +43,7 @@ type Database interface {
 	// Parser integration methods
 	SavePlayerStats(stats TPlayerStats) error
 	LoadPlayerStats() (TPlayerStats, error)
+	GetPlayerStatsInfo() (api.PlayerStatsInfo, error) // Phase 1: Straight SQL method
 	AddMessageToHistory(message TMessageHistory) error
 	GetMessageHistory(limit int) ([]TMessageHistory, error)
 	
@@ -966,4 +968,46 @@ func (d *SQLiteDatabase) FindPortsBuying(product TProductType) ([]TPort, error) 
 	}
 
 	return ports, nil
+}
+
+// GetPlayerStatsInfo reads complete player stats from database for API events
+// This method is used after PlayerStatsTracker updates to provide fresh, complete data
+func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
+	info := api.PlayerStatsInfo{}
+	
+	if !d.dbOpen {
+		return info, fmt.Errorf("database not open")
+	}
+	
+	query := `
+		SELECT turns, credits, fighters, shields, total_holds,
+		       ore_holds, org_holds, equ_holds, col_holds, photons,
+		       armids, limpets, gen_torps, twarp_type, cloaks,
+		       beacons, atomics, corbomite, eprobes, mine_disr,
+		       alignment, experience, corp, ship_number,
+		       psychic_probe, planet_scanner, scan_type,
+		       ship_class, current_sector, player_name
+		FROM player_stats WHERE id = 1`
+	
+	row := d.db.QueryRow(query)
+	err := row.Scan(
+		&info.Turns, &info.Credits, &info.Fighters, &info.Shields, &info.TotalHolds,
+		&info.OreHolds, &info.OrgHolds, &info.EquHolds, &info.ColHolds, &info.Photons,
+		&info.Armids, &info.Limpets, &info.GenTorps, &info.TwarpType, &info.Cloaks,
+		&info.Beacons, &info.Atomics, &info.Corbomite, &info.Eprobes, &info.MineDisr,
+		&info.Alignment, &info.Experience, &info.Corp, &info.ShipNumber,
+		&info.PsychicProbe, &info.PlanetScanner, &info.ScanType,
+		&info.ShipClass, &info.CurrentSector, &info.PlayerName,
+	)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Return default values if no player stats record exists yet
+			debug.Log("No player stats record found, returning default values")
+			return info, nil
+		}
+		return info, fmt.Errorf("failed to get player stats info: %w", err)
+	}
+	
+	return info, nil
 }

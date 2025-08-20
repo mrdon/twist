@@ -219,6 +219,9 @@ type TWXParser struct {
 
 	// Player statistics (mirrors TWX Pascal FCurrentXXX variables)
 	playerStats PlayerStats
+	
+	// Phase 1: Straight SQL player stats tracker (replaces direct playerStats usage)
+	playerStatsTracker *PlayerStatsTracker
 
 	// Info display parsing state
 	infoDisplay InfoDisplay
@@ -2778,6 +2781,15 @@ func (p *TWXParser) firePlayerStatsEvent(stats PlayerStats) {
 
 		// Fire the event
 		p.tuiAPI.OnPlayerStatsUpdated(apiStats)
+	}
+}
+
+// firePlayerStatsEventDirect fires a player statistics update event using API PlayerStatsInfo directly
+// This is used by the straight-sql pattern where we read fresh data from database
+func (p *TWXParser) firePlayerStatsEventDirect(stats api.PlayerStatsInfo) {
+	if p.tuiAPI != nil {
+		// Fire the event with fresh database data
+		p.tuiAPI.OnPlayerStatsUpdated(stats)
 	}
 }
 
