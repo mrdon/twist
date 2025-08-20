@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -9,7 +7,7 @@ import (
 // TestAdvancedGosub_BasicSubroutine_RealIntegration tests basic GOSUB/RETURN with real VM
 func TestAdvancedGosub_BasicSubroutine_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test basic subroutine call
 echo "Starting main program"
@@ -28,10 +26,10 @@ return
 :END
 echo "Done"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Starting main program",
 		"In subroutine",
@@ -46,7 +44,7 @@ echo "Done"
 // TestAdvancedGosub_NestedSubroutines_RealIntegration tests deeply nested GOSUB calls with real stack
 func TestAdvancedGosub_NestedSubroutines_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test nested subroutine calls
 echo "Main program start"
@@ -81,15 +79,15 @@ return
 :END
 echo "Final depth = " $depth
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Main program start",
 		"In LEVEL1",
 		"Depth = 1",
-		"In LEVEL2", 
+		"In LEVEL2",
 		"Depth = 2",
 		"In LEVEL3",
 		"Depth = 3",
@@ -105,7 +103,7 @@ echo "Final depth = " $depth
 // TestAdvancedGosub_MultipleCallsSameSubroutine_RealIntegration tests multiple calls to same subroutine
 func TestAdvancedGosub_MultipleCallsSameSubroutine_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test multiple calls to same subroutine
 echo "Testing multiple calls"
@@ -132,10 +130,10 @@ return
 :END
 echo "Done with multiple calls"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Testing multiple calls",
 		"First call:",
@@ -155,7 +153,7 @@ echo "Done with multiple calls"
 // TestAdvancedGosub_ParameterPassing_RealIntegration tests parameter passing to subroutines
 func TestAdvancedGosub_ParameterPassing_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test parameter passing via variables
 echo "Testing parameter passing"
@@ -183,10 +181,10 @@ return
 :END
 echo "Parameter passing complete"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Testing parameter passing",
 		"Multiplying 15 by 25 = 375",
@@ -202,7 +200,7 @@ echo "Parameter passing complete"
 func TestAdvancedGosub_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	// First VM instance - sets up variables and saves state
 	tester1 := NewIntegrationScriptTester(t)
-	
+
 	script1 := `
 # Set up subroutine state
 setVar $counter 0
@@ -216,13 +214,13 @@ add $counter 5
 echo "Counter in subroutine: " $counter
 return
 `
-	
+
 	result1 := tester1.ExecuteScript(script1)
 	tester1.AssertNoError(result1)
-	
+
 	// Second VM instance - loads state and continues
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
-	
+
 	script2 := `
 # Load previous state and continue
 loadVar $counter
@@ -236,10 +234,10 @@ add $counter 3
 echo "Counter in subroutine: " $counter
 return
 `
-	
+
 	result2 := tester2.ExecuteScript(script2)
 	tester2.AssertNoError(result2)
-	
+
 	// Verify persistence worked
 	tester2.AssertOutputContains(result2, "Loaded counter: 5")
 	tester2.AssertOutputContains(result2, "Counter in subroutine: 8")

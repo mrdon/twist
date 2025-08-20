@@ -2,49 +2,48 @@ package components
 
 import (
 	"twist/internal/theme"
-	
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
 
 // TerminalComponent wraps TerminalView with configuration and styling
 type TerminalComponent struct {
-	terminalView *TerminalView
-	wrapper      *tview.Flex
-	starfield    *StarfieldComponent
+	terminalView  *TerminalView
+	wrapper       *tview.Flex
+	starfield     *StarfieldComponent
 	showStarfield bool
-	app          *tview.Application
+	app           *tview.Application
 }
 
 // NewTerminalComponent creates a new terminal component with proper styling
 func NewTerminalComponent(app *tview.Application) *TerminalComponent {
 	// Create the core terminal view
 	terminalView := NewTerminalView()
-	
+
 	// Create starfield component with app reference
 	starfield := NewStarfieldComponent(150, app)
-	
+
 	// Create wrapper layout - show terminal directly (temporary fix)
 	wrapper := tview.NewFlex().SetDirection(tview.FlexRow)
-	
+
 	// Set explicit background color for wrapper
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
 	wrapper.SetBackgroundColor(defaultColors.Background)
-	
+
 	wrapper.AddItem(terminalView, 0, 1, true)
-	
+
 	tc := &TerminalComponent{
-		terminalView: terminalView,
-		wrapper:      wrapper,
-		starfield:    starfield,
-		showStarfield: false,  // Disable starfield for now
-		app:          app,
+		terminalView:  terminalView,
+		wrapper:       wrapper,
+		starfield:     starfield,
+		showStarfield: false, // Disable starfield for now
+		app:           app,
 	}
-	
+
 	return tc
 }
-
 
 // GetView returns the main wrapper component
 func (tc *TerminalComponent) GetView() tview.Primitive {
@@ -61,14 +60,14 @@ func (tc *TerminalComponent) TransitionToTerminal() {
 	if !tc.showStarfield {
 		return
 	}
-	
+
 	tc.showStarfield = false
 	tc.starfield.Stop()
-	
+
 	// Clear wrapper and add terminal view
 	tc.wrapper.Clear()
 	tc.wrapper.AddItem(tc.terminalView, 0, 1, true)
-	
+
 	// Ensure terminal view gets focus after transition
 	if tc.app != nil {
 		tc.app.QueueUpdateDraw(func() {
@@ -83,13 +82,13 @@ func (tc *TerminalComponent) Write(p []byte) (n int, err error) {
 	if tc.showStarfield {
 		tc.TransitionToTerminal()
 	}
-	
+
 	// Always write to terminal view, even during transition
 	n, err = tc.terminalView.Write(p)
-	
+
 	// Don't add extra QueueUpdateDraw here - the terminal view handles its own updates
 	// via the changedFunc callback to avoid double-drawing
-	
+
 	return n, err
 }
 

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"twist/integration/scripting"
 	"twist/internal/api"
-	
+
 	_ "modernc.org/sqlite"
 )
 
@@ -17,7 +17,7 @@ func TestProbeDataParsing(t *testing.T) {
 
 	// Set up test credits using database pre-setup
 	testCredits := 50000
-	
+
 	// Set up database schema and initial data before running the script
 	scripting.SetupTestDatabase(t, dbPath, func(db *sql.DB) {
 		_, err := db.Exec("INSERT OR REPLACE INTO player_stats (id, credits) VALUES (1, ?)", testCredits)
@@ -33,7 +33,6 @@ func TestProbeDataParsing(t *testing.T) {
 	result.Assert.AssertSectorExists(274) // First sector probed
 	result.Assert.AssertSectorExists(510) // Sector with Aachen port
 	result.Assert.AssertSectorExists(493) // Final sector where probe self-destructed
-	
 
 	// Verify sector constellations
 	result.Assert.AssertSectorConstellation(274, "uncharted space")
@@ -47,7 +46,7 @@ func TestProbeDataParsing(t *testing.T) {
 	// Verify probe movement created correct warp connections
 	// Based on actual probe path: 190 -> 274 -> 174 -> 66 -> 177 -> 946 -> 403 -> 328 -> 510 -> 493
 	result.Assert.AssertSectorWithWarps(190, []int{274}) // Should have warp to first probed sector
-	result.Assert.AssertSectorWithWarps(274, []int{174}) // Should have warp to next sector in path  
+	result.Assert.AssertSectorWithWarps(274, []int{174}) // Should have warp to next sector in path
 	result.Assert.AssertSectorWithWarps(510, []int{493}) // Should have warp to final sector
 
 	// Verify that after ether probe + command prompt, current sector is set correctly
@@ -65,7 +64,7 @@ func TestProbeDataParsing(t *testing.T) {
 			t.Errorf("OnCurrentSectorChanged should not be called for probe-discovered sector %d", call.Number)
 		}
 	}
-	
+
 	// Verify that calls for the player's actual sector (190) are allowed
 	playerSectorCalls := 0
 	for _, call := range result.TuiAPI.SectorChangeCalls {

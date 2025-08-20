@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -15,7 +13,7 @@ import (
 	"twist/internal/proxy/scripting/vm"
 )
 
-// IntegrationTestResult captures the output from a script execution  
+// IntegrationTestResult captures the output from a script execution
 type IntegrationTestResult struct {
 	Output   []string
 	Commands []string
@@ -40,20 +38,20 @@ func NewMockScript(name string, db database.Database) *MockScript {
 		running:  true,
 		system:   false,
 	}
-	
+
 	// Register the script in the database to satisfy foreign key constraints
 	if sqlDB := db.GetDB(); sqlDB != nil {
 		query := `
 		INSERT OR IGNORE INTO scripts (script_id, name, filename, version, is_running, is_system, loaded_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?);`
-		
+
 		_, err := sqlDB.Exec(query, script.id, script.name, script.filename, 6, script.running, script.system, time.Now().Format("2006-01-02 15:04:05"))
 		if err != nil {
 			// Log but don't fail - the script creation can still proceed
 			// In a real implementation, we'd use proper logging
 		}
 	}
-	
+
 	return script
 }
 
@@ -94,7 +92,7 @@ type IntegrationScriptTester struct {
 // NewIntegrationScriptTester creates a new integration script tester with real components
 func NewIntegrationScriptTester(t *testing.T) *IntegrationScriptTester {
 	setupData := setup.SetupRealComponents(t)
-	
+
 	return &IntegrationScriptTester{
 		setupData: setupData,
 		t:         t,
@@ -105,22 +103,22 @@ func NewIntegrationScriptTester(t *testing.T) *IntegrationScriptTester {
 func NewIntegrationScriptTesterWithSharedDB(t *testing.T, sharedSetup *setup.IntegrationTestSetup) *IntegrationScriptTester {
 	// Create real game adapter using the shared database
 	gameAdapter := scripting.NewGameAdapter(sharedSetup.DB)
-	
+
 	// Create real VM
 	realVM := vm.NewVirtualMachine(gameAdapter)
-	
+
 	newSetup := &setup.IntegrationTestSetup{
 		DB:          sharedSetup.DB, // Share the same database
 		GameAdapter: gameAdapter,
 		VM:          realVM,
 		DBPath:      sharedSetup.DBPath, // Share the same DB path
 	}
-	
+
 	// Register cleanup for VM only (don't clean up shared DB)
 	t.Cleanup(func() {
 		// Only cleanup VM resources, not the shared database
 	})
-	
+
 	return &IntegrationScriptTester{
 		setupData: newSetup,
 		t:         t,
@@ -138,27 +136,27 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 			Error:    err,
 		}
 	}
-	
+
 	// Initialize captured data
 	tester.capturedOutput = []string{}
 	tester.capturedCommands = []string{}
-	
+
 	// Set up output handlers to use instance fields
 	tester.setupData.VM.SetOutputHandler(func(text string) error {
 		tester.capturedOutput = append(tester.capturedOutput, text)
 		return nil
 	})
-	
+
 	tester.setupData.VM.SetEchoHandler(func(text string) error {
 		tester.capturedOutput = append(tester.capturedOutput, text)
 		return nil
 	})
-	
+
 	tester.setupData.VM.SetSendHandler(func(text string) error {
 		tester.capturedCommands = append(tester.capturedCommands, text)
 		return nil
 	})
-	
+
 	// Create a test script instance for call stack persistence
 	testScript := NewMockScript("integration_test", tester.setupData.DB)
 	tester.currentScript = &scripting.Script{
@@ -167,7 +165,7 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 		AST:      ast,
 		VM:       tester.setupData.VM,
 	}
-	
+
 	// Load and execute the script
 	if err := tester.setupData.VM.LoadScript(ast, testScript); err != nil {
 		return &IntegrationTestResult{
@@ -176,7 +174,7 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 			Error:    err,
 		}
 	}
-	
+
 	if err := tester.setupData.VM.Execute(); err != nil {
 		return &IntegrationTestResult{
 			Output:   append([]string{}, tester.capturedOutput...),
@@ -184,7 +182,7 @@ func (tester *IntegrationScriptTester) ExecuteScript(script string) *Integration
 			Error:    err,
 		}
 	}
-	
+
 	// For WAITFOR tests, we need to keep the handlers active
 	// The result should be returned by the goroutine only when the script truly completes
 	return &IntegrationTestResult{
@@ -216,7 +214,7 @@ func (tester *IntegrationScriptTester) AssertOutput(result *IntegrationTestResul
 		tester.t.Errorf("Expected: %v", expectedOutput)
 		return
 	}
-	
+
 	for i, expected := range expectedOutput {
 		if i >= len(result.Output) {
 			tester.t.Errorf("Missing output line %d: expected %q", i, expected)
@@ -246,7 +244,7 @@ func (tester *IntegrationScriptTester) AssertCommands(result *IntegrationTestRes
 		tester.t.Errorf("Expected: %v", expectedCommands)
 		return
 	}
-	
+
 	for i, expected := range expectedCommands {
 		if i >= len(result.Commands) {
 			tester.t.Errorf("Missing command %d: expected %q", i, expected)
@@ -271,11 +269,11 @@ func (tester *IntegrationScriptTester) ProvideInput(input string) error {
 	if tester.currentScript == nil || tester.currentScript.VM == nil {
 		return fmt.Errorf("no active script")
 	}
-	
+
 	if !tester.currentScript.VM.IsWaitingForInput() {
 		return fmt.Errorf("script is not waiting for input")
 	}
-	
+
 	return tester.currentScript.VM.ResumeWithInput(input)
 }
 
@@ -286,14 +284,14 @@ func (tester *IntegrationScriptTester) ContinueExecution() *IntegrationTestResul
 			Error: fmt.Errorf("no active script"),
 		}
 	}
-	
+
 	// Clear previous outputs and commands for this continuation
 	tester.capturedOutput = []string{}
 	tester.capturedCommands = []string{}
-	
+
 	// Continue execution
 	err := tester.currentScript.VM.Execute()
-	
+
 	return &IntegrationTestResult{
 		Output:   append([]string{}, tester.capturedOutput...),
 		Commands: append([]string{}, tester.capturedCommands...),
@@ -309,33 +307,33 @@ func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Create result channel
 	resultChan := make(chan *IntegrationTestResult, 1)
-	
+
 	// Capture output and commands in shared slices
 	var output []string
 	var commands []string
-	
+
 	// Set up output handlers that will persist across the async execution
 	tester.setupData.VM.SetOutputHandler(func(text string) error {
 		output = append(output, text)
 		return nil
 	})
-	
+
 	tester.setupData.VM.SetEchoHandler(func(text string) error {
 		output = append(output, text)
 		return nil
 	})
-	
+
 	tester.setupData.VM.SetSendHandler(func(text string) error {
 		commands = append(commands, text)
 		return nil
 	})
-	
+
 	// Create a test script instance
 	testScript := NewMockScript("integration_test_async", tester.setupData.DB)
-	
+
 	// Start async execution
 	go func() {
 		defer func() {
@@ -346,17 +344,17 @@ func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan
 				Error:    nil,
 			}
 		}()
-		
+
 		// Load and execute the script
 		if err := tester.setupData.VM.LoadScript(ast, testScript); err != nil {
 			return
 		}
-		
+
 		// Execute until completion or waiting
 		if err := tester.setupData.VM.Execute(); err != nil {
 			return
 		}
-		
+
 		// If we're waiting, the script will continue via ProcessIncomingText calls
 		// The goroutine will remain alive until the script completes or times out
 		for tester.setupData.VM.IsWaiting() {
@@ -365,7 +363,7 @@ func (tester *IntegrationScriptTester) ExecuteScriptAsync(script string) (<-chan
 			time.Sleep(1 * time.Millisecond)
 		}
 	}()
-	
+
 	return resultChan, nil
 }
 
@@ -391,32 +389,32 @@ func (tester *IntegrationScriptTester) parseScriptWithPreprocessor(source string
 	if err != nil {
 		return nil, fmt.Errorf("preprocessing error: %v", err)
 	}
-	
+
 	// Rejoin the processed lines
 	processedSource := strings.Join(processedLines, "\n")
-	
+
 	// Step 2: Create lexer
 	lexer := parser.NewLexer(strings.NewReader(processedSource))
-	
+
 	// Step 3: Tokenize
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("lexer error: %v", err)
 	}
-	
+
 	// Step 4: Parse
 	parserObj := parser.NewParser(tokens)
 	ast, err := parserObj.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("parser error: %v", err)
 	}
-	
+
 	// Step 5: Process includes (minimal processing for integration tests)
 	includeProcessor := include.NewIncludeProcessor(".")
 	processedAST, err := includeProcessor.ProcessIncludes(ast)
 	if err != nil {
 		return nil, fmt.Errorf("include processing error: %v", err)
 	}
-	
+
 	return processedAST, nil
 }

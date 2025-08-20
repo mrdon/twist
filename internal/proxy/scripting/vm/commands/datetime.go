@@ -60,7 +60,7 @@ func cmdDateTimeDiff(vm types.VMInterface, params []*types.CommandParam) error {
 	dt2Str := GetParamString(vm, params[1])
 	var unit string
 	var resultVarName string
-	
+
 	if len(params) == 3 {
 		// 3 params: datetime1, datetime2, result_var (default to seconds)
 		unit = "seconds"
@@ -79,10 +79,10 @@ func cmdDateTimeDiff(vm types.VMInterface, params []*types.CommandParam) error {
 		"01/02/2006",
 		"2006-01-02",
 	}
-	
+
 	var dt1, dt2 time.Time
 	var err1, err2 error
-	
+
 	for _, format := range formats {
 		if dt1, err1 = time.Parse(format, dt1Str); err1 == nil {
 			break
@@ -131,7 +131,7 @@ func cmdDateTimeToStr(vm types.VMInterface, params []*types.CommandParam) error 
 	dtStr := GetParamString(vm, params[0])
 	resultVarName := params[1].VarName
 	var formatStr string
-	
+
 	if len(params) == 2 {
 		// Default format - no format parameter
 		formatStr = "2006-01-02 15:04:05" // Default ISO format
@@ -148,10 +148,10 @@ func cmdDateTimeToStr(vm types.VMInterface, params []*types.CommandParam) error 
 		"01/02/2006",
 		"2006-01-02",
 	}
-	
+
 	var dt time.Time
 	var err error
-	
+
 	for _, format := range formats {
 		if dt, err = time.Parse(format, dtStr); err == nil {
 			break
@@ -178,10 +178,10 @@ func cmdDateTimeToStr(vm types.VMInterface, params []*types.CommandParam) error 
 func convertTWXFormatToGo(twxFormat string) string {
 	// Basic TWX to Go format conversion
 	goFormat := twxFormat
-	
+
 	// Replace common TWX format codes with Go equivalents
 	// Process in order from longest to shortest to avoid partial replacements
-	replacements := []struct{twx, goFmt string}{
+	replacements := []struct{ twx, goFmt string }{
 		{"YYYY", "2006"},
 		{"YY", "06"},
 		{"MM", "01"},
@@ -190,11 +190,11 @@ func convertTWXFormatToGo(twxFormat string) string {
 		{"mm", "04"},
 		{"ss", "05"},
 	}
-	
+
 	for _, r := range replacements {
 		goFormat = strings.ReplaceAll(goFormat, r.twx, r.goFmt)
 	}
-	
+
 	return goFormat
 }
 

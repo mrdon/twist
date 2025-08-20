@@ -20,35 +20,35 @@ func RegisterMenuCommands(vm CommandRegistry) {
 		types.ParamValue, // prompt
 		types.ParamValue, // closeMenu
 	}, cmdAddMenu)
-	
+
 	vm.RegisterCommand("OPENMENU", 1, 1, []types.ParameterType{
 		types.ParamValue, // menuName
 	}, cmdOpenMenu)
-	
+
 	vm.RegisterCommand("CLOSEMENU", 1, 1, []types.ParameterType{
 		types.ParamValue, // menuName
 	}, cmdCloseMenu)
-	
+
 	vm.RegisterCommand("GETMENUVALUE", 2, 2, []types.ParameterType{
 		types.ParamValue, // menuName
 		types.ParamVar,   // result variable
 	}, cmdGetMenuValue)
-	
+
 	vm.RegisterCommand("SETMENUVALUE", 2, 2, []types.ParameterType{
 		types.ParamValue, // menuName
 		types.ParamValue, // value
 	}, cmdSetMenuValue)
-	
+
 	vm.RegisterCommand("SETMENUHELP", 2, 2, []types.ParameterType{
 		types.ParamValue, // menuName
 		types.ParamValue, // helpText
 	}, cmdSetMenuHelp)
-	
+
 	vm.RegisterCommand("SETMENUOPTIONS", 2, 2, []types.ParameterType{
 		types.ParamValue, // menuName
 		types.ParamValue, // options
 	}, cmdSetMenuOptions)
-	
+
 	vm.RegisterCommand("SETMENUKEY", 1, 1, []types.ParameterType{
 		types.ParamValue, // newKey
 	}, cmdSetMenuKey)
@@ -220,7 +220,7 @@ func cmdGetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 		if err != nil {
 			return fmt.Errorf("GETMENUVALUE failed: %v", err)
 		}
-		
+
 		// Set the result in the variable
 		vm.SetVariable(resultVar, &types.Value{
 			Type:   types.StringType,

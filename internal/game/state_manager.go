@@ -9,7 +9,7 @@ import (
 
 // StateManager handles game state changes and coordinates with the TuiAPI
 type StateManager struct {
-	mu           sync.RWMutex
+	mu            sync.RWMutex
 	currentSector int
 	playerName    string
 	tuiAPI        api.TuiAPI
@@ -33,10 +33,10 @@ func (sm *StateManager) convertSectorToSectorInfo(sector database.TSector, secto
 			warps = append(warps, warp)
 		}
 	}
-	
+
 	// Count traders
 	hasTraders := len(sector.Traders)
-	
+
 	return api.SectorInfo{
 		Number:        sectorNum,
 		NavHaz:        sector.NavHaz,
@@ -53,10 +53,10 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 	oldSector := sm.currentSector
 	sm.currentSector = sectorNum
 	sm.mu.Unlock()
-	
+
 	// Only notify if sector actually changed
 	if oldSector != sectorNum {
-		
+
 		// Load complete sector information from database
 		var sectorInfo api.SectorInfo
 		if sm.db != nil && sm.db.GetDatabaseOpen() {
@@ -70,7 +70,7 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 			// No database available, provide basic sector info
 			sectorInfo = api.SectorInfo{Number: sectorNum}
 		}
-		
+
 		debug.Log("STATE_MANAGER: Firing OnCurrentSectorChanged for sector %d (oldSector=%d) [SOURCE: SetCurrentSector]", sectorNum, oldSector)
 		sm.tuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}

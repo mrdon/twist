@@ -23,7 +23,7 @@ func NewStreamingStripper() *StreamingStripper {
 // It handles ANSI escape sequences that may be split across chunks
 func (s *StreamingStripper) StripChunk(text string) string {
 	var result strings.Builder
-	
+
 	for _, char := range text {
 		switch s.state {
 		case 0: // Normal state
@@ -33,7 +33,7 @@ func (s *StreamingStripper) StripChunk(text string) string {
 			} else {
 				result.WriteRune(char)
 			}
-			
+
 		case 1: // Saw escape character
 			s.ansiBuffer += string(char)
 			if char == '[' {
@@ -44,7 +44,7 @@ func (s *StreamingStripper) StripChunk(text string) string {
 				s.ansiBuffer = ""
 				s.state = 0
 			}
-			
+
 		case 2: // In ANSI sequence
 			s.ansiBuffer += string(char)
 			// Check if this is a terminating character for ANSI sequences
@@ -56,7 +56,7 @@ func (s *StreamingStripper) StripChunk(text string) string {
 			// Continue accumulating sequence characters (numbers, semicolons, etc.)
 		}
 	}
-	
+
 	return result.String()
 }
 

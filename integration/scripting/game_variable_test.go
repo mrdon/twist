@@ -26,8 +26,8 @@ func TestGameVariableOverride_RealIntegration(t *testing.T) {
 	// Expect that user variable Game="a" overrides system constant GAME="TradeWars 2002"
 	expectedOutputs := []string{
 		"Initial GAME constant: TradeWars 2002",
-		"After Game = a, GAME is: a",       // User variable should override
-		"After Game = a, Game is: a",       // Same variable, different case
+		"After Game = a, GAME is: a", // User variable should override
+		"After Game = a, Game is: a", // Same variable, different case
 	}
 
 	if len(result.Output) != len(expectedOutputs) {

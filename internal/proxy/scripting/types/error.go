@@ -17,6 +17,6 @@ func (e *VMError) Error() string {
 
 // Special errors for script control flow
 var (
-	ErrScriptPaused = errors.New("script execution paused")
+	ErrScriptPaused  = errors.New("script execution paused")
 	ErrScriptStopped = errors.New("script execution stopped")
 )

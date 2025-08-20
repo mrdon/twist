@@ -18,33 +18,33 @@ type VirtualMachine struct {
 	callStack *CallStack
 	variables *VariableManager
 	execution *ExecutionEngine
-	
+
 	// Script context
 	script        types.ScriptInterface
 	gameInterface types.GameInterface
 	scriptManager *manager.ScriptManager
-	
+
 	// Commands and triggers
 	commands map[string]*types.CommandDef
 	triggers map[string]types.TriggerInterface
-	
+
 	// Output handlers
 	outputHandler func(string) error
 	echoHandler   func(string) error
 	sendHandler   func(string) error
-	
+
 	// Timer system
 	timerStart time.Time
 	timerValue float64
-	
+
 	// Error tracking
 	lastError error
-	
+
 	// Input collection state
-	waitingForInput     bool
-	pendingInputPrompt  string
-	pendingInputResult  string
-	justResumed         bool
+	waitingForInput    bool
+	pendingInputPrompt string
+	pendingInputResult string
+	justResumed        bool
 }
 
 // NewVirtualMachine creates a new virtual machine
@@ -57,12 +57,12 @@ func NewVirtualMachine(gameInterface types.GameInterface) *VirtualMachine {
 		triggers:      make(map[string]types.TriggerInterface),
 		gameInterface: gameInterface,
 	}
-	
+
 	// Initialize execution engine
 	vm.execution = NewExecutionEngine(vm)
-	
+
 	// System constants are now provided by GameInterface
-	
+
 	// Initialize script manager
 	if db := gameInterface.GetDatabase(); db != nil {
 		if dbInterface, ok := db.(database.Database); ok {
@@ -71,14 +71,14 @@ func NewVirtualMachine(gameInterface types.GameInterface) *VirtualMachine {
 			vm.scriptManager.RestoreFromDatabase()
 		}
 	}
-	
+
 	// Initialize timer system
 	vm.timerStart = time.Now()
 	vm.timerValue = 0
-	
+
 	// Register built-in commands
 	vm.registerCommands()
-	
+
 	return vm
 }
 
@@ -88,14 +88,14 @@ func (vm *VirtualMachine) LoadScript(ast *parser.ASTNode, script types.ScriptInt
 	vm.script = script
 	vm.state.SetRunning()
 	vm.state.Position = 0
-	
+
 	// Restore call stack from database if script is provided
 	if script != nil {
 		if err := vm.restoreCallStack(script.GetID()); err != nil {
 			// Failed to restore call stack - just start with empty call stack
 		}
 	}
-	
+
 	return nil
 }
 
@@ -106,16 +106,16 @@ func (vm *VirtualMachine) Execute() error {
 		scriptName = vm.script.GetName()
 	}
 	debug.Log("VM.Execute [%s]: starting execution loop", scriptName)
-	
+
 	for vm.state.IsRunning() && !vm.state.IsWaiting() {
 		debug.Log("VM.Execute [%s]: executing step at position %d", scriptName, vm.state.Position)
-		
+
 		if err := vm.execution.ExecuteStep(); err != nil {
 			debug.Log("VM.Execute [%s]: ExecuteStep returned error: %v", scriptName, err)
 			vm.lastError = err
 			return err
 		}
-		
+
 		// Handle pause state
 		if vm.state.IsPaused() {
 			debug.Log("VM.Execute [%s]: detected PAUSED state, waitingForInput=%v", scriptName, vm.waitingForInput)
@@ -125,13 +125,13 @@ func (vm *VirtualMachine) Execute() error {
 				debug.Log("VM.Execute [%s]: RETURNING from Execute() - waiting for input", scriptName)
 				return nil
 			}
-			
+
 			debug.Log("VM.Execute [%s]: continuing execution after pause (not waiting for input)", scriptName)
 			// For other pause types (like regular pause command), continue automatically
 			// This maintains backwards compatibility with existing test behavior
 			vm.state.SetRunning()
 		}
-		
+
 	}
 	debug.Log("VM.Execute [%s]: execution loop finished", scriptName)
 	return nil
@@ -178,14 +178,14 @@ func (vm *VirtualMachine) Gosub(label string) error {
 	frame := NewStackFrame(label, vm.state.Position, vm.state.Position+1)
 	vm.callStack.Push(frame)
 	vm.state.SetJumpTarget(label)
-	
+
 	// Save call stack to database for persistence across VM instances
 	if vm.script != nil {
 		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
 			// Failed to save call stack - continue with GOSUB
 		}
 	}
-	
+
 	return nil
 }
 
@@ -196,14 +196,14 @@ func (vm *VirtualMachine) Return() error {
 	}
 	// Set position to ReturnAddr - 1 because the execution loop will increment it
 	vm.state.Position = frame.ReturnAddr - 1
-	
+
 	// Save updated call stack to database for persistence across VM instances
 	if vm.script != nil {
 		if err := vm.saveCallStack(vm.script.GetID()); err != nil {
 			// Failed to save call stack - continue with RETURN
 		}
 	}
-	
+
 	return nil
 }
 
@@ -259,29 +259,29 @@ func (vm *VirtualMachine) GetInput(prompt string) (string, error) {
 		scriptName = vm.script.GetName()
 	}
 	debug.Log("VM.GetInput [%s]: initiating input for prompt %q", scriptName, prompt)
-	
+
 	// Display the prompt (matching TWX behavior)
 	if err := vm.Echo("\r\n" + prompt + "\r\n"); err != nil {
 		return "", err
 	}
-	
+
 	// Set up script input collection state
 	vm.pendingInputPrompt = prompt
 	vm.pendingInputResult = ""
 	vm.waitingForInput = true
-	
+
 	debug.Log("VM.GetInput [%s]: set waitingForInput=true, pendingInputPrompt=%q", scriptName, prompt)
-	
+
 	// Pause script execution - this will cause the Run loop to exit
 	// and return control to the caller (matching TWX caPause behavior)
 	vm.state.SetPaused()
-	
+
 	debug.Log("VM.GetInput [%s]: set state to PAUSED", scriptName)
-	
+
 	// The script manager should detect this paused state and initiate
 	// input collection via the menu system's InputCollector
 	// This matches TWX's BeginScriptInput() integration
-	
+
 	// This returns immediately with empty result - the actual input
 	// will be provided later via ResumeWithInput()
 	return vm.pendingInputResult, nil
@@ -313,24 +313,24 @@ func (vm *VirtualMachine) ResumeWithInput(input string) error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	
+
 	if !vm.waitingForInput {
 		debug.Log("VM.ResumeWithInput [%s]: ERROR - not waiting for input!", scriptName)
 		return fmt.Errorf("VM is not waiting for input")
 	}
-	
+
 	debug.Log("VM.ResumeWithInput [%s]: resuming with input %q", scriptName, input)
-	
+
 	vm.pendingInputResult = input
 	vm.waitingForInput = false
 	vm.pendingInputPrompt = "" // Clear prompt since input has been provided
-	vm.justResumed = true       // Flag to indicate we just resumed with input
-	
+	vm.justResumed = true      // Flag to indicate we just resumed with input
+
 	// Resume script execution
 	vm.state.SetRunning()
-	
+
 	debug.Log("VM.ResumeWithInput [%s]: set state to RUNNING", scriptName)
-	
+
 	return nil
 }
 
@@ -369,13 +369,13 @@ func (vm *VirtualMachine) LoadAdditionalScript(filename string) (types.ScriptInt
 	if vm.scriptManager == nil {
 		return nil, fmt.Errorf("script manager not initialized")
 	}
-	
+
 	// Load script through the script manager
 	scriptInfo, err := vm.scriptManager.LoadScript(filename, false)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// TODO: Actually parse and compile the script file
 	// For now, just return the script info which implements ScriptInterface
 	return scriptInfo, nil
@@ -385,14 +385,14 @@ func (vm *VirtualMachine) StopScript(scriptID string) error {
 	if vm.scriptManager == nil {
 		return fmt.Errorf("script manager not initialized")
 	}
-	
+
 	// Try to stop by ID first, then by name
 	err := vm.scriptManager.StopScript(scriptID)
 	if err != nil {
 		// If ID didn't work, try as a name
 		return vm.scriptManager.StopScriptByName(scriptID)
 	}
-	
+
 	return nil
 }
 
@@ -438,12 +438,12 @@ func (vm *VirtualMachine) ProcessTriggers(text string) error {
 }
 
 func (vm *VirtualMachine) ProcessIncomingText(text string) error {
-	
+
 	// Process triggers first
 	if err := vm.ProcessTriggers(text); err != nil {
 		return err
 	}
-	
+
 	// Check if we're waiting for specific text (like TWX WaitFor)
 	if vm.state.IsWaiting() && vm.state.WaitText != "" {
 		scriptName := "unknown"
@@ -461,7 +461,7 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 			debug.Log("VM.ProcessIncomingText [%s]: trigger not found, still waiting", scriptName)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -499,26 +499,26 @@ func (vm *VirtualMachine) GetCurrentPosition() int {
 func (vm *VirtualMachine) EvaluateExpression(expression string) (*types.Value, error) {
 	// Unescape any escaped quotes in the expression
 	unescapedExpression := strings.ReplaceAll(expression, "\\\"", "\"")
-	
+
 	// Parse the expression string into an AST node
 	lexer := parser.NewLexer(strings.NewReader(unescapedExpression))
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize expression: %v", err)
 	}
-	
+
 	parserObj := parser.NewParser(tokens)
 	// Parse as a single expression
 	expr, err := parserObj.ParseExpression()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse expression: %v", err)
 	}
-	
+
 	// Use the execution engine to evaluate the expression
 	if vm.execution == nil {
 		vm.execution = NewExecutionEngine(vm)
 	}
-	
+
 	return vm.execution.evaluateExpression(expr)
 }
 
@@ -560,40 +560,40 @@ func (vm *VirtualMachine) saveCallStack(scriptID string) error {
 	if vm.gameInterface == nil {
 		return nil // No database available
 	}
-	
+
 	db := vm.gameInterface.GetDatabase()
 	if db == nil {
 		return nil // No database available
 	}
-	
+
 	dbInterface, ok := db.(database.Database)
 	if !ok {
 		return nil // Not the right database interface
 	}
-	
+
 	// Clear existing call stack for this script
 	deleteQuery := `DELETE FROM script_call_stack WHERE script_id = ?;`
 	if _, err := dbInterface.GetDB().Exec(deleteQuery, scriptID); err != nil {
 		return fmt.Errorf("failed to clear call stack: %w", err)
 	}
-	
+
 	// Save current call stack frames
 	frames := vm.callStack.GetFrames()
 	if len(frames) == 0 {
 		return nil // Nothing to save
 	}
-	
+
 	insertQuery := `
 	INSERT INTO script_call_stack (script_id, frame_index, label, position, return_addr)
 	VALUES (?, ?, ?, ?, ?);`
-	
+
 	for i, frame := range frames {
 		_, err := dbInterface.GetDB().Exec(insertQuery, scriptID, i, frame.Label, frame.Position, frame.ReturnAddr)
 		if err != nil {
 			return fmt.Errorf("failed to save call stack frame %d: %w", i, err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -601,44 +601,44 @@ func (vm *VirtualMachine) restoreCallStack(scriptID string) error {
 	if vm.gameInterface == nil {
 		return nil // No database available
 	}
-	
+
 	db := vm.gameInterface.GetDatabase()
 	if db == nil {
 		return nil // No database available
 	}
-	
+
 	dbInterface, ok := db.(database.Database)
 	if !ok {
 		return nil // Not the right database interface
 	}
-	
+
 	// Clear current call stack
 	vm.callStack.Clear()
-	
+
 	// Load call stack frames from database, ordered by frame_index
 	query := `
 	SELECT label, position, return_addr
 	FROM script_call_stack
 	WHERE script_id = ?
 	ORDER BY frame_index;`
-	
+
 	rows, err := dbInterface.GetDB().Query(query, scriptID)
 	if err != nil {
 		return fmt.Errorf("failed to query call stack: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var label string
 		var position, returnAddr int
-		
+
 		if err := rows.Scan(&label, &position, &returnAddr); err != nil {
 			return fmt.Errorf("failed to scan call stack frame: %w", err)
 		}
-		
+
 		frame := NewStackFrame(label, position, returnAddr)
 		vm.callStack.Push(frame)
 	}
-	
+
 	return rows.Err()
 }

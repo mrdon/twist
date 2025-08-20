@@ -25,17 +25,13 @@ func registerArrayCommandsInternal(vm CommandRegistry) {
 	RegisterArrayCommands(vm)
 }
 
-// Internal function to avoid naming conflicts  
+// Internal function to avoid naming conflicts
 func registerGameCommandsInternal(vm CommandRegistry) {
 	// Import from game.go
 	RegisterGameCommands(vm)
 }
 
 // Placeholder functions for other command groups - these would be implemented similarly
-
-
-
-
 
 func RegisterSystemCommands(vm CommandRegistry) {
 	// LOGGING, GETTEXT, GETOUTTEXT commands
@@ -44,4 +40,3 @@ func RegisterSystemCommands(vm CommandRegistry) {
 func RegisterFileCommands(vm CommandRegistry) {
 	// LOADTEXT, SAVETEXT, FILEEXISTS, etc.
 }
-

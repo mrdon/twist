@@ -1,19 +1,18 @@
 package streaming
 
-import (
-)
+import ()
 
 // ScriptEngine interface for script integration (mirrors Pascal TWXInterpreter)
 type ScriptEngine interface {
 	// TextEvent processes text events (mirrors Pascal TWXInterpreter.TextEvent)
 	ProcessText(text string) error
-	
+
 	// TextLineEvent processes text line events (mirrors Pascal TWXInterpreter.TextLineEvent)
 	ProcessTextLine(line string) error
-	
+
 	// ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
 	ActivateTriggers() error
-	
+
 	// AutoTextEvent processes auto text events (mirrors Pascal TWXInterpreter.AutoTextEvent)
 	ProcessAutoText(text string) error
 }
@@ -48,14 +47,13 @@ func (sep *ScriptEventProcessor) FireTextEvent(text string, blockExtended bool) 
 	if !sep.IsEnabled() {
 		return nil
 	}
-	
-	
+
 	// In Pascal TWX, blockExtended parameter controls whether extended characters are processed
 	// For now, we'll process all text events
 	if err := sep.scriptEngine.ProcessText(text); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -64,12 +62,11 @@ func (sep *ScriptEventProcessor) FireTextLineEvent(line string, blockExtended bo
 	if !sep.IsEnabled() {
 		return nil
 	}
-	
-	
+
 	if err := sep.scriptEngine.ProcessTextLine(line); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -78,12 +75,11 @@ func (sep *ScriptEventProcessor) FireActivateTriggers() error {
 	if !sep.IsEnabled() {
 		return nil
 	}
-	
-	
+
 	if err := sep.scriptEngine.ActivateTriggers(); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -92,12 +88,11 @@ func (sep *ScriptEventProcessor) FireAutoTextEvent(text string, blockExtended bo
 	if !sep.IsEnabled() {
 		return nil
 	}
-	
-	
+
 	if err := sep.scriptEngine.ProcessAutoText(text); err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -107,25 +102,25 @@ func (sep *ScriptEventProcessor) ProcessLineWithScriptEvents(line string) error 
 	if !sep.IsEnabled() {
 		return nil
 	}
-	
+
 	// For complete lines, fire TextLineEvent, TextEvent (in processPrompt), and ActivateTriggers
 	// Pascal TWX: ProcessLine -> TextLineEvent -> ProcessPrompt -> TextEvent -> ActivateTriggers
 	// AutoTextEvent is NOT fired for complete lines, only for prompts
-	
+
 	// Fire TextLineEvent (mirrors Pascal ProcessLine)
 	if err := sep.FireTextLineEvent(line, false); err != nil {
 		return err
 	}
-	
+
 	// Fire TextEvent (mirrors Pascal ProcessPrompt)
 	if err := sep.FireTextEvent(line, false); err != nil {
 		return err
 	}
-	
+
 	// Activate triggers (mirrors Pascal ProcessLine end)
 	if err := sep.FireActivateTriggers(); err != nil {
 		return err
 	}
-	
+
 	return nil
 }

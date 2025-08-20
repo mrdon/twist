@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -48,7 +46,7 @@ func TestGetDateTime_RealIntegration(t *testing.T) {
 	beforeTime := time.Now()
 	result := tester.ExecuteScript(script)
 	afterTime := time.Now()
-	
+
 	if result.Error != nil {
 		t.Fatalf("GETDATETIME command failed: %v", result.Error)
 	}
@@ -67,14 +65,14 @@ func TestGetDateTime_RealIntegration(t *testing.T) {
 	if !strings.Contains(output, "/") || !strings.Contains(output, ":") {
 		t.Errorf("Expected datetime format with slashes and colons, got %s", output)
 	}
-	
+
 	// Extract the datetime part
 	parts := strings.Split(output, "Current datetime: ")
 	if len(parts) != 2 {
 		t.Errorf("Could not extract datetime from: %s", output)
 		return
 	}
-	
+
 	// Parse and verify it's reasonable
 	datetimeStr := parts[1]
 	parsedTime, err := time.ParseInLocation("01/02/2006 15:04:05", datetimeStr, time.Local)
@@ -85,7 +83,7 @@ func TestGetDateTime_RealIntegration(t *testing.T) {
 
 	// Verify the time is within reasonable bounds (allow 5 second tolerance)
 	if parsedTime.Before(beforeTime.Add(-5*time.Second)) || parsedTime.After(afterTime.Add(5*time.Second)) {
-		t.Errorf("Returned datetime %v is not within expected range %v to %v", 
+		t.Errorf("Returned datetime %v is not within expected range %v to %v",
 			parsedTime, beforeTime, afterTime)
 	}
 }
@@ -104,7 +102,7 @@ func TestDateTimeDiff_RealIntegration(t *testing.T) {
 			expected: "10",
 		},
 		{
-			name:     "Difference in minutes", 
+			name:     "Difference in minutes",
 			script:   `datetimediff "2023-01-01 12:00:00" "2023-01-01 12:05:00" "minutes" $diff`,
 			expected: "5",
 		},
@@ -130,7 +128,7 @@ func TestDateTimeDiff_RealIntegration(t *testing.T) {
 			fullScript := tt.script + `
 				echo "Diff: " $diff
 			`
-			
+
 			result := tester.ExecuteScript(fullScript)
 			if result.Error != nil {
 				t.Fatalf("Script execution failed: %v", result.Error)
@@ -182,7 +180,7 @@ func TestDateTimeDiff_DifferentFormats_RealIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			script := `datetimediff "` + tt.datetime1 + `" "` + tt.datetime2 + `" "seconds" $diff
 				echo "Seconds: " $diff`
-				
+
 			result := tester.ExecuteScript(script)
 			if result.Error != nil {
 				t.Fatalf("Script execution failed: %v", result.Error)
@@ -248,7 +246,7 @@ func TestDateTimeToStr_CustomFormat_RealIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			script := `datetimetostr "` + tt.input + `" $result "` + tt.format + `"
 				echo "Result: " $result`
-				
+
 			result := tester.ExecuteScript(script)
 			if result.Error != nil {
 				t.Fatalf("Script execution failed: %v", result.Error)
@@ -373,7 +371,7 @@ func TestDateTimePersistence_CrossInstance_RealIntegration(t *testing.T) {
 		if !strings.Contains(loadedOutput, "Loaded: ") {
 			t.Errorf("Expected 'Loaded: ' prefix, got %s", loadedOutput)
 		}
-		
+
 		// The loaded time should match the captured time
 		capturedTime := strings.TrimPrefix(capturedOutput, "Captured: ")
 		loadedTime := strings.TrimPrefix(loadedOutput, "Loaded: ")
@@ -428,7 +426,7 @@ func TestComplexDateTimeWorkflow_RealIntegration(t *testing.T) {
 			}
 		}
 	}
-	
+
 	// Verify date formats
 	todayOutput := result.Output[0]
 	if !strings.Contains(todayOutput, "/") {

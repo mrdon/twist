@@ -17,58 +17,58 @@ type Database interface {
 	OpenDatabase(filename string) error
 	CloseDatabase() error
 	CreateDatabase(filename string) error
-	
+
 	// Sector operations (matching TWX methods)
 	SaveSector(sector TSector, index int) error
 	LoadSector(index int) (TSector, error)
-	
+
 	// Enhanced SaveSector with collections (Pascal-compliant signature)
 	SaveSectorWithCollections(sector TSector, index int, ships []TShip, traders []TTrader, planets []TPlanet) error
-	
+
 	// Port operations (Phase 2: Database Schema Optimization)
 	SavePort(port TPort, sectorIndex int) error
 	LoadPort(sectorIndex int) (TPort, error)
 	DeletePort(sectorIndex int) error
 	FindPortsByClass(classIndex int) ([]TPort, error)
 	FindPortsBuying(product TProductType) ([]TPort, error)
-	
+
 	// TWX compatibility methods
 	GetDatabaseOpen() bool
 	GetSectors() int
-	
+
 	// Script variable operations
 	SaveScriptVariable(name string, value interface{}) error
 	LoadScriptVariable(name string) (interface{}, error)
-	
+
 	// Parser integration methods
 	SavePlayerStats(stats TPlayerStats) error
 	LoadPlayerStats() (TPlayerStats, error)
-	GetPlayerStatsInfo() (api.PlayerStatsInfo, error) // Phase 1: Straight SQL method
+	GetPlayerStatsInfo() (api.PlayerStatsInfo, error)      // Phase 1: Straight SQL method
 	GetSectorInfo(sectorIndex int) (api.SectorInfo, error) // Phase 2: Straight SQL method
-	GetPortInfo(sectorIndex int) (*api.PortInfo, error) // Phase 3: Straight SQL method
+	GetPortInfo(sectorIndex int) (*api.PortInfo, error)    // Phase 3: Straight SQL method
 	AddMessageToHistory(message TMessageHistory) error
 	GetMessageHistory(limit int) ([]TMessageHistory, error)
-	
+
 	// Fighter management
 	ResetPersonalCorpFighters() error
-	
+
 	// Modern additions
 	BeginTransaction() error
 	CommitTransaction() error
 	RollbackTransaction() error
-	
+
 	// Internal access for advanced operations
 	GetDB() *sql.DB
 }
 
 // SQLiteDatabase implements Database interface using SQLite
 type SQLiteDatabase struct {
-	db           *sql.DB
-	dbOpen       bool
-	filename     string
-	sectors      int
-	tx           *sql.Tx  // Current transaction
-	
+	db       *sql.DB
+	dbOpen   bool
+	filename string
+	sectors  int
+	tx       *sql.Tx // Current transaction
+
 	// Prepared statements for performance
 	loadSectorStmt *sql.Stmt
 	saveSectorStmt *sql.Stmt
@@ -84,103 +84,103 @@ func (d *SQLiteDatabase) OpenDatabase(filename string) error {
 	if d.dbOpen {
 		return fmt.Errorf("database already open")
 	}
-	
+
 	var err error
 	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=0")
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
-	
+
 	// Test the connection
 	if err = d.db.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
-	
+
 	// Explicitly set busy timeout via PRAGMA to ensure it's applied
 	if _, err = d.db.Exec("PRAGMA busy_timeout = 0"); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
-	
+
 	// Enable WAL mode for better concurrent access
 	if _, err = d.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		return fmt.Errorf("failed to set WAL mode: %w", err)
 	}
-	
+
 	// Create schema (handles IF NOT EXISTS)
 	if err = d.createSchema(); err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
-	
+
 	// Check if database has proper schema
 	if err = d.validateSchema(); err != nil {
-		return fmt.Errorf("invalid database schema: %w", err)  
+		return fmt.Errorf("invalid database schema: %w", err)
 	}
-	
+
 	// Get sector count
 	d.sectors, err = d.getSectorCount()
 	if err != nil {
 		return fmt.Errorf("failed to get sector count: %w", err)
 	}
-	
+
 	// Prepare statements
 	if err = d.prepareStatements(); err != nil {
 		return fmt.Errorf("failed to prepare statements: %w", err)
 	}
-	
+
 	d.filename = filename
 	d.dbOpen = true
-	
+
 	return nil
 }
 
 // CreateDatabase creates a new SQLite database with TWX-compatible schema
 func (d *SQLiteDatabase) CreateDatabase(filename string) error {
-	
+
 	var err error
 	d.db, err = sql.Open("sqlite", filename+"?_foreign_keys=on&_busy_timeout=0")
 	if err != nil {
 		return fmt.Errorf("failed to create database: %w", err)
 	}
-	
+
 	// Test the connection
 	if err = d.db.Ping(); err != nil {
 		return fmt.Errorf("failed to ping database: %w", err)
 	}
-	
+
 	// Enable WAL mode for better concurrent access
 	if _, err = d.db.Exec("PRAGMA journal_mode = WAL"); err != nil {
 		return fmt.Errorf("failed to set WAL mode: %w", err)
 	}
-	
+
 	// Set zero busy timeout for immediate failures
 	if _, err = d.db.Exec("PRAGMA busy_timeout = 0"); err != nil {
 		return fmt.Errorf("failed to set busy timeout: %w", err)
 	}
-	
+
 	// Create complete schema (no migrations for new app)
 	if err = d.createSchema(); err != nil {
 		return fmt.Errorf("failed to create schema: %w", err)
 	}
-	
+
 	// Validate schema was created correctly
 	if err = d.validateSchema(); err != nil {
 		return fmt.Errorf("schema validation failed: %w", err)
 	}
-	
+
 	// Get sector count
 	d.sectors, err = d.getSectorCount()
 	if err != nil {
 		return fmt.Errorf("failed to get sector count: %w", err)
 	}
-	
+
 	// Prepare statements for performance
 	if err = d.prepareStatements(); err != nil {
 		return fmt.Errorf("failed to prepare statements: %w", err)
 	}
-	
+
 	d.filename = filename
 	d.dbOpen = true
-	
+
 	return nil
 }
 
@@ -189,13 +189,13 @@ func (d *SQLiteDatabase) CloseDatabase() error {
 	if !d.dbOpen {
 		return nil
 	}
-	
+
 	// Close any active transaction
 	if d.tx != nil {
 		d.tx.Rollback() // Rollback any uncommitted transaction
 		d.tx = nil
 	}
-	
+
 	// Close prepared statements
 	if d.loadSectorStmt != nil {
 		d.loadSectorStmt.Close()
@@ -203,18 +203,18 @@ func (d *SQLiteDatabase) CloseDatabase() error {
 	if d.saveSectorStmt != nil {
 		d.saveSectorStmt.Close()
 	}
-	
+
 	// Close database
 	if d.db != nil {
 		// Force WAL checkpoint to ensure all data is written to main database file
 		// This helps prevent locking issues when another connection opens the database
 		d.db.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-		
+
 		if err := d.db.Close(); err != nil {
 			return fmt.Errorf("failed to close database: %w", err)
 		}
 	}
-	
+
 	d.dbOpen = false
 	d.filename = ""
 	return nil
@@ -225,49 +225,49 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	if !d.dbOpen {
 		return NULLSector(), fmt.Errorf("database not open")
 	}
-	
+
 	if index <= 0 {
 		return NULLSector(), fmt.Errorf("invalid sector index: %d", index)
 	}
-	
+
 	sector := NULLSector()
-	
+
 	// Load main sector data (Phase 2: port data removed from sectors table)
 	// Add timing debug to check if busy timeout is working
 	startTime := time.Now()
 	row := d.loadSectorStmt.QueryRow(index)
-	
+
 	var upDate sql.NullTime
-	
+
 	err := row.Scan(
-		&sector.Warp[0], &sector.Warp[1], &sector.Warp[2], 
+		&sector.Warp[0], &sector.Warp[1], &sector.Warp[2],
 		&sector.Warp[3], &sector.Warp[4], &sector.Warp[5],
 		&sector.Constellation, &sector.Beacon, &sector.NavHaz,
 		&sector.Density, &sector.Anomaly, &sector.Warps, &sector.Explored,
-		&upDate, 
+		&upDate,
 		&sector.Figs.Quantity, &sector.Figs.Owner, &sector.Figs.FigType,
 		&sector.MinesArmid.Quantity, &sector.MinesArmid.Owner,
 		&sector.MinesLimpet.Quantity, &sector.MinesLimpet.Owner,
 	)
-	
+
 	// Log timing for database lock analysis
 	elapsed := time.Since(startTime)
 	if err != nil && strings.Contains(err.Error(), "database is locked") {
 		debug.Log("TIMING: LoadSector(%d) failed with database lock after %v", index, elapsed)
 	}
-	
+
 	if err == sql.ErrNoRows {
 		// Sector doesn't exist, return blank sector (like TWX)
 		return NULLSector(), nil
 	} else if err != nil {
 		return NULLSector(), fmt.Errorf("failed to load sector %d: %w", index, err)
 	}
-	
+
 	// Handle nullable timestamps
 	if upDate.Valid {
 		sector.UpDate = upDate.Time
 	}
-	
+
 	// Automatic warp count enforcement: always keep warp array and count in sync
 	// Calculate actual warps from warp array
 	calculatedWarps := 0
@@ -276,19 +276,19 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 			calculatedWarps++
 		}
 	}
-	
+
 	// If warp array has connections, that's authoritative (overrides any stored count)
 	if calculatedWarps > 0 {
 		sector.Warps = calculatedWarps
 	}
 	// If no warp connections but count > 0, keep stored value (from density scans)
 	// This allows density scans to provide warp counts without warp destinations
-	
+
 	// Load related data (ships, traders, planets)
 	if err = d.loadSectorRelatedData(index, &sector); err != nil {
 		return sector, fmt.Errorf("failed to load related data for sector %d: %w", index, err)
 	}
-	
+
 	return sector, nil
 }
 
@@ -297,27 +297,26 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}
-	
+
 	if index <= 0 {
 		return fmt.Errorf("invalid sector index: %d", index)
 	}
-	
+
 	// Debug: Verify database connection and table existence
 	if d.db == nil {
 		return fmt.Errorf("database connection is nil")
 	}
-	
+
 	// Test a simple query to ensure the connection works
 	var tableCount int
 	if err := d.db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='sectors'").Scan(&tableCount); err != nil {
-		return fmt.Errorf("failed to query sqlite_master: %w", err)  
+		return fmt.Errorf("failed to query sqlite_master: %w", err)
 	}
-	
+
 	if tableCount == 0 {
 		return fmt.Errorf("sectors table does not exist (found %d tables named 'sectors')", tableCount)
 	}
-	
-	
+
 	// Start transaction if not already in one
 	shouldCommit := false
 	if d.tx == nil {
@@ -326,10 +325,10 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		}
 		shouldCommit = true
 	}
-	
+
 	// Update timestamp
 	sector.UpDate = time.Now()
-	
+
 	// Calculate and enforce warp count before saving (interceptor pattern)
 	calculatedWarps := 0
 	for _, warp := range sector.Warp {
@@ -342,7 +341,7 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		sector.Warps = calculatedWarps
 	}
 	// Otherwise preserve existing count (allows density scans to set counts)
-	
+
 	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
@@ -355,7 +354,7 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 	) VALUES (
 		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
-	
+
 	_, err := d.tx.Exec(saveQuery,
 		index,
 		sector.Warp[0], sector.Warp[1], sector.Warp[2],
@@ -367,14 +366,14 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
 	)
-	
+
 	if err != nil {
 		if shouldCommit {
 			d.RollbackTransaction()
 		}
 		return fmt.Errorf("failed to save sector %d: %w", index, err)
 	}
-	
+
 	// Save related data
 	if err = d.saveSectorRelatedData(index, sector); err != nil {
 		if shouldCommit {
@@ -382,12 +381,11 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		}
 		return fmt.Errorf("failed to save related data for sector %d: %w", index, err)
 	}
-	
-	
+
 	if shouldCommit {
 		return d.CommitTransaction()
 	}
-	
+
 	return nil
 }
 
@@ -397,11 +395,11 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}
-	
+
 	if index <= 0 {
 		return fmt.Errorf("invalid sector index: %d", index)
 	}
-	
+
 	// Start transaction for atomic operation
 	shouldCommit := false
 	if d.tx == nil {
@@ -410,10 +408,10 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		}
 		shouldCommit = true
 	}
-	
+
 	// Update timestamp
 	sector.UpDate = time.Now()
-	
+
 	// Calculate and enforce warp count before saving (interceptor pattern)
 	calculatedWarps := 0
 	for _, warp := range sector.Warp {
@@ -426,7 +424,7 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		sector.Warps = calculatedWarps
 	}
 	// Otherwise preserve existing count (allows density scans to set counts)
-	
+
 	// Save main sector data (Phase 2: port data removed from sectors table)
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
@@ -439,7 +437,7 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 	) VALUES (
 		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
-	
+
 	_, err := d.tx.Exec(saveQuery,
 		index,
 		sector.Warp[0], sector.Warp[1], sector.Warp[2],
@@ -451,14 +449,14 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
 	)
-	
+
 	if err != nil {
 		if shouldCommit {
 			d.RollbackTransaction()
 		}
 		return fmt.Errorf("failed to save sector %d: %w", index, err)
 	}
-	
+
 	// Save collections with explicit parameters (Pascal-compliant approach)
 	if err = d.saveSectorCollectionsWithParams(index, ships, traders, planets); err != nil {
 		if shouldCommit {
@@ -466,11 +464,11 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		}
 		return fmt.Errorf("failed to save collections for sector %d: %w", index, err)
 	}
-	
+
 	if shouldCommit {
 		return d.CommitTransaction()
 	}
-	
+
 	return nil
 }
 
@@ -479,7 +477,7 @@ func (d *SQLiteDatabase) GetDatabaseOpen() bool {
 	return d.dbOpen
 }
 
-// GetSectors returns the number of sectors (TWX compatibility)  
+// GetSectors returns the number of sectors (TWX compatibility)
 func (d *SQLiteDatabase) GetSectors() int {
 	return d.sectors
 }
@@ -493,7 +491,7 @@ func (d *SQLiteDatabase) BeginTransaction() error {
 	if d.tx != nil {
 		return fmt.Errorf("transaction already active")
 	}
-	
+
 	var err error
 	d.tx, err = d.db.Begin()
 	return err
@@ -503,7 +501,7 @@ func (d *SQLiteDatabase) CommitTransaction() error {
 	if d.tx == nil {
 		return fmt.Errorf("no active transaction")
 	}
-	
+
 	err := d.tx.Commit()
 	d.tx = nil
 	return err
@@ -511,14 +509,13 @@ func (d *SQLiteDatabase) CommitTransaction() error {
 
 func (d *SQLiteDatabase) RollbackTransaction() error {
 	if d.tx == nil {
-		return fmt.Errorf("no active transaction")  
+		return fmt.Errorf("no active transaction")
 	}
-	
+
 	err := d.tx.Rollback()
 	d.tx = nil
 	return err
 }
-
 
 // SaveScriptVariable saves a script variable to persistent storage
 func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) error {
@@ -544,7 +541,7 @@ func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) erro
 			numberValue = 0
 		}
 	case float64:
-		varType = 1 // NumberType  
+		varType = 1 // NumberType
 		stringValue = ""
 		numberValue = v
 	case int:
@@ -566,7 +563,6 @@ func (d *SQLiteDatabase) SaveScriptVariable(name string, value interface{}) erro
 	if err != nil {
 		return fmt.Errorf("failed to save script variable %s: %w", name, err)
 	}
-
 
 	return nil
 }
@@ -612,7 +608,7 @@ func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
 
 // SavePlayerStats saves current player statistics to database
 func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
-	debug.Log("SavePlayerStats: saving stats - credits: %d, turns: %d, sector: %d", 
+	debug.Log("SavePlayerStats: saving stats - credits: %d, turns: %d, sector: %d",
 		stats.Credits, stats.Turns, stats.CurrentSector)
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
@@ -721,11 +717,11 @@ func (d *SQLiteDatabase) GetMessageHistory(limit int) ([]TMessageHistory, error)
 	for rows.Next() {
 		var message TMessageHistory
 		var messageType int
-		
+
 		if err := rows.Scan(&messageType, &message.Timestamp, &message.Content, &message.Sender, &message.Channel); err != nil {
 			return nil, fmt.Errorf("failed to scan message: %w", err)
 		}
-		
+
 		message.Type = TMessageType(messageType)
 		messages = append(messages, message)
 	}
@@ -760,7 +756,7 @@ func (d *SQLiteDatabase) SavePort(port TPort, sectorIndex int) error {
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}
-	
+
 	if sectorIndex <= 0 {
 		return fmt.Errorf("invalid sector index")
 	}
@@ -789,7 +785,7 @@ func (d *SQLiteDatabase) SavePort(port TPort, sectorIndex int) error {
 			port.ProductPercent[PtFuelOre], port.ProductPercent[PtOrganics], port.ProductPercent[PtEquipment],
 			port.ProductAmount[PtFuelOre], port.ProductAmount[PtOrganics], port.ProductAmount[PtEquipment])
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorIndex, err)
 	}
@@ -800,11 +796,11 @@ func (d *SQLiteDatabase) SavePort(port TPort, sectorIndex int) error {
 // LoadPort loads port information from the dedicated ports table
 func (d *SQLiteDatabase) LoadPort(sectorIndex int) (TPort, error) {
 	var port TPort
-	
+
 	if !d.dbOpen {
 		return port, fmt.Errorf("database not open")
 	}
-	
+
 	if sectorIndex <= 0 {
 		return port, fmt.Errorf("invalid sector index")
 	}
@@ -819,7 +815,7 @@ func (d *SQLiteDatabase) LoadPort(sectorIndex int) (TPort, error) {
 
 	var updateTime time.Time
 	var err error
-	
+
 	// Use transaction if active, otherwise use direct connection
 	if d.tx != nil {
 		err = d.tx.QueryRow(query, sectorIndex).Scan(
@@ -836,7 +832,7 @@ func (d *SQLiteDatabase) LoadPort(sectorIndex int) (TPort, error) {
 			&port.ProductAmount[PtFuelOre], &port.ProductAmount[PtOrganics], &port.ProductAmount[PtEquipment],
 			&updateTime)
 	}
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// No port in this sector - return empty port struct
@@ -844,7 +840,7 @@ func (d *SQLiteDatabase) LoadPort(sectorIndex int) (TPort, error) {
 		}
 		return port, fmt.Errorf("failed to load port for sector %d: %w", sectorIndex, err)
 	}
-	
+
 	port.UpDate = updateTime
 	return port, nil
 }
@@ -854,13 +850,13 @@ func (d *SQLiteDatabase) DeletePort(sectorIndex int) error {
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}
-	
+
 	if sectorIndex <= 0 {
 		return fmt.Errorf("invalid sector index")
 	}
 
 	query := `DELETE FROM ports WHERE sector_index = ?;`
-	
+
 	// Use transaction if active, otherwise use direct connection (consistent with SavePort)
 	var err error
 	if d.tx != nil {
@@ -868,7 +864,7 @@ func (d *SQLiteDatabase) DeletePort(sectorIndex int) error {
 	} else {
 		_, err = d.db.Exec(query, sectorIndex)
 	}
-	
+
 	if err != nil {
 		return fmt.Errorf("failed to delete port for sector %d: %w", sectorIndex, err)
 	}
@@ -901,7 +897,7 @@ func (d *SQLiteDatabase) FindPortsByClass(classIndex int) ([]TPort, error) {
 		var port TPort
 		var sectorIndex int
 		var updateTime time.Time
-		
+
 		if err := rows.Scan(
 			&sectorIndex, &port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
 			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
@@ -910,7 +906,7 @@ func (d *SQLiteDatabase) FindPortsByClass(classIndex int) ([]TPort, error) {
 			&updateTime); err != nil {
 			return nil, fmt.Errorf("failed to scan port: %w", err)
 		}
-		
+
 		port.UpDate = updateTime
 		ports = append(ports, port)
 	}
@@ -955,7 +951,7 @@ func (d *SQLiteDatabase) FindPortsBuying(product TProductType) ([]TPort, error) 
 		var port TPort
 		var sectorIndex int
 		var updateTime time.Time
-		
+
 		if err := rows.Scan(
 			&sectorIndex, &port.Name, &port.ClassIndex, &port.Dead, &port.BuildTime,
 			&port.BuyProduct[PtFuelOre], &port.BuyProduct[PtOrganics], &port.BuyProduct[PtEquipment],
@@ -964,7 +960,7 @@ func (d *SQLiteDatabase) FindPortsBuying(product TProductType) ([]TPort, error) 
 			&updateTime); err != nil {
 			return nil, fmt.Errorf("failed to scan port: %w", err)
 		}
-		
+
 		port.UpDate = updateTime
 		ports = append(ports, port)
 	}
@@ -976,11 +972,11 @@ func (d *SQLiteDatabase) FindPortsBuying(product TProductType) ([]TPort, error) 
 // This method is used after PlayerStatsTracker updates to provide fresh, complete data
 func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 	info := api.PlayerStatsInfo{}
-	
+
 	if !d.dbOpen {
 		return info, fmt.Errorf("database not open")
 	}
-	
+
 	query := `
 		SELECT turns, credits, fighters, shields, total_holds,
 		       ore_holds, org_holds, equ_holds, col_holds, photons,
@@ -990,7 +986,7 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 		       psychic_probe, planet_scanner, scan_type,
 		       ship_class, current_sector, player_name
 		FROM player_stats WHERE id = 1`
-	
+
 	row := d.db.QueryRow(query)
 	err := row.Scan(
 		&info.Turns, &info.Credits, &info.Fighters, &info.Shields, &info.TotalHolds,
@@ -1001,7 +997,7 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 		&info.PsychicProbe, &info.PlanetScanner, &info.ScanType,
 		&info.ShipClass, &info.CurrentSector, &info.PlayerName,
 	)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Return default values if no player stats record exists yet
@@ -1010,7 +1006,7 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 		}
 		return info, fmt.Errorf("failed to get player stats info: %w", err)
 	}
-	
+
 	return info, nil
 }
 
@@ -1018,30 +1014,30 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 // This method is used after SectorTracker updates to provide fresh, complete data
 func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) {
 	info := api.SectorInfo{Number: sectorIndex}
-	
+
 	if !d.dbOpen {
 		return info, fmt.Errorf("database not open")
 	}
-	
+
 	// Query basic sector fields
 	query := `
 		SELECT constellation, beacon, nav_haz, 
 		       warp1, warp2, warp3, warp4, warp5, warp6,
 		       density, anomaly, explored
 		FROM sectors WHERE sector_index = ?`
-	
+
 	row := d.db.QueryRow(query, sectorIndex)
-	
+
 	var constellation, beacon sql.NullString
 	var navHaz, density sql.NullInt64
 	var warps [6]sql.NullInt64
 	var anomaly sql.NullBool
 	var explored sql.NullInt64
-	
+
 	err := row.Scan(&constellation, &beacon, &navHaz,
-	               &warps[0], &warps[1], &warps[2], &warps[3], &warps[4], &warps[5],
-	               &density, &anomaly, &explored)
-	
+		&warps[0], &warps[1], &warps[2], &warps[3], &warps[4], &warps[5],
+		&density, &anomaly, &explored)
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Return basic info if no sector record exists yet
@@ -1050,7 +1046,7 @@ func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) 
 		}
 		return info, fmt.Errorf("failed to get sector info for sector %d: %w", sectorIndex, err)
 	}
-	
+
 	// Populate info object from nullable database values
 	if constellation.Valid {
 		info.Constellation = constellation.String
@@ -1061,7 +1057,7 @@ func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) 
 	if navHaz.Valid {
 		info.NavHaz = int(navHaz.Int64)
 	}
-	
+
 	// Build warps array from non-zero values
 	warpList := make([]int, 0, 6)
 	for i := 0; i < 6; i++ {
@@ -1070,26 +1066,26 @@ func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) 
 		}
 	}
 	info.Warps = warpList
-	
+
 	// Check for port presence
 	portQuery := `SELECT COUNT(*) FROM ports WHERE sector_index = ?`
 	var portCount int
 	if err := d.db.QueryRow(portQuery, sectorIndex).Scan(&portCount); err == nil {
 		info.HasPort = portCount > 0
 	}
-	
+
 	// Count traders
 	tradersQuery := `SELECT COUNT(*) FROM traders WHERE sector_index = ?`
 	var traderCount int
 	if err := d.db.QueryRow(tradersQuery, sectorIndex).Scan(&traderCount); err == nil {
 		info.HasTraders = traderCount
 	}
-	
+
 	// Set visited based on explored status (simplified logic for now)
 	if explored.Valid {
 		info.Visited = explored.Int64 > 0
 	}
-	
+
 	return info, nil
 }
 
@@ -1099,7 +1095,7 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 	if !d.dbOpen {
 		return nil, fmt.Errorf("database not open")
 	}
-	
+
 	// Query port data
 	query := `
 		SELECT name, dead, build_time, class_index,
@@ -1108,9 +1104,9 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		       amount_fuel_ore, amount_organics, amount_equipment,
 		       updated_at
 		FROM ports WHERE sector_index = ?`
-	
+
 	row := d.db.QueryRow(query, sectorIndex)
-	
+
 	var name sql.NullString
 	var dead sql.NullBool
 	var buildTime, classIndex sql.NullInt64
@@ -1118,13 +1114,13 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 	var percentFuelOre, percentOrganics, percentEquipment sql.NullInt64
 	var amountFuelOre, amountOrganics, amountEquipment sql.NullInt64
 	var updateTime sql.NullTime
-	
+
 	err := row.Scan(&name, &dead, &buildTime, &classIndex,
 		&buyFuelOre, &buyOrganics, &buyEquipment,
 		&percentFuelOre, &percentOrganics, &percentEquipment,
 		&amountFuelOre, &amountOrganics, &amountEquipment,
 		&updateTime)
-	
+
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// No port record exists for this sector
@@ -1132,13 +1128,13 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		}
 		return nil, fmt.Errorf("failed to get port info for sector %d: %w", sectorIndex, err)
 	}
-	
+
 	// Build port info object
 	info := &api.PortInfo{
 		SectorID: sectorIndex,
 		Dead:     dead.Bool,
 	}
-	
+
 	if name.Valid {
 		info.Name = name.String
 	}
@@ -1152,10 +1148,10 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 	if updateTime.Valid {
 		info.LastUpdate = updateTime.Time
 	}
-	
+
 	// Build products array with discovered data
 	products := make([]api.ProductInfo, 0, 3)
-	
+
 	// Fuel Ore (ProductType = 0)
 	if buyFuelOre.Valid || percentFuelOre.Valid || amountFuelOre.Valid {
 		product := api.ProductInfo{
@@ -1176,7 +1172,7 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		}
 		products = append(products, product)
 	}
-	
+
 	// Organics (ProductType = 1)
 	if buyOrganics.Valid || percentOrganics.Valid || amountOrganics.Valid {
 		product := api.ProductInfo{
@@ -1197,7 +1193,7 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		}
 		products = append(products, product)
 	}
-	
+
 	// Equipment (ProductType = 2)
 	if buyEquipment.Valid || percentEquipment.Valid || amountEquipment.Valid {
 		product := api.ProductInfo{
@@ -1218,8 +1214,8 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		}
 		products = append(products, product)
 	}
-	
+
 	info.Products = products
-	
+
 	return info, nil
 }

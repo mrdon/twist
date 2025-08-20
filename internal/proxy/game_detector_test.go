@@ -20,24 +20,24 @@ func newTestGameDetector(t *testing.T) (*GameDetector, func()) {
 	if err != nil {
 		t.Fatalf("Failed to get current directory: %v", err)
 	}
-	
+
 	// Change to temp directory so database files are created there
 	if err := os.Chdir(tempDir); err != nil {
 		t.Fatalf("Failed to change to temp directory: %v", err)
 	}
-	
+
 	// Use unique identifier to ensure no conflicts with other tests
 	uniqueID := fmt.Sprintf("%d_%s", time.Now().UnixNano(), strings.ReplaceAll(t.Name(), "/", "_"))
 	connInfo := ConnectionInfo{Host: "localhost", Port: uniqueID}
 	gd := NewGameDetector(connInfo)
-	
+
 	// Return cleanup function that restores directory and closes GameDetector
 	cleanup := func() {
 		gd.Close()
 		os.Chdir(originalDir)
 		// Database files will be automatically cleaned up when tempDir is removed
 	}
-	
+
 	return gd, cleanup
 }
 
@@ -63,8 +63,8 @@ func TestGameDetector_BasicFlow(t *testing.T) {
 	gd.ProcessLine("<B> Another Game\n")
 
 	// Step 3: User selects game (server shows prompt, user types input)
-	gd.ProcessLine("Your choice: ")  // Server output
-	gd.ProcessUserInput("A")         // User input
+	gd.ProcessLine("Your choice: ") // Server output
+	gd.ProcessUserInput("A")        // User input
 	if gd.GetState() != StateGameSelected {
 		t.Errorf("Expected StateGameSelected after selection, got %v", gd.GetState())
 	}
@@ -95,52 +95,52 @@ func TestGameDetector_ChunkSplitting(t *testing.T) {
 	defer gd.Close()
 
 	testCases := []struct {
-		name   string
-		chunks []string
+		name          string
+		chunks        []string
 		expectedState GameDetectionState
 		expectedGame  string
 	}{
 		{
-			name: "Menu trigger split across chunks",
-			chunks: []string{"Select a ga", "me :"},
+			name:          "Menu trigger split across chunks",
+			chunks:        []string{"Select a ga", "me :"},
 			expectedState: StateGameMenuVisible,
 		},
 		{
-			name: "Game option split across chunks", 
-			chunks: []string{"Select a game :", "<A> Trade Wa", "rs 2002\n", "A"},
+			name:          "Game option split across chunks",
+			chunks:        []string{"Select a game :", "<A> Trade Wa", "rs 2002\n", "A"},
 			expectedState: StateGameSelected,
-			expectedGame: "Trade Wars 2002",
+			expectedGame:  "Trade Wars 2002",
 		},
 		{
-			name: "Game start pattern split",
-			chunks: []string{"Select a game :", "<A> Test Game\n", "A", "Show today's log", "? (Y/N)"},
+			name:          "Game start pattern split",
+			chunks:        []string{"Select a game :", "<A> Test Game\n", "A", "Show today's log", "? (Y/N)"},
 			expectedState: StateGameActive,
-			expectedGame: "Test Game",
+			expectedGame:  "Test Game",
 		},
 		{
-			name: "Exit pattern split",
-			chunks: []string{"Select a game :", "<A> Test Game\n", "A", "Show today's log? (Y/N)", "Good", "bye"},
+			name:          "Exit pattern split",
+			chunks:        []string{"Select a game :", "<A> Test Game\n", "A", "Show today's log? (Y/N)", "Good", "bye"},
 			expectedState: StateIdle,
-			expectedGame: "",
+			expectedGame:  "",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			gd.resetGameState()
-			
+
 			for _, chunk := range tc.chunks {
 				gd.ProcessLine(chunk)
 			}
-			
+
 			if gd.GetState() != tc.expectedState {
 				t.Errorf("Expected state %v, got %v", tc.expectedState, gd.GetState())
 			}
-			
+
 			if tc.expectedGame != "" && gd.GetCurrentGame() != tc.expectedGame {
 				t.Errorf("Expected game %q, got %q", tc.expectedGame, gd.GetCurrentGame())
 			}
-			
+
 			if tc.expectedGame == "" && gd.GetCurrentGame() != "" {
 				t.Errorf("Expected empty game, got %q", gd.GetCurrentGame())
 			}
@@ -161,7 +161,7 @@ func TestGameDetector_ANSISequences(t *testing.T) {
 
 	gd.ProcessLine("\x1b[31m<A>\x1b[32m Trade Wars 2002\x1b[0m\n")
 	gd.ProcessLine("\x1b[1mA\x1b[0m")
-	
+
 	if gd.GetState() != StateGameSelected {
 		t.Errorf("Expected StateGameSelected with ANSI, got %v", gd.GetState())
 	}
@@ -179,12 +179,12 @@ func TestGameDetector_ProcessChunk(t *testing.T) {
 	// Test processing raw bytes
 	chunk1 := []byte("Select a ga")
 	chunk2 := []byte("me :")
-	
+
 	gd.ProcessChunk(chunk1)
 	if gd.GetState() != StateIdle {
 		t.Errorf("Expected StateIdle after partial pattern, got %v", gd.GetState())
 	}
-	
+
 	gd.ProcessChunk(chunk2)
 	if gd.GetState() != StateGameMenuVisible {
 		t.Errorf("Expected StateGameMenuVisible after complete pattern, got %v", gd.GetState())
@@ -209,7 +209,7 @@ func TestGameDetector_StateProtection(t *testing.T) {
 	gd.ProcessLine("<A> Test Game\n")
 	gd.ProcessLine("A")
 	gd.ProcessLine("Show today's log? (Y/N)")
-	
+
 	if gd.GetState() != StateGameActive {
 		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
 	}
@@ -219,7 +219,7 @@ func TestGameDetector_StateProtection(t *testing.T) {
 	gd.ProcessLine("Select a game :")
 	gd.ProcessLine("<B> Another Game\n")
 	gd.ProcessLine("B")
-	
+
 	if gd.GetState() != StateGameActive {
 		t.Errorf("Game detection should not interfere with active game, got %v", gd.GetState())
 	}
@@ -242,9 +242,9 @@ func TestGameDetector_MainMenuReturn(t *testing.T) {
 	// Set up active game
 	gd.ProcessLine("Select a game :")
 	gd.ProcessLine("<A> Test Game\n")
-	gd.ProcessLine("A") 
+	gd.ProcessLine("A")
 	gd.ProcessLine("Show today's log? (Y/N)")
-	
+
 	if gd.GetState() != StateGameActive {
 		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
 	}
@@ -263,10 +263,10 @@ func TestGameDetector_MainMenuReturn(t *testing.T) {
 			gd.ProcessLine("<A> Test Game\n")
 			gd.ProcessLine("A")
 			gd.ProcessLine("Show today's log? (Y/N)")
-			
+
 			// Process main menu pattern
 			gd.ProcessLine(pattern)
-			
+
 			if gd.GetState() != StateIdle {
 				t.Errorf("Expected StateIdle after main menu pattern %q, got %v", pattern, gd.GetState())
 			}
@@ -290,10 +290,10 @@ func TestGameDetector_Timeout(t *testing.T) {
 
 	// Wait for timeout
 	time.Sleep(time.Millisecond * 20)
-	
+
 	// Trigger timeout check without updating activity
 	gd.CheckTimeoutManual()
-	
+
 	if gd.GetState() != StateIdle {
 		t.Errorf("Expected StateIdle after timeout, got %v", gd.GetState())
 	}
@@ -430,7 +430,7 @@ func TestGameDetector_EdgeCases(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			gd.resetGameState()
 			gd.ProcessLine(tc.input)
-			
+
 			if gd.GetState() != tc.expected {
 				t.Errorf("Expected state %v, got %v", tc.expected, gd.GetState())
 			}
@@ -451,7 +451,7 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 			"Welcome to TradeWars Game Server\n",
 			"\x1b[36mSelect a game :\x1b[37m\n",
 			"\x1b[31m<A>\x1b[32m Trade Wars 2002 \x1b[33m[Active]\x1b[37m\n",
-			"<B> Another Game [Inactive]\n", 
+			"<B> Another Game [Inactive]\n",
 			"<Q> Quit\n",
 			"Your choice: A\n",
 			"Loading Trade Wars 2002...\n",
@@ -473,18 +473,18 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 
 	t.Run("UserChangesGame", func(t *testing.T) {
 		gd.resetGameState()
-		
+
 		// User starts to select one game
 		gd.ProcessLine("Select a game :")
 		gd.ProcessLine("<A> Game One\n")
 		gd.ProcessLine("<B> Game Two\n")
-		
+
 		// But then sees the menu again (maybe they pressed wrong key)
 		gd.ProcessLine("Select a game :")
 		gd.ProcessLine("<A> Game One\n")
 		gd.ProcessLine("<B> Game Two\n")
 		gd.ProcessUserInput("B") // User types B
-		
+
 		if gd.GetCurrentGame() != "Game Two" {
 			t.Errorf("Expected 'Game Two', got %q", gd.GetCurrentGame())
 		}
@@ -492,17 +492,17 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 
 	t.Run("ServerMenuTextShouldNotTriggerGameSelection", func(t *testing.T) {
 		gd.resetGameState()
-		
+
 		// Simulate server displaying game menu with various letters in the content
 		gd.ProcessLine("Select a game :\n")
 		gd.ProcessLine("<A> Alien Retribution\n")
-		gd.ProcessLine("<B> Star Control II\n") 
+		gd.ProcessLine("<B> Star Control II\n")
 		gd.ProcessLine("<E> Stock (9600Baud)\n")
 		gd.ProcessLine("Found game option via lexer: A -> Alien Retribution\n")
 		gd.ProcessLine("Found game option via lexer: B -> Star Control II\n")
 		gd.ProcessLine("Found game option via lexer: E -> Stock (9600Baud)\n")
 		gd.ProcessLine("Some server text with letters like A and B and E scattered throughout\n")
-		
+
 		// Verify no game was incorrectly selected from server output
 		if gd.GetState() != StateGameMenuVisible {
 			t.Errorf("Expected StateGameMenuVisible, got %v", gd.GetState())
@@ -510,11 +510,11 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 		if gd.GetCurrentGame() != "" {
 			t.Errorf("Expected no game selected, but got %q", gd.GetCurrentGame())
 		}
-		
+
 		// Now simulate actual user input with proper prompt context
-		gd.ProcessLine("Your choice: ")  // Server shows prompt
-		gd.ProcessUserInput("E")         // User types selection
-		
+		gd.ProcessLine("Your choice: ") // Server shows prompt
+		gd.ProcessUserInput("E")        // User types selection
+
 		// Should now detect the game selection
 		if gd.GetState() != StateGameSelected {
 			t.Errorf("Expected StateGameSelected after user input, got %v", gd.GetState())
@@ -526,14 +526,14 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 
 	t.Run("NewlineServerTextShouldNotTriggerGameSelection", func(t *testing.T) {
 		gd.resetGameState()
-		
+
 		// Simulate the exact scenario from the debug log
 		gd.ProcessLine("Select a game :\n")
 		gd.ProcessLine("<A> Alien Retribution\n")
 		gd.ProcessLine("<E> Stock (9600Baud)\n")
-		gd.ProcessLine("Some server text with E\n")  // This "E" at start of line should NOT be detected
-		gd.ProcessLine("E")  // This should also not be detected yet
-		
+		gd.ProcessLine("Some server text with E\n") // This "E" at start of line should NOT be detected
+		gd.ProcessLine("E")                         // This should also not be detected yet
+
 		// Verify no game was selected from server output
 		if gd.GetState() != StateGameMenuVisible {
 			t.Errorf("Expected StateGameMenuVisible, got %v", gd.GetState())
@@ -541,12 +541,12 @@ func TestGameDetector_RealWorldScenarios(t *testing.T) {
 		if gd.GetCurrentGame() != "" {
 			t.Errorf("Expected no game selected from server text, but got %q", gd.GetCurrentGame())
 		}
-		
-		// Now the server sends the actual prompt  
-		gd.ProcessLine("Enter your choice: ")  // Server output
+
+		// Now the server sends the actual prompt
+		gd.ProcessLine("Enter your choice: ") // Server output
 		// And then the actual user input
-		gd.ProcessUserInput("A")               // User input
-		
+		gd.ProcessUserInput("A") // User input
+
 		// Should now detect the correct game selection
 		if gd.GetState() != StateGameSelected {
 			t.Errorf("Expected StateGameSelected after user input, got %v", gd.GetState())
@@ -568,7 +568,7 @@ func TestGameDetector_ConfigScreenBug(t *testing.T) {
 	gd.ProcessLine("<A> Alien Retribution\n")
 	gd.ProcessUserInput("A") // User selects game
 	gd.ProcessLine("Show today's log? (Y/N)")
-	
+
 	// Verify we're in an active game
 	if gd.GetState() != StateGameActive {
 		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
@@ -605,7 +605,7 @@ Command [TL=00:00:00]:[2142] (?=Help)? : `
 
 	// Process the config screen output from server
 	gd.ProcessLine(configText)
-	
+
 	// BUG: The game detector should NOT change state due to "TWGS v" in the config text
 	// The game should still be active because we're just viewing config within the game
 	if gd.GetState() != StateGameActive {
@@ -619,7 +619,7 @@ Command [TL=00:00:00]:[2142] (?=Help)? : `
 	// The user should still be in the active game and be able to continue playing
 	// For example, they should be able to enter another command
 	gd.ProcessLine("Command [TL=00:00:00]:[2142] (?=Help)? : ")
-	
+
 	if gd.GetState() != StateGameActive {
 		t.Errorf("Game should still be active after config screen, got %v", gd.GetState())
 	}
@@ -635,7 +635,7 @@ func TestGameDetector_InactivityDisconnect(t *testing.T) {
 	gd.ProcessLine("<A> Trade Wars 2002\n")
 	gd.ProcessUserInput("A")
 	gd.ProcessLine("Show today's log? (Y/N)")
-	
+
 	// Verify we're in an active game
 	if gd.GetState() != StateGameActive {
 		t.Fatalf("Expected StateGameActive, got %v", gd.GetState())
@@ -644,7 +644,7 @@ func TestGameDetector_InactivityDisconnect(t *testing.T) {
 	// Test inactivity warnings (these should not change game state)
 	gd.ProcessLine("\x1b[1;31mINACTIVITY WARNING:\r\x1b[0m\n")
 	gd.ProcessLine("\x1b[1;36m  Your session will be terminated in \x1b[5;31mSixty \x1b[0m\x1b[1;36mseconds.\r\x1b[0m\n")
-	
+
 	// Game should still be active after warnings
 	if gd.GetState() != StateGameActive {
 		t.Errorf("Expected StateGameActive after inactivity warning, got %v", gd.GetState())
@@ -652,12 +652,12 @@ func TestGameDetector_InactivityDisconnect(t *testing.T) {
 
 	// Test final inactivity termination
 	gd.ProcessLine("\x1b[1;31mCRITICAL INACTIVITY:  \x1b[5mYour session has been terminated.\r\x1b[0m\n")
-	
+
 	// Game should be idle after termination
 	if gd.GetState() != StateIdle {
 		t.Errorf("Expected StateIdle after inactivity termination, got %v", gd.GetState())
 	}
-	
+
 	// Game name should be cleared
 	if gd.GetCurrentGame() != "" {
 		t.Errorf("Expected empty game name after termination, got %q", gd.GetCurrentGame())

@@ -45,7 +45,7 @@ func (cs *CallStack) Pop() (*StackFrame, error) {
 	if len(cs.frames) == 0 {
 		return nil, fmt.Errorf("call stack is empty")
 	}
-	
+
 	frame := cs.frames[len(cs.frames)-1]
 	cs.frames = cs.frames[:len(cs.frames)-1]
 	return frame, nil
@@ -56,7 +56,7 @@ func (cs *CallStack) Peek() (*StackFrame, error) {
 	if len(cs.frames) == 0 {
 		return nil, fmt.Errorf("call stack is empty")
 	}
-	
+
 	return cs.frames[len(cs.frames)-1], nil
 }
 

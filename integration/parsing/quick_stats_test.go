@@ -20,14 +20,14 @@ func TestQuickStats(t *testing.T) {
 	expectedOreHolds := 2
 	expectedOrgHolds := 3
 	expectedEquHolds := 0
-	expectedColHolds := 0  // col_holds
+	expectedColHolds := 0 // col_holds
 	expectedPhotons := 0
 	expectedArmids := 0   // armids (armid mines)
-	expectedLimpets := 0  // limpets (limpet mines) 
+	expectedLimpets := 0  // limpets (limpet mines)
 	expectedGenTorps := 0 // gen_torps (genesis torpedoes/devices)
 	expectedCloaks := 0
 	expectedBeacons := 0
-	expectedAtomics := 0  // atomics (atomic detonators)
+	expectedAtomics := 0   // atomics (atomic detonators)
 	expectedCorbomite := 0 // corbomite (carbonite)
 	expectedEprobes := 14  // eprobes (ether probes)
 	expectedMineDisr := 0  // mine_disr (mine disruptors)
@@ -36,7 +36,7 @@ func TestQuickStats(t *testing.T) {
 
 	// Verify sector 286 was parsed and saved
 	result.Assert.AssertSectorExists(286)
-	
+
 	// Verify sector constellation
 	result.Assert.AssertSectorConstellation(286, "uncharted space")
 
@@ -55,15 +55,15 @@ func TestQuickStats(t *testing.T) {
 	result.Assert.AssertPlayerExperience(expectedExperience)
 	result.Assert.AssertPlayerFighters(expectedFighters)
 	result.Assert.AssertPlayerShields(expectedShields)
-	
+
 	// Verify player cargo hold information
 	result.Assert.AssertPlayerCargo(expectedOreHolds, expectedOrgHolds, expectedEquHolds)
 	result.Assert.AssertPlayerTotalHolds(expectedTotalHolds)
 	result.Assert.AssertPlayerEmptyHolds(expectedTotalHolds - expectedOreHolds - expectedOrgHolds - expectedEquHolds) // 20 - 2 - 3 - 0 = 15
-	
+
 	// Verify player colonists
 	result.Assert.AssertPlayerColonists(expectedColHolds)
-	
+
 	// Verify player weapons and equipment
 	result.Assert.AssertPlayerPhotons(expectedPhotons)
 	result.Assert.AssertPlayerArmidMines(expectedArmids)
@@ -75,7 +75,7 @@ func TestQuickStats(t *testing.T) {
 	result.Assert.AssertPlayerCarbonite(expectedCorbomite)
 	result.Assert.AssertPlayerEtherProbes(expectedEprobes)
 	result.Assert.AssertPlayerMineDisruptors(expectedMineDisr)
-	
+
 	// Verify player alignment and ship number
 	result.Assert.AssertPlayerAlignment(expectedAlignment)
 	result.Assert.AssertPlayerShipNumber(expectedShipNumber) // 1 = MerCru
@@ -87,7 +87,7 @@ func TestQuickStats(t *testing.T) {
 		t.Errorf("Expected OnPlayerStatsUpdated to be called during quick stats display, but got no calls")
 	} else {
 		t.Logf("OnPlayerStatsUpdated called %d times during quick stats display", len(playerStatsCalls))
-		
+
 		// Check that the final player stats call has the expected values
 		finalStats := playerStatsCalls[len(playerStatsCalls)-1]
 		if finalStats.Credits != expectedCredits {
@@ -105,7 +105,7 @@ func TestQuickStats(t *testing.T) {
 		if finalStats.Shields != expectedShields {
 			t.Errorf("Expected final stats shields to be %d, got %d", expectedShields, finalStats.Shields)
 		}
-		
+
 		// Verify cargo in player stats events
 		if finalStats.OreHolds != expectedOreHolds {
 			t.Errorf("Expected final stats ore holds to be %d, got %d", expectedOreHolds, finalStats.OreHolds)
@@ -122,7 +122,7 @@ func TestQuickStats(t *testing.T) {
 		if finalStats.ColHolds != expectedColHolds {
 			t.Errorf("Expected final stats colonists to be %d, got %d", expectedColHolds, finalStats.ColHolds)
 		}
-		
+
 		// Verify weapons and equipment in player stats events
 		if finalStats.Photons != expectedPhotons {
 			t.Errorf("Expected final stats photons to be %d, got %d", expectedPhotons, finalStats.Photons)

@@ -66,7 +66,7 @@ func (ip *IncludeProcessor) processIncludeNode(node *parser.ASTNode) ([]*parser.
 	}
 
 	filename := node.Children[0].Value
-	
+
 	// Remove quotes if present
 	if len(filename) >= 2 && filename[0] == '"' && filename[len(filename)-1] == '"' {
 		filename = filename[1 : len(filename)-1]
@@ -74,7 +74,7 @@ func (ip *IncludeProcessor) processIncludeNode(node *parser.ASTNode) ([]*parser.
 
 	// Normalize filename (uppercase like Pascal version)
 	normalizedName := strings.ToUpper(filename)
-	
+
 	// Check if already included
 	if ip.includedFiles[normalizedName] {
 		// Already included, return empty slice

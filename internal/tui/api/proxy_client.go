@@ -65,4 +65,3 @@ func (pc *ProxyClient) SendData(data []byte) error {
 func (pc *ProxyClient) GetCurrentAPI() coreapi.ProxyAPI {
 	return pc.currentAPI
 }
-

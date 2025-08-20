@@ -14,7 +14,7 @@ type LogEntry struct {
 	Type string // "OnData" or "SendData"
 	Size int
 	Data string
-	Line int    // Line number in raw.log
+	Line int // Line number in raw.log
 }
 
 // ScriptLine represents a single line in the raw script format
@@ -107,7 +107,7 @@ func parseRawLogWithRange(filename string, startLine, endLine int) ([]LogEntry, 
 
 func generateScriptLines(entries []LogEntry) []ScriptLine {
 	var lines []ScriptLine
-	
+
 	// Simply convert each entry to its raw form in order
 	for _, entry := range entries {
 		if entry.Type == "OnData" {
@@ -131,7 +131,7 @@ func generateScriptLines(entries []LogEntry) []ScriptLine {
 func printScript(lines []ScriptLine, name, description string) {
 	fmt.Printf("# %s\n", name)
 	fmt.Printf("# %s\n\n", description)
-	
+
 	for _, line := range lines {
 		fmt.Printf("%s %s\n", line.Direction, line.Data)
 	}
@@ -143,13 +143,13 @@ func writeScriptToFile(lines []ScriptLine, filename, name, description string) e
 		return err
 	}
 	defer file.Close()
-	
+
 	fmt.Fprintf(file, "# %s\n", name)
 	fmt.Fprintf(file, "# %s\n\n", description)
-	
+
 	for _, line := range lines {
 		fmt.Fprintf(file, "%s %s\n", line.Direction, line.Data)
 	}
-	
+
 	return nil
 }

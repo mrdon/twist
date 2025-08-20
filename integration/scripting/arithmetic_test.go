@@ -1,11 +1,8 @@
-
-
 package scripting
 
 import (
 	"testing"
 )
-
 
 // TestTWXArithmetic_OriginalSyntax tests TWX arithmetic with in-place modification
 func TestTWXArithmetic_OriginalSyntax_RealIntegration(t *testing.T) {
@@ -34,7 +31,7 @@ func TestTWXArithmetic_OriginalSyntax_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"After add: 15",     // 10 + 5
+		"After add: 15",      // 10 + 5
 		"After subtract: 12", // 15 - 3
 		"After multiply: 24", // 12 * 2
 		"After divide: 6",    // 24 / 4
@@ -122,9 +119,9 @@ func TestArithmetic_DecimalPrecision_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"Subtotal: 59.97",   // 19.99 * 3
-		"Tax: 4.7976",       // 59.97 * 0.08
-		"Total: 64.7676",    // 59.97 + 4.7976
+		"Subtotal: 59.97", // 19.99 * 3
+		"Tax: 4.7976",     // 59.97 * 0.08
+		"Total: 64.7676",  // 59.97 + 4.7976
 	}
 
 	if len(result.Output) != 3 {
@@ -239,8 +236,8 @@ func TestArithmetic_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"Balance after interest: 867",  // 850 + (850 * 0.02) = 850 + 17 = 867
-		"Interest earned: 17",          // 850 * 0.02 = 17
+		"Balance after interest: 867", // 850 + (850 * 0.02) = 850 + 17 = 867
+		"Interest earned: 17",         // 850 * 0.02 = 17
 	}
 
 	if len(result2.Output) != 2 {

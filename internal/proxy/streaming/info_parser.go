@@ -23,7 +23,7 @@ const (
 func (p *TWXParser) setupInfoHandlers() {
 	// Info display headers - detect start of info display
 	p.AddHandler("<Info>", p.handleInfoDisplayStart)
-	
+
 	// Info display fields - only active when inside info display
 	p.AddHandler("Trader Name    :", p.handleInfoTraderName)
 	p.AddHandler("Rank and Exp   :", p.handleInfoRankExp)
@@ -44,15 +44,15 @@ func (p *TWXParser) initInfoDisplay() {
 // handleInfoDisplayStart detects the start of an info display
 func (p *TWXParser) handleInfoDisplayStart(line string) {
 	defer p.recoverFromPanic("handleInfoDisplayStart")
-	
+
 	p.infoDisplay.Active = true
 	p.infoDisplay.Complete = false
-	
+
 	// Reset incomplete tracker from previous session
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
 		debug.Log("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
 	}
-	
+
 	// Start new discovered field session
 	p.playerStatsTracker = NewPlayerStatsTracker()
 }
@@ -62,7 +62,7 @@ func (p *TWXParser) checkInfoDisplayEnd(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	// Info display ends with command prompt (not blank lines, as there are blank lines within the display)
 	if strings.Contains(line, "Command [") {
 		p.completeInfoDisplay()
@@ -72,14 +72,14 @@ func (p *TWXParser) checkInfoDisplayEnd(line string) {
 // completeInfoDisplay finalizes the info display parsing
 func (p *TWXParser) completeInfoDisplay() {
 	defer p.recoverFromPanic("completeInfoDisplay")
-	
+
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	p.infoDisplay.Active = false
 	p.infoDisplay.Complete = true
-	
+
 	// Execute SQL update with ONLY discovered fields
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
 		err := p.playerStatsTracker.Execute(p.database.GetDB())
@@ -87,7 +87,7 @@ func (p *TWXParser) completeInfoDisplay() {
 			debug.Log("INFO_PARSER: Failed to update player stats: %v", err)
 			return
 		}
-		
+
 		// Read complete, fresh data from database for API event
 		if p.tuiAPI != nil {
 			fullPlayerStats, err := p.database.GetPlayerStatsInfo()
@@ -97,7 +97,7 @@ func (p *TWXParser) completeInfoDisplay() {
 				debug.Log("INFO_PARSER: Failed to read player stats info for API event: %v", err)
 			}
 		}
-		
+
 		// Reset tracker for next parsing session
 		p.playerStatsTracker = nil
 	}
@@ -108,9 +108,9 @@ func (p *TWXParser) handleInfoTraderName(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoTraderName")
-	
+
 	// Parse format: "Trader Name    : Private 1st Class mrdon"
 	if len(line) > 17 { // "Trader Name    : ".length = 17
 		traderName := strings.TrimSpace(line[17:])
@@ -124,13 +124,13 @@ func (p *TWXParser) handleInfoRankExp(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoRankExp")
-	
+
 	// Parse format: "Rank and Exp   : 4 points, Alignment=28 Tolerant"
 	if len(line) > 17 { // "Rank and Exp   : ".length = 17
 		rankExpInfo := strings.TrimSpace(line[17:])
-		
+
 		// Extract experience points
 		pointsPos := strings.Index(rankExpInfo, " points")
 		if pointsPos > 0 {
@@ -140,7 +140,7 @@ func (p *TWXParser) handleInfoRankExp(line string) {
 				p.playerStatsTracker.SetExperience(experience)
 			}
 		}
-		
+
 		// Extract alignment
 		alignPos := strings.Index(rankExpInfo, "Alignment=")
 		if alignPos >= 0 {
@@ -149,7 +149,7 @@ func (p *TWXParser) handleInfoRankExp(line string) {
 			if alignEnd == -1 {
 				alignEnd = len(rankExpInfo) - alignStart
 			}
-			
+
 			if alignEnd > 0 {
 				alignStr := rankExpInfo[alignStart : alignStart+alignEnd]
 				alignment := p.parseIntSafe(alignStr)
@@ -166,15 +166,15 @@ func (p *TWXParser) handleInfoShipInfo(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoShipInfo")
-	
+
 	// Parse format: "Ship Info      : Le Richelieu Merchant Cruiser Ported=3 Kills=0"
 	if len(line) > 17 { // "Ship Info      : ".length = 17
 		// Don't try to parse ship class from info display - too many variations
 		// Quick stats already provides ShipClass in abbreviated form (like "MerCru")
 		// Just preserve existing ShipClass and set defaults for other fields
-		
+
 		// Ship number defaults to 1 if not specified elsewhere
 		if p.playerStatsTracker != nil {
 			p.playerStatsTracker.SetShipNumber(1)
@@ -187,9 +187,9 @@ func (p *TWXParser) handleInfoTurnsLeft(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoTurnsLeft")
-	
+
 	// Parse format: "Turns left     : 19993"
 	if len(line) > 17 { // "Turns left     : ".length = 17
 		turnsStr := strings.TrimSpace(line[17:])
@@ -207,13 +207,13 @@ func (p *TWXParser) handleInfoTotalHolds(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoTotalHolds")
-	
+
 	// Parse format: "Total Holds    : 20 - Fuel Ore=2 Organics=3 Empty=15"
 	if len(line) > 17 { // "Total Holds    : ".length = 17
 		holdsInfo := strings.TrimSpace(line[17:])
-		
+
 		// Extract total holds (before the dash)
 		dashPos := strings.Index(holdsInfo, " -")
 		if dashPos > 0 {
@@ -222,7 +222,7 @@ func (p *TWXParser) handleInfoTotalHolds(line string) {
 			if p.playerStatsTracker != nil {
 				p.playerStatsTracker.SetTotalHolds(totalHolds)
 			}
-			
+
 			// Parse cargo breakdown
 			cargoInfo := strings.TrimSpace(holdsInfo[dashPos+2:]) // After " - "
 			p.parseCargoHolds(cargoInfo)
@@ -233,9 +233,9 @@ func (p *TWXParser) handleInfoTotalHolds(line string) {
 // parseCargoHolds parses the cargo breakdown from holds line
 func (p *TWXParser) parseCargoHolds(cargoInfo string) {
 	defer p.recoverFromPanic("parseCargoHolds")
-	
+
 	// Parse format: "Fuel Ore=2 Organics=3 Empty=15"
-	
+
 	// Extract Fuel Ore
 	if orePos := strings.Index(cargoInfo, "Fuel Ore="); orePos >= 0 {
 		oreStart := orePos + 9 // After "Fuel Ore="
@@ -251,7 +251,7 @@ func (p *TWXParser) parseCargoHolds(cargoInfo string) {
 			}
 		}
 	}
-	
+
 	// Extract Organics
 	if orgPos := strings.Index(cargoInfo, "Organics="); orgPos >= 0 {
 		orgStart := orgPos + 9 // After "Organics="
@@ -267,7 +267,7 @@ func (p *TWXParser) parseCargoHolds(cargoInfo string) {
 			}
 		}
 	}
-	
+
 	// Equipment and Colonist holds set to 0 as defaults (not shown in this format)
 	if p.playerStatsTracker != nil {
 		p.playerStatsTracker.SetEquHolds(0)
@@ -280,9 +280,9 @@ func (p *TWXParser) handleInfoFighters(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoFighters")
-	
+
 	// Parse format: "Fighters       : 2,500"
 	if len(line) > 17 { // "Fighters       : ".length = 17
 		fightersStr := strings.TrimSpace(line[17:])
@@ -300,9 +300,9 @@ func (p *TWXParser) handleInfoEtherProbes(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoEtherProbes")
-	
+
 	// Parse format: "Ether Probes   : 25"
 	if len(line) > 17 { // "Ether Probes   : ".length = 17
 		eprobesStr := strings.TrimSpace(line[17:])
@@ -320,9 +320,9 @@ func (p *TWXParser) handleInfoCredits(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoCredits")
-	
+
 	// Parse format: "Credits        : 140,585"
 	if len(line) > 17 { // "Credits        : ".length = 17
 		creditsStr := strings.TrimSpace(line[17:])
@@ -332,7 +332,7 @@ func (p *TWXParser) handleInfoCredits(line string) {
 		if p.playerStatsTracker != nil {
 			p.playerStatsTracker.SetCredits(credits)
 		}
-		
+
 		// Credits is typically the last field in info display, so trigger completion
 		p.completeInfoDisplay()
 	}
@@ -343,9 +343,9 @@ func (p *TWXParser) handleInfoCurrentSector(line string) {
 	if !p.infoDisplay.Active {
 		return
 	}
-	
+
 	defer p.recoverFromPanic("handleInfoCurrentSector")
-	
+
 	// Parse format: "Current Sector : 190"
 	if len(line) > 17 { // "Current Sector : ".length = 17
 		sectorStr := strings.TrimSpace(line[17:])
@@ -359,4 +359,3 @@ func (p *TWXParser) handleInfoCurrentSector(line string) {
 		}
 	}
 }
-

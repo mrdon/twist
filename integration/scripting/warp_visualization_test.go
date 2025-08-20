@@ -6,7 +6,7 @@ import (
 	"twist/internal/api"
 )
 
-// TestWarpVisualizationBug demonstrates that sectors with only calculated warp data (EtCalc) 
+// TestWarpVisualizationBug demonstrates that sectors with only calculated warp data (EtCalc)
 // are incorrectly being shown as explored (gray) instead of unexplored (lightcoral) in the sector map
 func TestWarpVisualizationBug(t *testing.T) {
 	// Server script that simulates a sector being visited, which will create reverse warps
@@ -22,7 +22,7 @@ expect "Command"`
 	// Use database path to enable warp processing and database storage
 	dbPath := t.TempDir() + "/test.db"
 	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
+
 	result := Execute(t, serverScript, clientScript, connectOpts)
 
 	// Verify game context was created
@@ -51,7 +51,7 @@ expect "Command"`
 		var warpExplored int
 		var warpConstellation string
 		var hasReverseWarp bool
-		
+
 		err := result.Database.QueryRow("SELECT explored, constellation FROM sectors WHERE sector_index = ?", warpSector).Scan(&warpExplored, &warpConstellation)
 		if err != nil {
 			t.Fatalf("Failed to query warp sector %d: %v", warpSector, err)
@@ -81,9 +81,9 @@ expect "Command"`
 
 	t.Log("✓ Verified that reverse warp sectors are correctly marked as EtCalc")
 	t.Log("✓ The bug is in the visualization logic, not the warp processing")
-	
+
 	// The bug should be fixed in the sector map visualization where sectors with
-	// exploration status EtCalc (1) should be shown as unexplored (lightcoral), 
+	// exploration status EtCalc (1) should be shown as unexplored (lightcoral),
 	// not as explored (gray)
 }
 
@@ -102,7 +102,7 @@ expect "Command"`
 	// Use database path to enable warp processing and database storage
 	dbPath := t.TempDir() + "/test.db"
 	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
+
 	result := Execute(t, serverScript, clientScript, connectOpts)
 
 	// Verify game context was created
@@ -112,7 +112,7 @@ expect "Command"`
 
 	// Test that the database has the right exploration status
 	// and that the API would correctly convert it to visited=false
-	
+
 	// Check exploration status for reverse warp sectors - they should be EtCalc (1)
 	for _, sectorNum := range []int{1001, 1002} {
 		var explored int
@@ -120,20 +120,19 @@ expect "Command"`
 		if err != nil {
 			t.Fatalf("Failed to query sector %d: %v", sectorNum, err)
 		}
-		
+
 		// Should be EtCalc (1) - calculated from warp data only
 		if explored != 1 {
 			t.Errorf("Sector %d should be EtCalc (1), got %d", sectorNum, explored)
 		}
-		
+
 		// Test that our API conversion logic correctly sets visited=false for EtCalc
 		visited := (explored == 3) // Only EtHolo (3) should be visited=true
 		if visited {
 			t.Errorf("Sector %d should have visited=false since it's EtCalc (1), not EtHolo (3)", sectorNum)
 		}
 	}
-	
+
 	t.Log("✓ Verified that EtCalc sectors correctly have Visited=false")
 	t.Log("✓ Visualization should now show them as unexplored (lightcoral) instead of explored")
 }
-

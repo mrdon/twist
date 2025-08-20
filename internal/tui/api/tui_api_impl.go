@@ -34,10 +34,10 @@ func NewTuiAPI(app TwistApp) coreapi.TuiAPI {
 		dataChan:   make(chan []byte, 100), // Buffered channel for data
 		shutdownCh: make(chan struct{}),
 	}
-	
+
 	// Start single processing goroutine
 	go impl.processDataLoop()
-	
+
 	return impl
 }
 
@@ -54,11 +54,11 @@ func (tui *TuiApiImpl) OnConnectionError(err error) {
 func (tui *TuiApiImpl) OnData(data []byte) {
 	// Log raw data chunks for debugging
 	debug.LogDataChunk("<", data)
-	
+
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))
 	copy(dataCopy, data)
-	
+
 	// Non-blocking send to avoid blocking network thread
 	select {
 	case tui.dataChan <- dataCopy:
@@ -120,7 +120,7 @@ func (tui *TuiApiImpl) processDataLoop() {
 				}()
 				tui.app.HandleTerminalData(data)
 			}()
-			
+
 		case <-tui.shutdownCh:
 			return
 		}

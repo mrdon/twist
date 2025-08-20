@@ -81,7 +81,7 @@ func (p *TWXParser) recoverFromPanic(operation string) {
 
 // resetParserState resets parser to a safe state after errors
 func (p *TWXParser) resetParserState() {
-	
+
 	// Reset current parsing context
 	p.currentDisplay = DisplayNone
 	p.sectorPosition = SectorPosNormal
@@ -89,11 +89,11 @@ func (p *TWXParser) resetParserState() {
 	p.currentANSILine = ""
 	p.rawANSILine = ""
 	p.inANSI = false
-	
+
 	// Clear message context
 	p.currentChannel = 0
 	p.currentMessage = ""
-	
+
 }
 
 // validateLineFormat performs basic line format validation
@@ -102,12 +102,12 @@ func (p *TWXParser) validateLineFormat(line string) bool {
 	if len(line) > 2000 {
 		return false
 	}
-	
+
 	// Check for null characters or other problematic content
 	if strings.Contains(line, "\x00") {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -122,11 +122,11 @@ func (p *TWXParser) validatePortData(port *PortData) {
 	if port == nil {
 		return
 	}
-	
+
 	// Validate class index (0-9 are typical)
 	if port.ClassIndex < 0 || port.ClassIndex > 20 {
 	}
-	
+
 	// Validate build time (reasonable range)
 	if port.BuildTime < 0 {
 		port.BuildTime = 0
@@ -134,12 +134,12 @@ func (p *TWXParser) validatePortData(port *PortData) {
 	if port.BuildTime > 1000000 {
 		port.BuildTime = 1000000
 	}
-	
+
 	// Validate percentages
 	port.OrePercent = p.validatePercentage(port.OrePercent)
 	port.OrgPercent = p.validatePercentage(port.OrgPercent)
 	port.EquipPercent = p.validatePercentage(port.EquipPercent)
-	
+
 	// Validate amounts (non-negative)
 	if port.OreAmount < 0 {
 		port.OreAmount = 0
@@ -157,10 +157,10 @@ func (p *TWXParser) validateShipData(ship *ShipInfo) {
 	if ship == nil {
 		return
 	}
-	
+
 	// Validate fighter count
 	ship.Fighters = p.validateFighterCount(ship.Fighters)
-	
+
 	// Validate name length
 	if len(ship.Name) > 200 {
 		ship.Name = ship.Name[:200]
@@ -175,10 +175,10 @@ func (p *TWXParser) validateTraderData(trader *TraderInfo) {
 	if trader == nil {
 		return
 	}
-	
+
 	// Validate fighter count
 	trader.Fighters = p.validateFighterCount(trader.Fighters)
-	
+
 	// Validate name lengths
 	if len(trader.Name) > 200 {
 		trader.Name = trader.Name[:200]
@@ -193,10 +193,10 @@ func (p *TWXParser) validatePlanetData(planet *PlanetInfo) {
 	if planet == nil {
 		return
 	}
-	
+
 	// Validate fighter count
 	planet.Fighters = p.validateFighterCount(planet.Fighters)
-	
+
 	// Validate name length
 	if len(planet.Name) > 200 {
 		planet.Name = planet.Name[:200]
@@ -204,15 +204,15 @@ func (p *TWXParser) validatePlanetData(planet *PlanetInfo) {
 	if len(planet.Owner) > 200 {
 		planet.Owner = planet.Owner[:200]
 	}
-	
+
 	// Enhanced validation for planet parsing
 	if planet.Name == "" {
 	}
-	
+
 	// Validate special type consistency
 	if planet.Stardock && planet.Citadel {
 	}
-	
+
 	// Owner validation and cleanup
 	if planet.Owner != "" {
 		// Clean up owner names
@@ -222,7 +222,6 @@ func (p *TWXParser) validatePlanetData(planet *PlanetInfo) {
 		}
 	}
 }
-
 
 // validateNonNegative ensures a value is non-negative
 func (p *TWXParser) validateNonNegative(value int, fieldName string) int {
@@ -245,18 +244,18 @@ func (p *TWXParser) validateWarpData(warps []int) []int {
 	if warps == nil {
 		return nil
 	}
-	
+
 	validWarps := make([]int, 0, len(warps))
 	for _, warp := range warps {
 		if p.validateSectorNumber(warp) {
 			validWarps = append(validWarps, warp)
 		}
 	}
-	
+
 	if len(validWarps) != len(warps) {
-			// Some warps were filtered out
+		// Some warps were filtered out
 	}
-	
+
 	return validWarps
 }
 
@@ -267,7 +266,7 @@ func (p *TWXParser) errorRecoveryHandler(operation string, criticalFunc func() e
 			p.resetParserState()
 		}
 	}()
-	
+
 	if err := criticalFunc(); err != nil {
 		// Don't reset state for non-critical errors, just log them
 	}
@@ -278,19 +277,18 @@ func (p *TWXParser) validateMessageData(msg *MessageHistory) {
 	if msg == nil {
 		return
 	}
-	
+
 	// Validate content length
 	if len(msg.Content) > 10000 {
 		msg.Content = msg.Content[:10000]
 	}
-	
+
 	// Validate sender name
 	if len(msg.Sender) > 500 {
 		msg.Sender = msg.Sender[:500]
 	}
-	
+
 	// Validate channel number (should be within reasonable range)
 	if msg.Channel < 0 || msg.Channel > 9999 {
 	}
 }
-

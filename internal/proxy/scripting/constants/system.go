@@ -20,7 +20,7 @@ func NewSystemConstants(gameInterface types.GameInterface) *SystemConstants {
 		gameInterface: gameInterface,
 		constants:     make(map[string]*types.Value),
 	}
-	
+
 	sc.initializeConstants()
 	return sc
 }
@@ -29,7 +29,7 @@ func NewSystemConstants(gameInterface types.GameInterface) *SystemConstants {
 func (sc *SystemConstants) GetConstant(name string) (*types.Value, bool) {
 	// Check if it's a dynamic constant that needs updating
 	sc.updateDynamicConstant(name)
-	
+
 	value, exists := sc.constants[name]
 	if exists {
 		return value.Clone(), true
@@ -40,47 +40,47 @@ func (sc *SystemConstants) GetConstant(name string) (*types.Value, bool) {
 // initializeConstants initializes all system constants
 func (sc *SystemConstants) initializeConstants() {
 	// ANSI Color Constants (16 constants)
-	sc.constants["ANSI_0"] = types.NewStringValue("\x1b[0;30m")   // Black
-	sc.constants["ANSI_1"] = types.NewStringValue("\x1b[0;34m")   // Blue
-	sc.constants["ANSI_2"] = types.NewStringValue("\x1b[0;32m")   // Green
-	sc.constants["ANSI_3"] = types.NewStringValue("\x1b[0;36m")   // Cyan
-	sc.constants["ANSI_4"] = types.NewStringValue("\x1b[0;31m")   // Red
-	sc.constants["ANSI_5"] = types.NewStringValue("\x1b[0;35m")   // Magenta
-	sc.constants["ANSI_6"] = types.NewStringValue("\x1b[0;33m")   // Brown
-	sc.constants["ANSI_7"] = types.NewStringValue("\x1b[0;37m")   // Light Gray
-	sc.constants["ANSI_8"] = types.NewStringValue("\x1b[1;30m")   // Dark Gray
-	sc.constants["ANSI_9"] = types.NewStringValue("\x1b[1;34m")   // Light Blue
-	sc.constants["ANSI_10"] = types.NewStringValue("\x1b[1;32m")  // Light Green
-	sc.constants["ANSI_11"] = types.NewStringValue("\x1b[1;36m")  // Light Cyan
-	sc.constants["ANSI_12"] = types.NewStringValue("\x1b[1;31m")  // Light Red
-	sc.constants["ANSI_13"] = types.NewStringValue("\x1b[1;35m")  // Light Magenta
-	sc.constants["ANSI_14"] = types.NewStringValue("\x1b[1;33m")  // Yellow
-	sc.constants["ANSI_15"] = types.NewStringValue("\x1b[1;37m")  // White
-	
+	sc.constants["ANSI_0"] = types.NewStringValue("\x1b[0;30m")  // Black
+	sc.constants["ANSI_1"] = types.NewStringValue("\x1b[0;34m")  // Blue
+	sc.constants["ANSI_2"] = types.NewStringValue("\x1b[0;32m")  // Green
+	sc.constants["ANSI_3"] = types.NewStringValue("\x1b[0;36m")  // Cyan
+	sc.constants["ANSI_4"] = types.NewStringValue("\x1b[0;31m")  // Red
+	sc.constants["ANSI_5"] = types.NewStringValue("\x1b[0;35m")  // Magenta
+	sc.constants["ANSI_6"] = types.NewStringValue("\x1b[0;33m")  // Brown
+	sc.constants["ANSI_7"] = types.NewStringValue("\x1b[0;37m")  // Light Gray
+	sc.constants["ANSI_8"] = types.NewStringValue("\x1b[1;30m")  // Dark Gray
+	sc.constants["ANSI_9"] = types.NewStringValue("\x1b[1;34m")  // Light Blue
+	sc.constants["ANSI_10"] = types.NewStringValue("\x1b[1;32m") // Light Green
+	sc.constants["ANSI_11"] = types.NewStringValue("\x1b[1;36m") // Light Cyan
+	sc.constants["ANSI_12"] = types.NewStringValue("\x1b[1;31m") // Light Red
+	sc.constants["ANSI_13"] = types.NewStringValue("\x1b[1;35m") // Light Magenta
+	sc.constants["ANSI_14"] = types.NewStringValue("\x1b[1;33m") // Yellow
+	sc.constants["ANSI_15"] = types.NewStringValue("\x1b[1;37m") // White
+
 	// Boolean Constants
 	sc.constants["TRUE"] = types.NewNumberValue(1)
 	sc.constants["FALSE"] = types.NewNumberValue(0)
-	
+
 	// System Information Constants
-	sc.constants["VERSION"] = types.NewStringValue("3.09")  // TWX version compatibility
+	sc.constants["VERSION"] = types.NewStringValue("3.09") // TWX version compatibility
 	sc.constants["GAME"] = types.NewStringValue("TradeWars 2002")
 	sc.constants["GAMENAME"] = types.NewStringValue("TradeWars 2002")
-	
+
 	// Dynamic constants (will be updated on access)
-	sc.constants["CONNECTED"] = types.NewNumberValue(1)  // Assume connected
+	sc.constants["CONNECTED"] = types.NewNumberValue(1) // Assume connected
 	sc.constants["CURRENTLINE"] = types.NewStringValue("")
 	sc.constants["CURRENTANSILINE"] = types.NewStringValue("")
 	sc.constants["DATE"] = types.NewStringValue("")
 	sc.constants["TIME"] = types.NewStringValue("")
 	sc.constants["CURRENTSECTOR"] = types.NewNumberValue(1)
 	sc.constants["RAWPACKET"] = types.NewStringValue("")
-	
+
 	// Game Location Constants
-	sc.constants["SECTORS"] = types.NewNumberValue(5000)  // Default game size
+	sc.constants["SECTORS"] = types.NewNumberValue(5000) // Default game size
 	sc.constants["STARDOCK"] = types.NewNumberValue(1)
 	sc.constants["ALPHACENTAURI"] = types.NewNumberValue(2)
 	sc.constants["RYLOS"] = types.NewNumberValue(3)
-	
+
 	// Player Status Constants (will be dynamic in real implementation)
 	sc.constants["TURNS"] = types.NewNumberValue(0)
 	sc.constants["CREDITS"] = types.NewNumberValue(0)
@@ -111,7 +111,7 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["CORP"] = types.NewNumberValue(0)
 	sc.constants["SHIPNUMBER"] = types.NewNumberValue(0)
 	sc.constants["SHIPCLASS"] = types.NewStringValue("Unknown")
-	
+
 	// Sector Information Constants (dynamic, based on current sector)
 	sc.constants["SECTOR.WARPS"] = types.NewStringValue("")
 	sc.constants["SECTOR.WARPCOUNT"] = types.NewNumberValue(0)
@@ -138,7 +138,7 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["SECTOR.SHIPCOUNT"] = types.NewNumberValue(0)
 	sc.constants["SECTOR.TRADERCOUNT"] = types.NewNumberValue(0)
 	sc.constants["SECTOR.UPDATED"] = types.NewStringValue("")
-	
+
 	// Port Information Constants (dynamic, based on current sector)
 	sc.constants["PORT.EXISTS"] = types.NewNumberValue(0)
 	sc.constants["PORT.NAME"] = types.NewStringValue("")
@@ -154,7 +154,7 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["PORT.BUYFUEL"] = types.NewNumberValue(0)
 	sc.constants["PORT.BUYORG"] = types.NewNumberValue(0)
 	sc.constants["PORT.BUYEQUIP"] = types.NewNumberValue(0)
-	
+
 	// Bot System Constants (for multi-bot support)
 	sc.constants["ACTIVEBOT"] = types.NewStringValue("Default")
 	sc.constants["ACTIVEBOTS"] = types.NewNumberValue(1)
@@ -163,7 +163,7 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["ACTIVEBOTNAME"] = types.NewStringValue("Default")
 	sc.constants["BOTLIST"] = types.NewStringValue("Default")
 	sc.constants["GAMEDATA"] = types.NewStringValue("")
-	
+
 	// Library System Constants (for advanced scripting)
 	for i := 0; i < 20; i++ { // Expand to 20 LIBPARM slots
 		sc.constants[fmt.Sprintf("LIBPARM[%d]", i)] = types.NewStringValue("")
@@ -174,7 +174,7 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["LIBSILENT"] = types.NewNumberValue(0)
 	sc.constants["LIBMULTILINE"] = types.NewNumberValue(0)
 	sc.constants["LIBMSG"] = types.NewStringValue("")
-	
+
 	// Additional TWX System Constants
 	sc.constants["TWXVERSION"] = types.NewStringValue("3.09")
 	sc.constants["TWXBUILD"] = types.NewStringValue("20240726")
@@ -190,13 +190,13 @@ func (sc *SystemConstants) initializeConstants() {
 	sc.constants["GENESIS_TORPEDO"] = types.NewNumberValue(0)
 	sc.constants["DENSITYSCANNER"] = types.NewNumberValue(0)
 	sc.constants["HOLOSCANNER"] = types.NewNumberValue(0)
-	
+
 	// Quick Status Constants
 	sc.constants["QUICKSTATS"] = types.NewStringValue("")
 	sc.constants["ANSIQUICKSTATS"] = types.NewStringValue("")
 	sc.constants["QS"] = types.NewStringValue("")
 	sc.constants["QSTAT"] = types.NewStringValue("")
-	
+
 	// Login/Authentication Constants
 	sc.constants["LICENSENAME"] = types.NewStringValue("")
 	sc.constants["LOGINNAME"] = types.NewStringValue("")
@@ -230,8 +230,8 @@ func (sc *SystemConstants) updateDynamicConstant(name string) {
 				sc.constants["CURRENTANSILINE"] = types.NewStringValue(currentPrompt)
 			}
 		}
-	case "SECTOR.WARPS", "SECTOR.WARPCOUNT", "SECTOR.DENSITY", "SECTOR.NAVHAZ", 
-		 "SECTOR.EXPLORED", "SECTOR.ANOMALY", "SECTOR.BEACON", "SECTOR.CONSTELLATION":
+	case "SECTOR.WARPS", "SECTOR.WARPCOUNT", "SECTOR.DENSITY", "SECTOR.NAVHAZ",
+		"SECTOR.EXPLORED", "SECTOR.ANOMALY", "SECTOR.BEACON", "SECTOR.CONSTELLATION":
 		sc.updateSectorConstants()
 	case "PORT.EXISTS", "PORT.NAME", "PORT.CLASS", "PORT.FUEL", "PORT.ORG", "PORT.EQUIP":
 		sc.updatePortConstants()
@@ -243,13 +243,13 @@ func (sc *SystemConstants) updateSectorConstants() {
 	if sc.gameInterface == nil {
 		return
 	}
-	
+
 	currentSector := sc.gameInterface.GetCurrentSector()
 	sectorData, err := sc.gameInterface.GetSector(currentSector)
 	if err != nil {
 		return
 	}
-	
+
 	// Update sector warps
 	warpStr := ""
 	warpCount := 0
@@ -264,20 +264,20 @@ func (sc *SystemConstants) updateSectorConstants() {
 	}
 	sc.constants["SECTOR.WARPS"] = types.NewStringValue(warpStr)
 	sc.constants["SECTOR.WARPCOUNT"] = types.NewNumberValue(float64(warpCount))
-	
+
 	// Update other sector info
 	sc.constants["SECTOR.DENSITY"] = types.NewNumberValue(float64(sectorData.Density))
 	sc.constants["SECTOR.NAVHAZ"] = types.NewNumberValue(float64(sectorData.NavHaz))
 	sc.constants["SECTOR.EXPLORED"] = types.NewNumberValue(float64(sectorData.Explored))
 	sc.constants["SECTOR.BEACON"] = types.NewStringValue(sectorData.Beacon)
 	sc.constants["SECTOR.CONSTELLATION"] = types.NewStringValue(sectorData.Constellation)
-	
+
 	if sectorData.Anomaly {
 		sc.constants["SECTOR.ANOMALY"] = types.NewNumberValue(1)
 	} else {
 		sc.constants["SECTOR.ANOMALY"] = types.NewNumberValue(0)
 	}
-	
+
 	// Update ship/trader/planet counts
 	sc.constants["SECTOR.SHIPCOUNT"] = types.NewNumberValue(float64(len(sectorData.Ships)))
 	sc.constants["SECTOR.TRADERCOUNT"] = types.NewNumberValue(float64(len(sectorData.Traders)))
@@ -289,13 +289,13 @@ func (sc *SystemConstants) updatePortConstants() {
 	if sc.gameInterface == nil {
 		return
 	}
-	
+
 	currentSector := sc.gameInterface.GetCurrentSector()
 	sectorData, err := sc.gameInterface.GetSector(currentSector)
 	if err != nil {
 		return
 	}
-	
+
 	if sectorData.HasPort {
 		sc.constants["PORT.EXISTS"] = types.NewNumberValue(1)
 		sc.constants["PORT.NAME"] = types.NewStringValue(sectorData.PortName)
@@ -324,11 +324,11 @@ func (sc *SystemConstants) GetConstantCount() int {
 // UpdateCurrentLine updates the current line constants
 func (sc *SystemConstants) UpdateCurrentLine(text string) {
 	sc.constants["CURRENTLINE"] = types.NewStringValue(text)
-	
+
 	// Strip ANSI codes for CURRENTANSILINE (simple implementation)
 	ansiText := text // TODO: Implement proper ANSI stripping
 	sc.constants["CURRENTANSILINE"] = types.NewStringValue(ansiText)
-	
+
 	// Update raw packet if needed
 	sc.constants["RAWPACKET"] = types.NewStringValue(text)
 }

@@ -15,10 +15,10 @@ type StatusComponent struct {
 	proxyAPI      api.ProxyAPI
 	connected     bool
 	serverAddress string
-	gameInfo      *GameInfo // Current active game information
-	lastWidth     int       // Track the last known width for padding
+	gameInfo      *GameInfo      // Current active game information
+	lastWidth     int            // Track the last known width for padding
 	menuComponent *MenuComponent // Reference to menu component for width coordination
-	
+
 	// Version information
 	version string
 	commit  string
@@ -40,15 +40,15 @@ func NewStatusComponent() *StatusComponent {
 		SetDynamicColors(true).
 		SetTextAlign(tview.AlignLeft).
 		SetWrap(false)
-	
+
 	// Get theme colors for status bar
 	currentTheme := theme.Current()
 	statusColors := currentTheme.StatusColors()
-	
+
 	// Set background and text color using themed colors
 	statusBar.SetBackgroundColor(statusColors.Background)
 	statusBar.SetTextColor(statusColors.Foreground)
-	
+
 	// Set initial status
 	statusBar.SetText(" Scripts: 0 active | Status: Ready | F1=Help")
 
@@ -77,7 +77,7 @@ func (sc *StatusComponent) SetConnectionStatus(connected bool, serverAddress str
 
 // SetGameInfo sets the active game information
 func (sc *StatusComponent) SetGameInfo(gameName, serverHost, serverPort string, isLoaded bool) {
-	
+
 	if isLoaded {
 		sc.gameInfo = &GameInfo{
 			GameName:   gameName,
@@ -94,73 +94,73 @@ func (sc *StatusComponent) SetGameInfo(gameName, serverHost, serverPort string, 
 // UpdateStatus updates the status bar display
 func (sc *StatusComponent) UpdateStatus() {
 	var statusText strings.Builder
-	
+
 	// Get theme colors for status bar
 	currentTheme := theme.Current()
 	statusColors := currentTheme.StatusColors()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	// Set the component background to theme background to prevent bleeding
 	sc.wrapper.SetBackgroundColor(defaultColors.Background)
 	sc.wrapper.SetTextColor(statusColors.Foreground)
-	
+
 	// Build status text with colored connection status
 	statusText.WriteString(" ")
 	if sc.connected {
 		// Add green "Connected" part
-		statusText.WriteString(fmt.Sprintf("[%s]Connected[-] to %s", 
+		statusText.WriteString(fmt.Sprintf("[%s]Connected[-] to %s",
 			statusColors.ConnectedFg.String(), sc.serverAddress))
 	} else if sc.serverAddress != "" {
 		// Add connecting color for server address
-		statusText.WriteString(fmt.Sprintf("[%s]%s[-]", 
+		statusText.WriteString(fmt.Sprintf("[%s]%s[-]",
 			statusColors.ConnectingFg.String(), sc.serverAddress))
 	} else {
 		// Add red "Disconnected" part
-		statusText.WriteString(fmt.Sprintf("[%s]Disconnected[-]", 
+		statusText.WriteString(fmt.Sprintf("[%s]Disconnected[-]",
 			statusColors.DisconnectedFg.String()))
 	}
-	
+
 	// Add active game information if available
 	if sc.gameInfo != nil && sc.gameInfo.IsLoaded {
 		statusText.WriteString(" | Game: ")
-		statusText.WriteString(fmt.Sprintf("[%s]%s[-]", 
+		statusText.WriteString(fmt.Sprintf("[%s]%s[-]",
 			statusColors.ConnectedFg.String(), sc.gameInfo.GameName))
 	} else {
 	}
-	
+
 	// Script status - use ProxyAPI instead of direct script manager access
 	if sc.proxyAPI != nil && sc.proxyAPI.IsConnected() {
 		scriptStatus := sc.proxyAPI.GetScriptStatus()
 		statusText.WriteString(" | Scripts: ")
 		statusText.WriteString(fmt.Sprintf("%d active", scriptStatus.ActiveCount))
-		
+
 		if scriptStatus.TotalCount > scriptStatus.ActiveCount {
-			statusText.WriteString(fmt.Sprintf(", %d stopped", 
-				scriptStatus.TotalCount - scriptStatus.ActiveCount))
+			statusText.WriteString(fmt.Sprintf(", %d stopped",
+				scriptStatus.TotalCount-scriptStatus.ActiveCount))
 		}
 	} else {
 		statusText.WriteString(" | Scripts: Not available")
 	}
-	
+
 	// Add version information if available
 	if sc.version != "" {
 		statusText.WriteString(" | v")
 		statusText.WriteString(sc.version)
 	}
-	
+
 	statusText.WriteString(" | F1=Help")
-	
+
 	// Calculate content length (without color tags) before adding the final space
 	plainTextBeforeSpace := sc.stripColorTags(statusText.String())
 	contentLength := len(plainTextBeforeSpace)
-	
+
 	// Always add one space at the end (this is the +1)
 	statusText.WriteString(" ")
 	contentLengthWithSpace := contentLength + 1
-	
+
 	// Minimum width is first two panels (left panel + terminal = 30 + 80 = 110)
 	minPanelWidth := 110
-	
+
 	// Final width is the larger of (content + 1) or panel width (110)
 	finalWidth := contentLengthWithSpace
 	if minPanelWidth > contentLengthWithSpace {
@@ -169,14 +169,14 @@ func (sc *StatusComponent) UpdateStatus() {
 		paddingNeeded := minPanelWidth - contentLengthWithSpace
 		statusText.WriteString(strings.Repeat(" ", paddingNeeded))
 	}
-	
+
 	// Store the final width for menu bar to match
 	sc.lastWidth = finalWidth
-	
+
 	// Apply explicit background color to the padded text content
 	finalText := fmt.Sprintf("[:%s]%s[-:-]", statusColors.Background.String(), statusText.String())
 	sc.wrapper.SetText(finalText)
-	
+
 	// Update menu bar to match this width
 	if sc.menuComponent != nil {
 		sc.menuComponent.SetTargetWidth(sc.lastWidth)
@@ -187,13 +187,13 @@ func (sc *StatusComponent) UpdateStatus() {
 func (sc *StatusComponent) stripColorTags(text string) string {
 	// Simple regex to remove tview color tags like [color], [-], [color:background], etc.
 	result := text
-	
+
 	// Remove color reset tags [-]
 	result = strings.ReplaceAll(result, "[-]", "")
-	
+
 	// Remove complex color tags [color:background] and [-:-]
 	result = strings.ReplaceAll(result, "[-:-]", "")
-	
+
 	// Remove simple color tags by finding patterns like [colorname]
 	for strings.Contains(result, "[") && strings.Contains(result, "]") {
 		start := strings.Index(result, "[")
@@ -204,7 +204,7 @@ func (sc *StatusComponent) stripColorTags(text string) string {
 			break
 		}
 	}
-	
+
 	return result
 }
 

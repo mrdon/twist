@@ -176,7 +176,7 @@ func (a *DBAsserts) AssertSectorExplorationStatus(sectorNum int, expectedExplore
 func (a *DBAsserts) AssertPortCommodity(sectorNum int, commodityType string, expectedAmount int, expectedPercent int, expectedBuying bool) {
 	var actualAmount, actualPercent int
 	var actualBuying bool
-	
+
 	var query string
 	switch commodityType {
 	case "fuel_ore":
@@ -189,12 +189,12 @@ func (a *DBAsserts) AssertPortCommodity(sectorNum int, commodityType string, exp
 		a.t.Fatalf("Invalid commodity type: %s", commodityType)
 		return
 	}
-	
+
 	err := a.db.QueryRow(query, sectorNum).Scan(&actualAmount, &actualPercent, &actualBuying)
 	if err != nil {
 		a.t.Fatalf("Failed to get %s commodity info for port in sector %d: %v", commodityType, sectorNum, err)
 	}
-	
+
 	if actualAmount != expectedAmount {
 		a.t.Errorf("Expected port %s amount to be %d, got %d", commodityType, expectedAmount, actualAmount)
 	}
@@ -213,7 +213,7 @@ func (a *DBAsserts) AssertPlayerCargo(expectedOre, expectedOrganics, expectedEqu
 	if err != nil {
 		a.t.Fatalf("Failed to get player cargo: %v", err)
 	}
-	
+
 	if actualOre != expectedOre {
 		a.t.Errorf("Expected player ore holds to be %d, got %d", expectedOre, actualOre)
 	}
@@ -232,10 +232,10 @@ func (a *DBAsserts) AssertPlayerEmptyHolds(expectedEmpty int) {
 	if err != nil {
 		a.t.Fatalf("Failed to get player cargo holds: %v", err)
 	}
-	
+
 	actualEmpty := totalHolds - oreHolds - orgHolds - equHolds
 	if actualEmpty != expectedEmpty {
-		a.t.Errorf("Expected player empty holds to be %d, got %d (total: %d, ore: %d, org: %d, equ: %d)", 
+		a.t.Errorf("Expected player empty holds to be %d, got %d (total: %d, ore: %d, org: %d, equ: %d)",
 			expectedEmpty, actualEmpty, totalHolds, oreHolds, orgHolds, equHolds)
 	}
 }
@@ -284,7 +284,7 @@ func (a *DBAsserts) AssertPortStatus(sectorNum int, expectedDead bool, expectedB
 	if err != nil {
 		a.t.Fatalf("Failed to get port status for sector %d: %v", sectorNum, err)
 	}
-	
+
 	if actualDead != expectedDead {
 		a.t.Errorf("Expected port dead status to be %t, got %t", expectedDead, actualDead)
 	}

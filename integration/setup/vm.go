@@ -1,5 +1,3 @@
-
-
 package setup
 
 import (
@@ -26,20 +24,20 @@ func SetupRealComponents(t *testing.T) *IntegrationTestSetup {
 	// Create temporary database file
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	
+
 	// Create real database using the existing pattern
 	db := database.NewDatabase()
 	err := db.CreateDatabase(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	
+
 	// Create real game adapter
 	gameAdapter := scripting.NewGameAdapter(db)
-	
+
 	// Create real VM
 	realVM := vm.NewVirtualMachine(gameAdapter)
-	
+
 	setup := &IntegrationTestSetup{
 		DB:          db,
 		GameAdapter: gameAdapter,
@@ -47,12 +45,12 @@ func SetupRealComponents(t *testing.T) *IntegrationTestSetup {
 		DBPath:      dbPath,
 		t:           t,
 	}
-	
+
 	// Register cleanup
 	t.Cleanup(func() {
 		setup.Cleanup()
 	})
-	
+
 	return setup
 }
 
@@ -61,7 +59,7 @@ func (s *IntegrationTestSetup) Cleanup() {
 	if s.DB != nil {
 		s.DB.CloseDatabase()
 	}
-	
+
 	// Remove database file (t.TempDir() handles this automatically, but explicit is better)
 	if s.DBPath != "" {
 		os.Remove(s.DBPath)
@@ -75,22 +73,22 @@ func (s *IntegrationTestSetup) VerifyScriptVariable(t *testing.T, name string, e
 		t.Errorf("Failed to load script variable %s: %v", name, err)
 		return
 	}
-	
+
 	switch expectedValue := expectedValue.(type) {
 	case string:
 		if value.Type != types.StringType || value.String != expectedValue {
-			t.Errorf("Variable %s: expected string %q, got %v %q", 
+			t.Errorf("Variable %s: expected string %q, got %v %q",
 				name, expectedValue, value.Type, value.String)
 		}
 	case float64:
 		if value.Type != types.NumberType || value.Number != expectedValue {
-			t.Errorf("Variable %s: expected number %f, got %v %f", 
+			t.Errorf("Variable %s: expected number %f, got %v %f",
 				name, expectedValue, value.Type, value.Number)
 		}
 	case int:
 		expectedFloat := float64(expectedValue)
 		if value.Type != types.NumberType || value.Number != expectedFloat {
-			t.Errorf("Variable %s: expected number %f, got %v %f", 
+			t.Errorf("Variable %s: expected number %f, got %v %f",
 				name, expectedFloat, value.Type, value.Number)
 		}
 	default:

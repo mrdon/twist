@@ -17,34 +17,34 @@ type TerminalView struct {
 	*tview.Box
 
 	// Terminal-specific storage - 2D grid for efficient cursor operations
-	lines    [][]rune         // Screen lines as runes
-	colors   [][]tcell.Style  // Per-character colors and attributes
-	width    int              // Current terminal width
-	height   int              // Current terminal height
-	
+	lines  [][]rune        // Screen lines as runes
+	colors [][]tcell.Style // Per-character colors and attributes
+	width  int             // Current terminal width
+	height int             // Current terminal height
+
 	// Cursor state
-	cursorX  int
-	cursorY  int 
-	
+	cursorX int
+	cursorY int
+
 	// ANSI processing
 	ansiConverter *ansi.ColorConverter
 	currentStyle  tcell.Style
-	
+
 	// Scrolling
-	scrollable   bool
+	scrollable      bool
 	scrollOffsetRow int
 	scrollOffsetCol int
-	
+
 	// ANSI sequence buffering
-	buffer       [8192]byte
-	bufferLen    int
-	
+	buffer    [8192]byte
+	bufferLen int
+
 	// Synchronization
 	mutex sync.RWMutex
-	
+
 	// Callbacks
 	changedFunc func()
-	
+
 	// UI wrapper
 	wrapper *tview.Flex
 }
@@ -60,27 +60,27 @@ func NewTerminalView() *TerminalView {
 		scrollable:    true,
 		ansiConverter: ansi.NewColorConverter(),
 	}
-	
+
 	// Apply theme colors
 	colors := theme.Current().TerminalColors()
 	tv.SetBackgroundColor(colors.Background)
-	
+
 	// Set default style using theme colors instead of hardcoded values
 	tv.currentStyle = tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	// Set up standard tview component styling like TextView
-	tv.SetBorder(false)  // Start with no border, can be enabled via SetBorder()
-	tv.SetBorderPadding(1, 1, 1, 1)  // Default padding: 1 row top/bottom, 1 column left/right
-	
-	// Create wrapper with theme colors  
+	tv.SetBorder(false)             // Start with no border, can be enabled via SetBorder()
+	tv.SetBorderPadding(1, 1, 1, 1) // Default padding: 1 row top/bottom, 1 column left/right
+
+	// Create wrapper with theme colors
 	tv.wrapper = tview.NewFlex().SetDirection(tview.FlexRow).
 		AddItem(tv, 0, 1, true)
-	
+
 	// Set up change callback for UI updates
 	tv.SetChangedFunc(func() {
 		// Trigger redraw when terminal content changes
 	})
-	
+
 	return tv
 }
 
@@ -88,7 +88,7 @@ func NewTerminalView() *TerminalView {
 func (tv *TerminalView) resizeBuffer(width, height int) {
 	tv.width = width
 	tv.height = height
-	
+
 	// Resize lines buffer
 	if len(tv.lines) < height {
 		// Need to add lines
@@ -108,7 +108,7 @@ func (tv *TerminalView) resizeBuffer(width, height int) {
 		tv.lines = tv.lines[:height]
 		tv.colors = tv.colors[:height]
 	}
-	
+
 	// Resize each line
 	for i := range tv.lines {
 		if len(tv.lines[i]) < width {
@@ -116,7 +116,7 @@ func (tv *TerminalView) resizeBuffer(width, height int) {
 			newRunes := make([]rune, width)
 			copy(newRunes, tv.lines[i])
 			tv.lines[i] = newRunes
-			
+
 			newColors := make([]tcell.Style, width)
 			copy(newColors, tv.colors[i])
 			// Initialize extended area with terminal default colors, not current style
@@ -138,12 +138,10 @@ func (tv *TerminalView) resizeBuffer(width, height int) {
 func (tv *TerminalView) Write(p []byte) (n int, err error) {
 	tv.mutex.Lock()
 	defer tv.mutex.Unlock()
-	
-	
+
 	// Process the data through ANSI sequence handling instead of just appending
 	tv.processDataWithANSI(p)
-	
-	
+
 	// Auto-scroll to bottom when new content is added (but only if not positioned elsewhere)
 	// This should happen during content addition, not during drawing
 	_, _, _, height := tv.GetInnerRect()
@@ -151,18 +149,17 @@ func (tv *TerminalView) Write(p []byte) (n int, err error) {
 		// Original logic: cursor near bottom
 		// Additional fix: also autoscroll if we're already viewing near the bottom,
 		// regardless of cursor position (fixes issue with ANSI cursor positioning)
-		cursorNearBottom := tv.scrollOffsetRow >= len(tv.lines) - height - 3
+		cursorNearBottom := tv.scrollOffsetRow >= len(tv.lines)-height-3
 		isViewingNearBottom := tv.cursorY >= len(tv.lines)-height
 		maxScrollOffset := len(tv.lines) - height
-		
+
 		// New fix: After clear screen, if we're at scroll position 0 and there's content
 		// beyond the visible area, auto-scroll to show the latest content
 		isAfterClearScreen := tv.scrollOffsetRow == 0 && len(tv.lines) > height
-		
+
 		// Additional fix: If cursor is writing outside the current view area, follow it
-		cursorOutsideView := tv.cursorY < tv.scrollOffsetRow || tv.cursorY >= tv.scrollOffsetRow + height
-		
-		
+		cursorOutsideView := tv.cursorY < tv.scrollOffsetRow || tv.cursorY >= tv.scrollOffsetRow+height
+
 		if cursorOutsideView {
 			// If cursor is outside current view, follow it immediately
 			// Center the cursor in the view for optimal visibility
@@ -180,12 +177,12 @@ func (tv *TerminalView) Write(p []byte) (n int, err error) {
 			}
 		}
 	}
-	
+
 	if tv.changedFunc != nil {
 		// Make callback non-blocking to avoid deadlocks
 		go tv.changedFunc()
 	}
-	
+
 	return len(p), nil
 }
 
@@ -198,11 +195,11 @@ func (tv *TerminalView) processDataWithANSI(data []byte) {
 		if toAdd > spaceLeft {
 			toAdd = spaceLeft
 		}
-		
+
 		copy(tv.buffer[tv.bufferLen:], data[:toAdd])
 		tv.bufferLen += toAdd
 		data = data[toAdd:]
-		
+
 		// Process buffer contents
 		consumed := 0
 		for consumed < tv.bufferLen {
@@ -213,13 +210,13 @@ func (tv *TerminalView) processDataWithANSI(data []byte) {
 				break
 			}
 		}
-		
+
 		// Remove consumed bytes
 		if consumed > 0 {
 			copy(tv.buffer[:], tv.buffer[consumed:tv.bufferLen])
 			tv.bufferLen -= consumed
 		}
-		
+
 		// Safety: force consume if buffer is full
 		if tv.bufferLen == len(tv.buffer) && consumed == 0 {
 			char, size := utf8.DecodeRune(tv.buffer[:])
@@ -235,12 +232,12 @@ func (tv *TerminalView) tryConsumeSequence(data []byte) int {
 	if len(data) == 0 {
 		return 0
 	}
-	
+
 	if data[0] == '\x1b' {
 		if len(data) < 2 {
 			return 0 // Need more data
 		}
-		
+
 		if data[1] == '[' {
 			// ANSI escape sequence
 			i := 2
@@ -278,11 +275,10 @@ func (tv *TerminalView) processANSISequence(sequence []byte) {
 	if len(sequence) < 3 || sequence[0] != '\x1b' || sequence[1] != '[' {
 		return
 	}
-	
+
 	params := string(sequence[2 : len(sequence)-1])
 	command := sequence[len(sequence)-1]
-	
-	
+
 	switch command {
 	case 'm': // Color/style
 		tv.handleColorSequence(params)
@@ -290,7 +286,7 @@ func (tv *TerminalView) processANSISequence(sequence []byte) {
 		tv.handleCursorPosition(params)
 	case 'A': // Cursor up
 		tv.handleCursorUp(params)
-	case 'B': // Cursor down  
+	case 'B': // Cursor down
 		tv.handleCursorDown(params)
 	case 'C': // Cursor right
 		tv.handleCursorRight(params)
@@ -335,7 +331,7 @@ func (tv *TerminalView) putChar(char rune) {
 		tv.newline()
 		tv.cursorX = 0
 	}
-	
+
 	// Expand buffer if needed
 	for tv.cursorY >= len(tv.lines) {
 		tv.lines = append(tv.lines, make([]rune, tv.width))
@@ -347,13 +343,13 @@ func (tv *TerminalView) putChar(char rune) {
 			tv.colors[len(tv.colors)-1][i] = defaultStyle
 		}
 	}
-	
-	if tv.cursorY >= 0 && tv.cursorY < len(tv.lines) && 
-	   tv.cursorX >= 0 && tv.cursorX < tv.width {
+
+	if tv.cursorY >= 0 && tv.cursorY < len(tv.lines) &&
+		tv.cursorX >= 0 && tv.cursorX < tv.width {
 		tv.lines[tv.cursorY][tv.cursorX] = char
 		tv.colors[tv.cursorY][tv.cursorX] = tv.currentStyle
 	}
-	
+
 	tv.cursorX++
 }
 
@@ -386,58 +382,55 @@ func (tv *TerminalView) GetLineCount() int {
 func (tv *TerminalView) Draw(screen tcell.Screen) {
 	tv.mutex.RLock()
 	defer tv.mutex.RUnlock()
-	
+
 	tv.Box.DrawForSubclass(screen, tv)
 	x, y, width, height := tv.GetInnerRect()
-	
-	
+
 	// If we have no content, just show empty terminal
 	if len(tv.lines) == 0 {
 		return
 	}
-	
+
 	// Debug: show what the first few lines actually contain
-	
+
 	// Note: Auto-scroll logic moved to Write() method to avoid interfering with cursor positioning
-	
+
 	// Calculate visible range
 	startRow := tv.scrollOffsetRow
 	endRow := startRow + height
 	if endRow > len(tv.lines) {
 		endRow = len(tv.lines)
 	}
-	
-	
+
 	// Draw visible lines
 	for row := startRow; row < endRow && row-startRow < height; row++ {
 		if row < 0 || row >= len(tv.lines) {
 			continue
 		}
-		
+
 		screenY := y + (row - startRow)
 		line := tv.lines[row]
 		colors := tv.colors[row]
-		
-		
+
 		startCol := tv.scrollOffsetCol
 		endCol := startCol + width
 		if endCol > len(line) {
 			endCol = len(line)
 		}
-		
+
 		for col := startCol; col < endCol && col-startCol < width; col++ {
 			if col < 0 || col >= len(line) {
 				continue
 			}
-			
+
 			screenX := x + (col - startCol)
 			char := line[col]
 			style := colors[col]
-			
+
 			if char == 0 {
 				char = ' '
 			}
-			
+
 			screen.SetContent(screenX, screenY, char, nil, style)
 		}
 	}
@@ -448,14 +441,14 @@ func (tv *TerminalView) handleColorSequence(params string) {
 	if tv.ansiConverter == nil {
 		return
 	}
-	
+
 	// Convert ANSI params directly to tcell.Style (much more efficient!)
 	tv.currentStyle = tv.ansiConverter.ConvertToTCellStyle(params)
 }
 
 func (tv *TerminalView) handleCursorPosition(params string) {
 	row, col := 1, 1
-	
+
 	if params != "" {
 		parts := strings.Split(params, ";")
 		if len(parts) >= 1 {
@@ -469,11 +462,11 @@ func (tv *TerminalView) handleCursorPosition(params string) {
 			}
 		}
 	}
-	
+
 	// Cursor position should be relative to the current visible area, not absolute buffer position
 	tv.cursorY = tv.scrollOffsetRow + (row - 1)
 	tv.cursorX = col - 1
-	
+
 	// Bounds checking
 	if tv.cursorY < 0 {
 		tv.cursorY = 0
@@ -481,8 +474,7 @@ func (tv *TerminalView) handleCursorPosition(params string) {
 	if tv.cursorX < 0 {
 		tv.cursorX = 0
 	}
-	
-	
+
 	// If cursor moved significantly backward after a clear screen operation,
 	// adjust scroll position to show the cursor area
 	_, _, _, height := tv.GetInnerRect()
@@ -546,8 +538,7 @@ func (tv *TerminalView) handleEraseDisplay(params string) {
 	if params != "" {
 		n = parseInt(params)
 	}
-	
-	
+
 	switch n {
 	case 0: // Clear from cursor to end of screen
 		tv.clearFromCursor()
@@ -563,7 +554,7 @@ func (tv *TerminalView) handleEraseLine(params string) {
 	if params != "" {
 		n = parseInt(params)
 	}
-	
+
 	switch n {
 	case 0: // Clear from cursor to end of line
 		tv.clearLineFromCursor()
@@ -592,17 +583,17 @@ func (tv *TerminalView) clearFromCursor() {
 	if tv.cursorY < 0 || tv.cursorY >= len(tv.lines) {
 		return
 	}
-	
+
 	// Use terminal default colors for clearing
 	colors := theme.Current().TerminalColors()
 	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	// Clear from cursor to end of current line
 	for x := tv.cursorX; x < tv.width && x < len(tv.lines[tv.cursorY]); x++ {
 		tv.lines[tv.cursorY][x] = ' '
 		tv.colors[tv.cursorY][x] = clearStyle
 	}
-	
+
 	// Clear all lines below
 	for y := tv.cursorY + 1; y < len(tv.lines); y++ {
 		for x := 0; x < len(tv.lines[y]); x++ {
@@ -616,7 +607,7 @@ func (tv *TerminalView) clearToCursor() {
 	// Use terminal default colors for clearing
 	colors := theme.Current().TerminalColors()
 	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	// Clear all lines above
 	for y := 0; y < tv.cursorY && y < len(tv.lines); y++ {
 		for x := 0; x < len(tv.lines[y]); x++ {
@@ -624,7 +615,7 @@ func (tv *TerminalView) clearToCursor() {
 			tv.colors[y][x] = clearStyle
 		}
 	}
-	
+
 	// Clear from beginning of current line to cursor
 	if tv.cursorY >= 0 && tv.cursorY < len(tv.lines) {
 		for x := 0; x <= tv.cursorX && x < len(tv.lines[tv.cursorY]); x++ {
@@ -636,7 +627,7 @@ func (tv *TerminalView) clearToCursor() {
 
 func (tv *TerminalView) clearScreen() {
 	_, _, _, height := tv.GetInnerRect()
-	
+
 	// Clear screen means: make old content scroll off-screen
 	// Add enough empty lines to push all existing content above the visible area
 	if len(tv.lines) > 0 {
@@ -652,14 +643,14 @@ func (tv *TerminalView) clearScreen() {
 			}
 			tv.colors = append(tv.colors, newColorLine)
 		}
-		
+
 		// Set scroll position so the new empty lines are at the top of the view
 		tv.scrollOffsetRow = len(tv.lines) - height
 	} else {
 		tv.scrollOffsetRow = 0
 	}
 	tv.scrollOffsetCol = 0
-	
+
 	// Cursor position will be set by subsequent cursor home command relative to current scroll position
 }
 
@@ -667,11 +658,11 @@ func (tv *TerminalView) clearLineFromCursor() {
 	if tv.cursorY < 0 || tv.cursorY >= len(tv.lines) {
 		return
 	}
-	
+
 	// Use terminal default colors for clearing
 	colors := theme.Current().TerminalColors()
 	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	for x := tv.cursorX; x < len(tv.lines[tv.cursorY]); x++ {
 		tv.lines[tv.cursorY][x] = ' '
 		tv.colors[tv.cursorY][x] = clearStyle
@@ -682,11 +673,11 @@ func (tv *TerminalView) clearLineToCursor() {
 	if tv.cursorY < 0 || tv.cursorY >= len(tv.lines) {
 		return
 	}
-	
+
 	// Use terminal default colors for clearing
 	colors := theme.Current().TerminalColors()
 	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	for x := 0; x <= tv.cursorX && x < len(tv.lines[tv.cursorY]); x++ {
 		tv.lines[tv.cursorY][x] = ' '
 		tv.colors[tv.cursorY][x] = clearStyle
@@ -697,11 +688,11 @@ func (tv *TerminalView) clearLine() {
 	if tv.cursorY < 0 || tv.cursorY >= len(tv.lines) {
 		return
 	}
-	
+
 	// Use terminal default colors for clearing
 	colors := theme.Current().TerminalColors()
 	clearStyle := tcell.StyleDefault.Foreground(colors.Foreground).Background(colors.Background)
-	
+
 	for x := 0; x < len(tv.lines[tv.cursorY]); x++ {
 		tv.lines[tv.cursorY][x] = ' '
 		tv.colors[tv.cursorY][x] = clearStyle
@@ -722,7 +713,7 @@ func (tv *TerminalView) UpdateContent() {
 func (tv *TerminalView) ScrollTo(row, column int) *TerminalView {
 	tv.mutex.Lock()
 	defer tv.mutex.Unlock()
-	
+
 	tv.scrollOffsetRow = int(math.Max(0, float64(row)))
 	tv.scrollOffsetCol = int(math.Max(0, float64(column)))
 	return tv
@@ -757,14 +748,14 @@ func (tv *TerminalView) SetBorder(show bool) *TerminalView {
 func (tv *TerminalView) Clear() *TerminalView {
 	tv.mutex.Lock()
 	defer tv.mutex.Unlock()
-	
+
 	tv.lines = tv.lines[:0]
 	tv.colors = tv.colors[:0]
 	tv.cursorX = 0
 	tv.cursorY = 0
 	tv.scrollOffsetRow = 0
 	tv.scrollOffsetCol = 0
-	
+
 	return tv
 }
 
@@ -773,10 +764,10 @@ func (tv *TerminalView) InputHandler() func(event *tcell.EventKey, setFocus func
 	return tv.WrapInputHandler(func(event *tcell.EventKey, setFocus func(p tview.Primitive)) {
 		tv.mutex.Lock()
 		defer tv.mutex.Unlock()
-		
+
 		_, _, _, height := tv.GetInnerRect()
 		totalLines := len(tv.lines)
-		
+
 		switch event.Key() {
 		case tcell.KeyPgUp:
 			// Page up - scroll up by page height
@@ -785,18 +776,18 @@ func (tv *TerminalView) InputHandler() func(event *tcell.EventKey, setFocus func
 				newRow = 0
 			}
 			tv.scrollOffsetRow = newRow
-			
+
 		case tcell.KeyPgDn:
 			// Page down - scroll down by page height
 			newRow := tv.scrollOffsetRow + height
-			if newRow + height > totalLines {
+			if newRow+height > totalLines {
 				newRow = totalLines - height
 				if newRow < 0 {
 					newRow = 0
 				}
 			}
 			tv.scrollOffsetRow = newRow
-			
+
 		default:
 			// Pass other keys to parent handler
 			if tv.Box.InputHandler() != nil {

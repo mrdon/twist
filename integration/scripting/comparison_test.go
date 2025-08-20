@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -9,7 +7,7 @@ import (
 // TestIsEqualCommand_RealIntegration tests ISEQUAL command with real VM and database
 func TestIsEqualCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test string equality
 		setVar $str1 "hello"
@@ -22,21 +20,21 @@ func TestIsEqualCommand_RealIntegration(t *testing.T) {
 		isequal $str1 $str3 $result2
 		echo "String inequality (hello == world): " $result2
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 2 {
 		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
 	}
-	
+
 	// Should show 1 for equality
 	if len(result.Output) > 0 && result.Output[0] != "String equality (hello == hello): 1" {
 		t.Errorf("String equality test: got %q, want %q", result.Output[0], "String equality (hello == hello): 1")
 	}
-	
+
 	// Should show 0 for inequality
 	if len(result.Output) > 1 && result.Output[1] != "String inequality (hello == world): 0" {
 		t.Errorf("String inequality test: got %q, want %q", result.Output[1], "String inequality (hello == world): 0")
@@ -46,7 +44,7 @@ func TestIsEqualCommand_RealIntegration(t *testing.T) {
 // TestIsEqualCommand_Numbers tests ISEQUAL with numeric values
 func TestIsEqualCommand_Numbers_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test number equality
 		setVar $num1 42
@@ -59,20 +57,20 @@ func TestIsEqualCommand_Numbers_RealIntegration(t *testing.T) {
 		isequal $num1 $num3 $result2
 		echo "Number inequality (42 == 43): " $result2
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 2 {
 		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Number equality (42 == 42): 1" {
 		t.Errorf("Number equality test: got %q, want %q", result.Output[0], "Number equality (42 == 42): 1")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "Number inequality (42 == 43): 0" {
 		t.Errorf("Number inequality test: got %q, want %q", result.Output[1], "Number inequality (42 == 43): 0")
 	}
@@ -81,7 +79,7 @@ func TestIsEqualCommand_Numbers_RealIntegration(t *testing.T) {
 // TestIsEqualCommand_StringNumberConversion tests ISEQUAL with string-number conversion
 func TestIsEqualCommand_StringNumberConversion_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test string-number conversion
 		setVar $str_num "42"
@@ -90,16 +88,16 @@ func TestIsEqualCommand_StringNumberConversion_RealIntegration(t *testing.T) {
 		isequal $str_num $actual_num $result
 		echo "String-number equality (\"42\" == 42): " $result
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 1 {
 		t.Errorf("Expected 1 output line, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "String-number equality (\"42\" == 42): 1" {
 		t.Errorf("String-number conversion test: got %q, want %q", result.Output[0], "String-number equality (\"42\" == 42): 1")
 	}
@@ -108,7 +106,7 @@ func TestIsEqualCommand_StringNumberConversion_RealIntegration(t *testing.T) {
 // TestIsGreaterCommand_RealIntegration tests ISGREATER command
 func TestIsGreaterCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test greater than comparisons
 		setVar $high 100
@@ -124,24 +122,24 @@ func TestIsGreaterCommand_RealIntegration(t *testing.T) {
 		isgreater $high $equal $result3
 		echo "Equal values (100 > 100): " $result3
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Greater than (100 > 50): 1" {
 		t.Errorf("Greater than test: got %q, want %q", result.Output[0], "Greater than (100 > 50): 1")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "Not greater than (50 > 100): 0" {
 		t.Errorf("Not greater than test: got %q, want %q", result.Output[1], "Not greater than (50 > 100): 0")
 	}
-	
+
 	if len(result.Output) > 2 && result.Output[2] != "Equal values (100 > 100): 0" {
 		t.Errorf("Equal values test: got %q, want %q", result.Output[2], "Equal values (100 > 100): 0")
 	}
@@ -150,7 +148,7 @@ func TestIsGreaterCommand_RealIntegration(t *testing.T) {
 // TestIsLessCommand_RealIntegration tests ISLESS command
 func TestIsLessCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test less than comparisons
 		setVar $high 100
@@ -166,24 +164,24 @@ func TestIsLessCommand_RealIntegration(t *testing.T) {
 		isless $low $equal $result3
 		echo "Equal values (50 < 50): " $result3
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Less than (50 < 100): 1" {
 		t.Errorf("Less than test: got %q, want %q", result.Output[0], "Less than (50 < 100): 1")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "Not less than (100 < 50): 0" {
 		t.Errorf("Not less than test: got %q, want %q", result.Output[1], "Not less than (100 < 50): 0")
 	}
-	
+
 	if len(result.Output) > 2 && result.Output[2] != "Equal values (50 < 50): 0" {
 		t.Errorf("Equal values test: got %q, want %q", result.Output[2], "Equal values (50 < 50): 0")
 	}
@@ -193,7 +191,7 @@ func TestIsLessCommand_RealIntegration(t *testing.T) {
 func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	// First script execution - save variables
 	tester1 := NewIntegrationScriptTester(t)
-	
+
 	script1 := `
 		setVar $value1 75
 		setVar $value2 50
@@ -201,31 +199,31 @@ func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.
 		saveVar $value2
 		echo "Saved values: " $value1 " and " $value2
 	`
-	
+
 	result1 := tester1.ExecuteScript(script1)
 	if result1.Error != nil {
 		t.Errorf("First script execution failed: %v", result1.Error)
 	}
-	
+
 	// Second script execution - load and compare variables
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
-	
+
 	script2 := `
 		loadVar $value1
 		loadVar $value2
 		isgreater $value1 $value2 $comparison_result
 		echo "Loaded comparison (75 > 50): " $comparison_result
 	`
-	
+
 	result2 := tester2.ExecuteScript(script2)
 	if result2.Error != nil {
 		t.Errorf("Second script execution failed: %v", result2.Error)
 	}
-	
+
 	if len(result2.Output) != 1 {
 		t.Errorf("Expected 1 output line from second script, got %d", len(result2.Output))
 	}
-	
+
 	expected := "Loaded comparison (75 > 50): 1"
 	if len(result2.Output) > 0 && result2.Output[0] != expected {
 		t.Errorf("Cross-instance comparison: got %q, want %q", result2.Output[0], expected)
@@ -235,7 +233,7 @@ func TestComparisonCommands_CrossInstancePersistence_RealIntegration(t *testing.
 // TestComparisonCommands_FloatingPoint tests comparison with floating point numbers
 func TestComparisonCommands_FloatingPoint_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test floating point comparisons
 		setVar $float1 3.14
@@ -251,24 +249,24 @@ func TestComparisonCommands_FloatingPoint_RealIntegration(t *testing.T) {
 		isless $float1 $float2 $result3
 		echo "Float less (3.14 < 3.15): " $result3
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Float greater (3.15 > 3.14): 1" {
 		t.Errorf("Float greater test: got %q, want %q", result.Output[0], "Float greater (3.15 > 3.14): 1")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "Float equal (3.14 == 3.14): 1" {
 		t.Errorf("Float equal test: got %q, want %q", result.Output[1], "Float equal (3.14 == 3.14): 1")
 	}
-	
+
 	if len(result.Output) > 2 && result.Output[2] != "Float less (3.14 < 3.15): 1" {
 		t.Errorf("Float less test: got %q, want %q", result.Output[2], "Float less (3.14 < 3.15): 1")
 	}
@@ -277,7 +275,7 @@ func TestComparisonCommands_FloatingPoint_RealIntegration(t *testing.T) {
 // TestComparisonCommands_EdgeCases tests comparison command edge cases
 func TestComparisonCommands_EdgeCases_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test edge cases
 		setVar $empty ""
@@ -293,16 +291,16 @@ func TestComparisonCommands_EdgeCases_RealIntegration(t *testing.T) {
 		isgreater $zero $empty $result3
 		echo "Zero greater than empty: " $result3
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	// These tests verify the comparison logic handles edge cases correctly
 	// Exact expectations may vary based on implementation
 	if len(result.Output) < 3 {
@@ -313,7 +311,7 @@ func TestComparisonCommands_EdgeCases_RealIntegration(t *testing.T) {
 // TestAllComparisonCommands_Comprehensive tests all comparison commands together
 func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Comprehensive comparison test
 		setVar $a 10
@@ -335,16 +333,16 @@ func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 		echo "Greater equal (10 >= 10): " $ge_result
 		echo "Less equal (10 <= 20): " $le_result
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 6 {
 		t.Errorf("Expected 6 output lines, got %d", len(result.Output))
 	}
-	
+
 	expectedOutputs := []string{
 		"Equal (10 == 10): 1",
 		"Not equal (10 != 20): 1",
@@ -353,7 +351,7 @@ func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 		"Greater equal (10 >= 10): 1",
 		"Less equal (10 <= 20): 1",
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Comparison %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -364,7 +362,7 @@ func TestAllComparisonCommands_Comprehensive_RealIntegration(t *testing.T) {
 // TestInfixOperators_NotEqual tests the <> operator in expressions
 func TestInfixOperators_NotEqual_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test <> operator in expressions
 		setVar $a 10
@@ -394,22 +392,22 @@ func TestInfixOperators_NotEqual_RealIntegration(t *testing.T) {
 			echo "hello <> world: false"
 		end
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"10 <> 20: true",
 		"10 <> 10: false",
 		"hello <> world: true",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -420,7 +418,7 @@ func TestInfixOperators_NotEqual_RealIntegration(t *testing.T) {
 // TestInfixOperators_LogicalAND tests the AND operator in expressions
 func TestInfixOperators_LogicalAND_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test AND operator in expressions
 		setVar $true_val 1
@@ -456,23 +454,23 @@ func TestInfixOperators_LogicalAND_RealIntegration(t *testing.T) {
 			echo "Complex AND: false"
 		end
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"1 AND 1: true",
 		"1 AND 0: false",
 		"0 AND 0: false",
 		"Complex AND: true",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -483,7 +481,7 @@ func TestInfixOperators_LogicalAND_RealIntegration(t *testing.T) {
 // TestInfixOperators_LogicalOR tests the OR operator in expressions
 func TestInfixOperators_LogicalOR_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test OR operator in expressions
 		setVar $true_val 1
@@ -519,23 +517,23 @@ func TestInfixOperators_LogicalOR_RealIntegration(t *testing.T) {
 			echo "Complex OR: false"
 		end
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"1 OR 1: true",
 		"1 OR 0: true",
 		"0 OR 0: false",
 		"Complex OR: true",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -546,7 +544,7 @@ func TestInfixOperators_LogicalOR_RealIntegration(t *testing.T) {
 // TestInfixOperators_LogicalXOR tests the XOR operator in expressions
 func TestInfixOperators_LogicalXOR_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test XOR operator in expressions
 		setVar $true_val 1
@@ -580,23 +578,23 @@ func TestInfixOperators_LogicalXOR_RealIntegration(t *testing.T) {
 			echo "0 XOR 0: false"
 		end
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"1 XOR 1: false",
 		"1 XOR 0: true",
 		"0 XOR 1: true",
 		"0 XOR 0: false",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -607,7 +605,7 @@ func TestInfixOperators_LogicalXOR_RealIntegration(t *testing.T) {
 // TestInfixOperators_StringConcatenation tests the & operator for string concatenation
 func TestInfixOperators_StringConcatenation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test & operator for string concatenation
 		setVar $str1 "Hello"
@@ -631,23 +629,23 @@ func TestInfixOperators_StringConcatenation_RealIntegration(t *testing.T) {
 		setVar $result4 ("Value: " & $num1 & " (PI: " & $num2 & ")")
 		echo "Complex: " $result4
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"String concat: Hello World",
 		"String + Number: Hello42",
 		"Number + Number: 423.14",
 		"Complex: Value: 42 (PI: 3.14)",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)
@@ -658,7 +656,7 @@ func TestInfixOperators_StringConcatenation_RealIntegration(t *testing.T) {
 // TestInfixOperators_ComplexExpressions tests complex expressions with multiple operators
 func TestInfixOperators_ComplexExpressions_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test complex expressions with multiple operators
 		setVar $a 10
@@ -691,23 +689,23 @@ func TestInfixOperators_ComplexExpressions_RealIntegration(t *testing.T) {
 		setVar $message ("Result: " & (($a + $b) & " total"))
 		echo $message
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	expectedOutputs := []string{
 		"Complex condition 1: true",
-		"Complex condition 2: true", 
+		"Complex condition 2: true",
 		"Complex condition 3: true",
 		"Result: 30 total",
 	}
-	
+
 	if len(result.Output) != len(expectedOutputs) {
 		t.Errorf("Expected %d output lines, got %d", len(expectedOutputs), len(result.Output))
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output %d: got %q, want %q", i+1, result.Output[i], expected)

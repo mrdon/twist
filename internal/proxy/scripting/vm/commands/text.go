@@ -6,7 +6,6 @@ import (
 	"unicode/utf8"
 )
 
-
 // RegisterTextCommands registers all text manipulation commands
 func RegisterTextCommands(vm CommandRegistry) {
 	vm.RegisterCommand("ECHO", 1, -1, []types.ParameterType{types.ParamValue}, cmdEcho)
@@ -33,7 +32,7 @@ func RegisterTextCommands(vm CommandRegistry) {
 	vm.RegisterCommand("LOWERCASE", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdLowercase)
 	vm.RegisterCommand("CENTER", 4, 4, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamValue, types.ParamVar}, cmdCenter)
 	vm.RegisterCommand("REPEAT", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdRepeat)
-	
+
 	// TWX text processing commands
 	vm.RegisterCommand("CUTTEXT", 4, 4, []types.ParameterType{types.ParamValue, types.ParamVar, types.ParamValue, types.ParamValue}, cmdCutText)
 	vm.RegisterCommand("GETWORD", 3, 4, []types.ParameterType{types.ParamValue, types.ParamVar, types.ParamValue, types.ParamValue}, cmdGetWord)
@@ -93,7 +92,7 @@ func cmdMid(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	start := int(GetParamNumber(vm, params[1])) - 1
 	length := int(GetParamNumber(vm, params[2]))
-	
+
 	if start < 0 {
 		start = 0
 	}
@@ -101,14 +100,14 @@ func cmdMid(vm types.VMInterface, params []*types.CommandParam) error {
 		vm.SetVariable(params[3].VarName, &types.Value{Type: types.StringType, String: ""})
 		return nil
 	}
-	
+
 	end := start + length
 	if end > len(text) {
 		end = len(text)
 	}
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: text[start:end],
 	}
 	vm.SetVariable(params[3].VarName, result)
@@ -118,14 +117,14 @@ func cmdMid(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdLeft(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	length := int(GetParamNumber(vm, params[1]))
-	
+
 	if length < 0 {
 		length = 0
 	}
 	if length > len(text) {
 		length = len(text)
 	}
-	
+
 	result := &types.Value{
 		Type:   types.StringType,
 		String: text[:length],
@@ -137,14 +136,14 @@ func cmdLeft(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdRight(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	length := int(GetParamNumber(vm, params[1]))
-	
+
 	if length < 0 {
 		length = 0
 	}
 	if length > len(text) {
 		length = len(text)
 	}
-	
+
 	start := len(text) - length
 	result := &types.Value{
 		Type:   types.StringType,
@@ -157,16 +156,16 @@ func cmdRight(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdInStr(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	search := GetParamString(vm, params[1])
-	
+
 	pos := strings.Index(text, search)
 	if pos == -1 {
 		pos = 0
 	} else {
 		pos += 1 // TWX uses 1-based indexing
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(pos),
 	}
 	vm.SetVariable(params[2].VarName, result)
@@ -196,7 +195,7 @@ func cmdLower(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdTrim(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: strings.TrimSpace(text),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -208,7 +207,7 @@ func cmdStripANSI(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	// This is a simplified version - full implementation would use regex
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: text, // Placeholder - real implementation would strip ANSI codes
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -220,9 +219,9 @@ func cmdChr(vm types.VMInterface, params []*types.CommandParam) error {
 	if code < 0 || code > 255 {
 		return vm.Error("Character code out of range")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: string(rune(code)),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -234,9 +233,9 @@ func cmdAsc(vm types.VMInterface, params []*types.CommandParam) error {
 	if len(text) == 0 {
 		return vm.Error("Empty string")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(text[0]),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -247,9 +246,9 @@ func cmdReplace(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	oldStr := GetParamString(vm, params[1])
 	newStr := GetParamString(vm, params[2])
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: strings.ReplaceAll(text, oldStr, newStr),
 	}
 	vm.SetVariable(params[3].VarName, result)
@@ -259,16 +258,16 @@ func cmdReplace(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdFind(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	search := GetParamString(vm, params[1])
-	
+
 	pos := strings.Index(text, search)
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(pos + 1), // TWX uses 1-based indexing, 0 for not found
 	}
 	if pos == -1 {
 		result.Number = 0
 	}
-	
+
 	vm.SetVariable(params[2].VarName, result)
 	return nil
 }
@@ -277,21 +276,21 @@ func cmdPadLeft(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	width := int(GetParamNumber(vm, params[1]))
 	padChar := GetParamString(vm, params[2])
-	
+
 	if len(padChar) == 0 {
 		padChar = " "
 	}
-	
+
 	if len(text) >= width {
 		vm.SetVariable(params[3].VarName, &types.Value{Type: types.StringType, String: text})
 		return nil
 	}
-	
+
 	padLength := width - len(text)
 	padding := strings.Repeat(string(padChar[0]), padLength)
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: padding + text,
 	}
 	vm.SetVariable(params[3].VarName, result)
@@ -302,21 +301,21 @@ func cmdPadRight(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	width := int(GetParamNumber(vm, params[1]))
 	padChar := GetParamString(vm, params[2])
-	
+
 	if len(padChar) == 0 {
 		padChar = " "
 	}
-	
+
 	if len(text) >= width {
 		vm.SetVariable(params[3].VarName, &types.Value{Type: types.StringType, String: text})
 		return nil
 	}
-	
+
 	padLength := width - len(text)
 	padding := strings.Repeat(string(padChar[0]), padLength)
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: text + padding,
 	}
 	vm.SetVariable(params[3].VarName, result)
@@ -339,25 +338,25 @@ func cmdCenter(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	width := int(GetParamNumber(vm, params[1]))
 	padChar := GetParamString(vm, params[2])
-	
+
 	if len(padChar) == 0 {
 		padChar = " "
 	}
-	
+
 	if len(text) >= width {
 		vm.SetVariable(params[3].VarName, &types.Value{Type: types.StringType, String: text})
 		return nil
 	}
-	
+
 	totalPad := width - len(text)
 	leftPad := totalPad / 2
 	rightPad := totalPad - leftPad
-	
+
 	leftPadding := strings.Repeat(string(padChar[0]), leftPad)
 	rightPadding := strings.Repeat(string(padChar[0]), rightPad)
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: leftPadding + text + rightPadding,
 	}
 	vm.SetVariable(params[3].VarName, result)
@@ -367,13 +366,13 @@ func cmdCenter(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdRepeat(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	count := int(GetParamNumber(vm, params[1]))
-	
+
 	if count < 0 {
 		count = 0
 	}
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: strings.Repeat(text, count),
 	}
 	vm.SetVariable(params[2].VarName, result)
@@ -385,25 +384,25 @@ func cmdRepeat(vm types.VMInterface, params []*types.CommandParam) error {
 // Example: cutText CURRENTLINE $location 1 7
 func cmdCutText(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
-	start := int(GetParamNumber(vm, params[2]))  // Pascal uses 1-based indexing directly
+	start := int(GetParamNumber(vm, params[2])) // Pascal uses 1-based indexing directly
 	length := int(GetParamNumber(vm, params[3]))
-	
+
 	// Match Pascal behavior: error if start position beyond end of line
 	if start > len(text) {
 		return vm.Error("CutText: Start position beyond End Of Line")
 	}
-	
+
 	// Convert to 0-based for Go string operations, but handle edge cases like Pascal
 	if start < 1 {
 		start = 1
 	}
-	
-	startIdx := start - 1  // Convert to 0-based
+
+	startIdx := start - 1 // Convert to 0-based
 	endIdx := startIdx + length
 	if endIdx > len(text) {
 		endIdx = len(text)
 	}
-	
+
 	result := &types.Value{
 		Type:   types.StringType,
 		String: text[startIdx:endIdx],
@@ -420,21 +419,21 @@ func cmdGetWord(vm types.VMInterface, params []*types.CommandParam) error {
 	// params[0] = source text, params[1] = result variable, params[2] = word number, params[3] = optional default
 	text := GetParamString(vm, params[0])
 	wordNum := int(GetParamNumber(vm, params[2]))
-	
+
 	words := SplitWords(text)
-	
+
 	var result string
 	if wordNum >= 1 && wordNum <= len(words) {
 		result = words[wordNum-1] // TWX uses 1-based indexing
 	} else {
 		// Handle empty result like Pascal implementation
 		if len(params) > 3 {
-			result = GetParamString(vm, params[3])  // Use provided default
+			result = GetParamString(vm, params[3]) // Use provided default
 		} else {
-			result = "0"  // Pascal default when no default provided
+			result = "0" // Pascal default when no default provided
 		}
 	}
-	
+
 	vm.SetVariable(params[1].VarName, &types.Value{
 		Type:   types.StringType,
 		String: result,
@@ -451,7 +450,7 @@ func cmdStripText(vm types.VMInterface, params []*types.CommandParam) error {
 	currentValue := vm.GetVariable(params[0].VarName)
 	text := currentValue.ToString()
 	toRemove := GetParamString(vm, params[1])
-	
+
 	// Remove all occurrences of the specified text
 	result := &types.Value{
 		Type:   types.StringType,
@@ -460,4 +459,3 @@ func cmdStripText(vm types.VMInterface, params []*types.CommandParam) error {
 	vm.SetVariable(params[0].VarName, result)
 	return nil
 }
-

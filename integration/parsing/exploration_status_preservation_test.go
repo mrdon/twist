@@ -1,12 +1,11 @@
 package parsing
 
 import (
+	_ "modernc.org/sqlite"
 	"testing"
 	"twist/integration/scripting"
 	"twist/internal/api"
-	_ "modernc.org/sqlite"
 )
-
 
 // TestExplorationStatusPreservation tests that visited sectors maintain EtHolo status
 // even when density scan information is processed afterward
@@ -24,12 +23,12 @@ send "Sector  2921  ==>           1500  Warps : 2    NavHaz :     0%    Anom : N
 expect "Warps to Sector"
 expect "Command"
 expect "Relative Density Scan"
-expect "Sector  2921  ==>"` 
+expect "Sector  2921  ==>"`
 
 	// Use ConnectOptions with database path to enable game context
 	dbPath := t.TempDir() + "/test.db"
 	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
+
 	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
 
 	// Verify game context was created
@@ -81,7 +80,7 @@ expect "Sector  : 3212"
 expect "Warps to Sector"
 expect "Command"
 expect "Relative Density Scan"
-expect "Sector  3212  ==>"` 
+expect "Sector  3212  ==>"`
 
 	result := scripting.Execute(t, serverScript, clientScript, nil)
 
@@ -106,12 +105,12 @@ send "Sector  7656  ==>            800  Warps : 3    NavHaz :     0%    Anom : Y
 
 	// Client script expects density scan
 	clientScript := `expect "Relative Density Scan"
-expect "Sector  7656  ==>"` 
+expect "Sector  7656  ==>"`
 
 	// Use ConnectOptions with database path to enable game context
 	dbPath := t.TempDir() + "/test.db"
 	connectOpts := &api.ConnectOptions{DatabasePath: dbPath}
-	
+
 	result := scripting.Execute(t, serverScript, clientScript, connectOpts)
 
 	// Verify game context was created

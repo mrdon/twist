@@ -13,16 +13,15 @@ func RegisterArrayCommands(vm CommandRegistry) {
 	// TWX uses array indexing syntax: $array[index] instead of separate commands
 }
 
-
 // cmdSetArray implements the TWX-compatible setArray command
 // Syntax: setArray $var dimension1 [dimension2] [dimension3]...  (e.g., setArray $sectors 10, setArray $data 3 3)
 func cmdSetArray(vm types.VMInterface, params []*types.CommandParam) error {
 	if len(params) < 2 {
 		return vm.Error("SETARRAY requires at least 2 parameters: variable and dimensions")
 	}
-	
+
 	varName := params[0].VarName
-	
+
 	// Extract dimensions from remaining parameters (TWX syntax)
 	dimensions := make([]int, len(params)-1)
 	for i := 1; i < len(params); i++ {
@@ -35,12 +34,11 @@ func cmdSetArray(vm types.VMInterface, params []*types.CommandParam) error {
 		}
 		dimensions[i-1] = dimValue
 	}
-	
+
 	// Create VarParam and set array dimensions (TWX-compatible)
 	varParam := types.NewVarParam(varName, types.VarParamVariable)
 	varParam.SetArray(dimensions)
 	vm.SetVarParam(varName, varParam)
-	
+
 	return nil
 }
-

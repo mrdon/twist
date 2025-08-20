@@ -7,11 +7,10 @@ import (
 	"twist/internal/debug"
 )
 
-
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
 type ProxyApiImpl struct {
-	proxy  *Proxy  // Active proxy instance
-	tuiAPI api.TuiAPI        // TuiAPI reference for callbacks
+	proxy  *Proxy     // Active proxy instance
+	tuiAPI api.TuiAPI // TuiAPI reference for callbacks
 }
 
 // SetProxy sets the proxy instance (for factory package)
@@ -19,7 +18,7 @@ func (p *ProxyApiImpl) SetProxy(proxy *Proxy) {
 	p.proxy = proxy
 }
 
-// SetTuiAPI sets the TuiAPI instance (for factory package) 
+// SetTuiAPI sets the TuiAPI instance (for factory package)
 func (p *ProxyApiImpl) SetTuiAPI(tuiAPI api.TuiAPI) {
 	p.tuiAPI = tuiAPI
 }
@@ -29,14 +28,13 @@ func (p *ProxyApiImpl) StartMonitoring() {
 	go p.monitorConnection()
 }
 
-
 // Thin orchestration methods - all one-liners delegating to proxy
 
 func (p *ProxyApiImpl) Disconnect() error {
 	if p.proxy == nil {
 		return nil
 	}
-	
+
 	go func() {
 		err := p.proxy.Disconnect()
 		if err != nil {
@@ -59,10 +57,10 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 	if p.proxy == nil {
 		return errors.New("not connected")
 	}
-	
+
 	// Log raw data chunks for debugging
 	debug.LogDataChunk(">>", data)
-	
+
 	p.proxy.SendInput(string(data))
 	return nil
 }
@@ -74,11 +72,11 @@ func (p *ProxyApiImpl) monitorConnection() {
 		// proxy is nil, returning
 		return
 	}
-	
+
 	// Use a ticker to periodically check connection status
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
-	
+
 	for {
 		select {
 		case _, ok := <-p.proxy.GetErrorChan():
@@ -100,7 +98,7 @@ func (p *ProxyApiImpl) monitorConnection() {
 				return
 			}
 			// Proxy still connected, continuing to monitor
-			
+
 		case <-ticker.C:
 			// Periodically check if connection is still alive
 			if !p.proxy.IsConnected() {
@@ -118,7 +116,7 @@ func (p *ProxyApiImpl) LoadScript(filename string) error {
 	if p.proxy == nil {
 		return errors.New("not connected")
 	}
-	
+
 	// Do work asynchronously - return immediately
 	go func() {
 		err := p.proxy.LoadScript(filename)
@@ -130,7 +128,7 @@ func (p *ProxyApiImpl) LoadScript(filename string) error {
 			p.tuiAPI.OnScriptStatusChanged(status)
 		}
 	}()
-	
+
 	return nil // Returns immediately
 }
 
@@ -138,7 +136,7 @@ func (p *ProxyApiImpl) StopAllScripts() error {
 	if p.proxy == nil {
 		return errors.New("not connected")
 	}
-	
+
 	// Do work asynchronously - return immediately
 	go func() {
 		err := p.proxy.StopAllScripts()
@@ -150,7 +148,7 @@ func (p *ProxyApiImpl) StopAllScripts() error {
 			p.tuiAPI.OnScriptStatusChanged(status)
 		}
 	}()
-	
+
 	return nil // Returns immediately
 }
 
@@ -162,31 +160,31 @@ func (p *ProxyApiImpl) GetScriptStatus() api.ScriptStatusInfo {
 			ScriptNames: []string{},
 		}
 	}
-	
+
 	return p.convertScriptStatus()
 }
 
 // convertScriptStatus converts proxy script manager status to API format
 func (p *ProxyApiImpl) convertScriptStatus() api.ScriptStatusInfo {
 	statusMap := p.proxy.GetScriptStatus()
-	
+
 	// Extract counts from existing GetStatus() return value
 	activeCount := 0
 	totalCount := 0
-	
+
 	if total, ok := statusMap["total_scripts"].(int); ok {
 		totalCount = total
 	}
 	if running, ok := statusMap["running_scripts"].(int); ok {
 		activeCount = running
 	}
-	
+
 	// Get script names - will need to be extended when proxy supports this
 	scriptNames := []string{}
 	if names, ok := statusMap["script_names"].([]string); ok {
 		scriptNames = names
 	}
-	
+
 	return api.ScriptStatusInfo{
 		ActiveCount: activeCount,
 		TotalCount:  totalCount,
@@ -207,12 +205,12 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 	if p.proxy == nil {
 		return api.SectorInfo{Number: sectorNum}, errors.New("not connected")
 	}
-	
+
 	// Validate sector number range
 	if sectorNum < 1 || sectorNum > 99999 {
 		return api.SectorInfo{Number: sectorNum}, errors.New("invalid sector number")
 	}
-	
+
 	// Phase 5: Use direct database API method (no converter needed)
 	sectorInfo, err := p.proxy.db.GetSectorInfo(sectorNum)
 	if err != nil {
@@ -225,7 +223,7 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 			Beacon:        "",
 		}, err
 	}
-	
+
 	return sectorInfo, nil
 }
 
@@ -236,7 +234,7 @@ func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
 	// Phase 5: Create PlayerInfo directly (no converter needed)
 	currentSector := p.proxy.GetCurrentSector()
 	playerName := p.proxy.GetPlayerName()
-	
+
 	return api.PlayerInfo{
 		Name:          playerName,
 		CurrentSector: currentSector,
@@ -247,40 +245,38 @@ func (p *ProxyApiImpl) GetPortInfo(sectorNum int) (*api.PortInfo, error) {
 	if p.proxy == nil {
 		return nil, errors.New("not connected")
 	}
-	
+
 	// Validate sector number range
 	if sectorNum < 1 || sectorNum > 99999 {
 		return nil, errors.New("invalid sector number")
 	}
-	
+
 	// Phase 5: Use direct database API method (no converter needed)
 	portInfo, err := p.proxy.db.GetPortInfo(sectorNum)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Return port info (nil if no port exists)
 	return portInfo, nil
 }
-
 
 func (p *ProxyApiImpl) GetPlayerStats() (*api.PlayerStatsInfo, error) {
 	if p.proxy == nil {
 		return nil, errors.New("not connected")
 	}
-	
+
 	// Phase 5: Use direct database API method (no converter needed)
 	database := p.proxy.GetDatabase()
 	if database == nil {
 		return nil, errors.New("database not available")
 	}
-	
+
 	// Get player stats directly in API format
 	apiStats, err := database.GetPlayerStatsInfo()
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return &apiStats, nil
 }
-

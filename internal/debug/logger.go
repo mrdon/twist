@@ -54,7 +54,7 @@ func NewLogger(filename string) (*Logger, error) {
 	}
 
 	logger := log.New(file, "", log.LstdFlags|log.Lmicroseconds)
-	
+
 	return &Logger{
 		file:   file,
 		logger: logger,
@@ -101,9 +101,9 @@ func LogDataChunk(direction string, data []byte) {
 		if len(encoded) >= 2 {
 			encoded = encoded[1 : len(encoded)-1]
 		}
-		
+
 		fmt.Fprintf(logFile, "%s %s\n", direction, encoded)
-		
+
 		logFile.Close()
 	} else {
 		// Fallback to regular debug log if we can't open the data chunks file

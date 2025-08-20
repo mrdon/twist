@@ -20,7 +20,7 @@ func TestVersionDetection(t *testing.T) {
 		testCases := []struct {
 			name           string
 			input          string
-			expectedType   int    // 0=unknown, 1=TW2002, 2=TWGS
+			expectedType   int // 0=unknown, 1=TW2002, 2=TWGS
 			expectedTWGS   string
 			expectedTW2002 string
 			description    string
@@ -49,23 +49,23 @@ func TestVersionDetection(t *testing.T) {
 				parser.twgsType = 0
 				parser.twgsVer = ""
 				parser.tw2002Ver = ""
-				
+
 				// Process the version detection line
 				parser.ProcessString(tc.input + "\r")
-				
+
 				// Verify version detection results
 				if parser.GetTWGSType() != tc.expectedType {
 					t.Errorf("Expected TWGS type %d, got %d", tc.expectedType, parser.GetTWGSType())
 				}
-				
+
 				if parser.GetTWGSVersion() != tc.expectedTWGS {
 					t.Errorf("Expected TWGS version '%s', got '%s'", tc.expectedTWGS, parser.GetTWGSVersion())
 				}
-				
+
 				if parser.GetTW2002Version() != tc.expectedTW2002 {
 					t.Errorf("Expected TW2002 version '%s', got '%s'", tc.expectedTW2002, parser.GetTW2002Version())
 				}
-				
+
 				t.Logf("✓ %s: %s", tc.name, tc.description)
 			})
 		}
@@ -113,23 +113,23 @@ func TestVersionDetection(t *testing.T) {
 				parser.twgsType = 0
 				parser.twgsVer = ""
 				parser.tw2002Ver = ""
-				
+
 				// Process the version detection line
 				parser.ProcessString(tc.input + "\r")
-				
+
 				// Verify version detection results
 				if parser.GetTWGSType() != tc.expectedType {
 					t.Errorf("Expected TWGS type %d, got %d", tc.expectedType, parser.GetTWGSType())
 				}
-				
+
 				if parser.GetTWGSVersion() != tc.expectedTWGS {
 					t.Errorf("Expected TWGS version '%s', got '%s'", tc.expectedTWGS, parser.GetTWGSVersion())
 				}
-				
+
 				if parser.GetTW2002Version() != tc.expectedTW2002 {
 					t.Errorf("Expected TW2002 version '%s', got '%s'", tc.expectedTW2002, parser.GetTW2002Version())
 				}
-				
+
 				t.Logf("✓ %s: %s", tc.name, tc.description)
 			})
 		}
@@ -140,7 +140,7 @@ func TestVersionDetection(t *testing.T) {
 		nonVersionLines := []string{
 			"Welcome to the game",
 			"TradeWars - but not the game server line", // Doesn't start with exact pattern
-			"Trade Wars but not 2002 Game",              // Doesn't match exact pattern
+			"Trade Wars but not 2002 Game",             // Doesn't match exact pattern
 			"Some other server announcement",
 			"Command [TL=30] (? for help): ",
 		}
@@ -150,84 +150,84 @@ func TestVersionDetection(t *testing.T) {
 			parser.twgsType = 0
 			parser.twgsVer = ""
 			parser.tw2002Ver = ""
-			
+
 			// Process the line
 			parser.ProcessString(line + "\r")
-			
+
 			// Verify no version detection occurred
 			if parser.GetTWGSType() != 0 {
 				t.Errorf("Line '%s' incorrectly triggered version detection (type %d)", line, parser.GetTWGSType())
 			}
-			
+
 			if parser.GetTWGSVersion() != "" {
 				t.Errorf("Line '%s' incorrectly set TWGS version '%s'", line, parser.GetTWGSVersion())
 			}
-			
+
 			if parser.GetTW2002Version() != "" {
 				t.Errorf("Line '%s' incorrectly set TW2002 version '%s'", line, parser.GetTW2002Version())
 			}
 		}
-		
+
 		t.Log("✓ Non-version lines correctly ignored")
 	})
 
 	t.Run("Version Persistence", func(t *testing.T) {
 		// Test that version information persists across multiple lines
-		
+
 		// First detect a TWGS server
 		parser.ProcessString("TradeWars Game Server v2.20b\r")
-		
+
 		// Verify detection
 		if parser.GetTWGSType() != 2 {
 			t.Fatalf("Expected TWGS type 2, got %d", parser.GetTWGSType())
 		}
-		
+
 		// Process other game lines
 		parser.ProcessString("Welcome to the game\r")
 		parser.ProcessString("Command [TL=30] (? for help): \r")
 		parser.ProcessString("Sector  : 1 in Sol\r")
-		
+
 		// Verify version information persists
 		if parser.GetTWGSType() != 2 {
 			t.Errorf("TWGS type should persist, expected 2, got %d", parser.GetTWGSType())
 		}
-		
+
 		if parser.GetTWGSVersion() != "2.20b" {
 			t.Errorf("TWGS version should persist, expected '2.20b', got '%s'", parser.GetTWGSVersion())
 		}
-		
+
 		if parser.GetTW2002Version() != "3.34" {
 			t.Errorf("TW2002 version should persist, expected '3.34', got '%s'", parser.GetTW2002Version())
 		}
-		
+
 		t.Log("✓ Version information persists across game session")
 	})
 
 	t.Run("Server Type Switching", func(t *testing.T) {
 		// Test switching between different server types
-		
+
 		// Start with TWGS
 		parser.ProcessString("TradeWars Game Server v2.20b\r")
 		if parser.GetTWGSType() != 2 {
 			t.Fatalf("Expected TWGS type 2, got %d", parser.GetTWGSType())
 		}
-		
+
 		// Switch to TW2002
 		parser.ProcessString("Trade Wars 2002 Game Server v1.03\r")
-		
+
 		// Verify the switch
 		if parser.GetTWGSType() != 1 {
 			t.Errorf("Expected switch to TW2002 (type 1), got %d", parser.GetTWGSType())
 		}
-		
+
 		if parser.GetTWGSVersion() != "1.03" {
 			t.Errorf("Expected TWGS version '1.03', got '%s'", parser.GetTWGSVersion())
 		}
-		
+
 		if parser.GetTW2002Version() != "3.13" {
 			t.Errorf("Expected TW2002 version '3.13', got '%s'", parser.GetTW2002Version())
 		}
-		
+
 		t.Log("✓ Server type switching works correctly")
 	})
 }
@@ -332,7 +332,7 @@ func TestVersionDetectionEdgeCases(t *testing.T) {
 		for _, line := range caseSensitiveTests {
 			parser.twgsType = 0
 			parser.ProcessString(line + "\r")
-			
+
 			if parser.GetTWGSType() != 0 {
 				t.Errorf("Case-sensitive test failed: '%s' should not trigger detection", line)
 			}
@@ -344,16 +344,16 @@ func TestVersionDetectionEdgeCases(t *testing.T) {
 	t.Run("Partial Matches", func(t *testing.T) {
 		// Test partial matches that should not trigger detection
 		partialMatches := []string{
-			"Trade Wars Game",          // Missing "2002"
-			"TradeWars",               // Too short
-			"Wars Game Server",        // Missing "Trade"
-			"Trade Wars 2002",         // Missing "Game"
+			"Trade Wars Game",  // Missing "2002"
+			"TradeWars",        // Too short
+			"Wars Game Server", // Missing "Trade"
+			"Trade Wars 2002",  // Missing "Game"
 		}
 
 		for _, line := range partialMatches {
 			parser.twgsType = 0
 			parser.ProcessString(line + "\r")
-			
+
 			if parser.GetTWGSType() != 0 {
 				t.Errorf("Partial match test failed: '%s' should not trigger detection", line)
 			}
@@ -365,23 +365,23 @@ func TestVersionDetectionEdgeCases(t *testing.T) {
 	t.Run("Multiple Detections", func(t *testing.T) {
 		// Test multiple version lines in same session
 		parser.twgsType = 0
-		
+
 		// First detection
 		parser.ProcessString("TradeWars Game Server v2.20b\r")
 		firstType := parser.GetTWGSType()
-		
+
 		// Second detection (should override)
 		parser.ProcessString("Trade Wars 2002 Game Server v1.03\r")
 		secondType := parser.GetTWGSType()
-		
+
 		if firstType != 2 {
 			t.Errorf("First detection failed, expected type 2, got %d", firstType)
 		}
-		
+
 		if secondType != 1 {
 			t.Errorf("Second detection failed, expected type 1, got %d", secondType)
 		}
-		
+
 		t.Log("✓ Multiple detections handled correctly")
 	})
 }

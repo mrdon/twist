@@ -143,14 +143,14 @@ func (p *TWXParser) parseShipLine(shipInfo string) {
 func (p *TWXParser) handleShipContinuation(line string) {
 	// Phase 4.5: Ship continuation handling with collection trackers
 	line = strings.TrimSpace(line)
-	
+
 	// Handle different types of ship continuation lines:
 	// 1. New ship entries that appear in continuation lines
 	if strings.Contains(line, "[Owned by") {
 		p.parseShipLine(line)
 		return
 	}
-	
+
 	// 2. Ship data that might be split across lines (ship types, alignments, etc.)
 	if strings.Contains(line, "(") && strings.Contains(line, ")") {
 		// This might be ship type or alignment information
@@ -158,7 +158,7 @@ func (p *TWXParser) handleShipContinuation(line string) {
 		// Incomplete ship data spanning lines is handled by parseShipLine when it gets the full line
 		return
 	}
-	
+
 	// 3. Any other line that looks like ship data
 	if strings.Contains(line, " ftrs") || strings.Contains(line, ", w/") {
 		// This line contains fighter information, treat as ship line
@@ -1092,7 +1092,7 @@ func (p *TWXParser) handleSectorConstellation(parts []string) {
 		constellation = strings.TrimSuffix(constellation, ".")
 		// Remove exploration status suffixes like "(unexplored)"
 		constellation = strings.TrimSuffix(constellation, " (unexplored)")
-		// Phase 2: Constellation tracked via SectorTracker  
+		// Phase 2: Constellation tracked via SectorTracker
 		if p.sectorTracker != nil {
 			p.sectorTracker.SetConstellation(constellation)
 		}

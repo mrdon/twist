@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -16,7 +14,7 @@ func TestMathCommands_RealIntegration(t *testing.T) {
 		add $result 3
 		echo "ADD result: " $result
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Fatalf("ADD command failed: %v", result.Error)
@@ -33,56 +31,56 @@ func TestMathCommands_RealIntegration(t *testing.T) {
 
 func TestMathCommandsAllTypes_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	tests := []struct {
-		name       string
-		script     string
-		expected   string
+		name     string
+		script   string
+		expected string
 	}{
 		{
-			name:      "SUBTRACT command",
-			script:    "setVar $result 10\nsubtract $result 4\necho \"SUBTRACT: \" $result",
-			expected:  "SUBTRACT: 6",
+			name:     "SUBTRACT command",
+			script:   "setVar $result 10\nsubtract $result 4\necho \"SUBTRACT: \" $result",
+			expected: "SUBTRACT: 6",
 		},
 		{
-			name:      "MULTIPLY command",
-			script:    "setVar $result 6\nmultiply $result 7\necho \"MULTIPLY: \" $result",
-			expected:  "MULTIPLY: 42",
+			name:     "MULTIPLY command",
+			script:   "setVar $result 6\nmultiply $result 7\necho \"MULTIPLY: \" $result",
+			expected: "MULTIPLY: 42",
 		},
 		{
-			name:      "DIVIDE command",
-			script:    "setVar $result 15\ndivide $result 3\necho \"DIVIDE: \" $result",
-			expected:  "DIVIDE: 5",
+			name:     "DIVIDE command",
+			script:   "setVar $result 15\ndivide $result 3\necho \"DIVIDE: \" $result",
+			expected: "DIVIDE: 5",
 		},
 		{
-			name:      "MOD command",
-			script:    "mod 17 5 $result\necho \"MOD: \" $result",
-			expected:  "MOD: 2",
+			name:     "MOD command",
+			script:   "mod 17 5 $result\necho \"MOD: \" $result",
+			expected: "MOD: 2",
 		},
 		{
-			name:      "ABS negative command", 
-			script:    "abs -42 $result\necho \"ABS: \" $result",
-			expected:  "ABS: 42",
+			name:     "ABS negative command",
+			script:   "abs -42 $result\necho \"ABS: \" $result",
+			expected: "ABS: 42",
 		},
 		{
-			name:      "INT command",
-			script:    "int 3.14159 $result\necho \"INT: \" $result",
-			expected:  "INT: 3",
+			name:     "INT command",
+			script:   "int 3.14159 $result\necho \"INT: \" $result",
+			expected: "INT: 3",
 		},
 		{
-			name:      "ROUND command",
-			script:    "round 3.6 $result\necho \"ROUND: \" $result",
-			expected:  "ROUND: 4",
+			name:     "ROUND command",
+			script:   "round 3.6 $result\necho \"ROUND: \" $result",
+			expected: "ROUND: 4",
 		},
 		{
-			name:      "SQR command",
-			script:    "sqr 16 $result\necho \"SQR: \" $result",
-			expected:  "SQR: 4",
+			name:     "SQR command",
+			script:   "sqr 16 $result\necho \"SQR: \" $result",
+			expected: "SQR: 4",
 		},
 		{
-			name:      "POWER command",
-			script:    "power 2 3 $result\necho \"POWER: \" $result",
-			expected:  "POWER: 8",
+			name:     "POWER command",
+			script:   "power 2 3 $result\necho \"POWER: \" $result",
+			expected: "POWER: 8",
 		},
 	}
 
@@ -187,7 +185,7 @@ func TestRandomCommand_RealIntegration(t *testing.T) {
 			random 6 $dice_roll
 			echo "Roll: " $dice_roll
 		`
-		
+
 		result := tester.ExecuteScript(script)
 		if result.Error != nil {
 			t.Fatalf("RANDOM command failed: %v", result.Error)
@@ -202,7 +200,7 @@ func TestRandomCommand_RealIntegration(t *testing.T) {
 		if !strings.Contains(output, "Roll: ") {
 			t.Errorf("Unexpected output format: %s", output)
 		}
-		
+
 		// Extract number and verify it's in range 1-6
 		parts := strings.Split(output, "Roll: ")
 		if len(parts) != 2 {
@@ -288,9 +286,9 @@ func TestComplexMathWorkflow_RealIntegration(t *testing.T) {
 
 	// Verify the calculations are approximately correct
 	expectedOutputs := []string{
-		"Area: 78.5398",   // 25 * 3.14159
+		"Area: 78.5398",          // 25 * 3.14159
 		"Circumference: 31.4159", // 10 * 3.14159
-		"Ratio: 2.5",      // radius/2 = 2.5
+		"Ratio: 2.5",             // radius/2 = 2.5
 	}
 
 	for i, expected := range expectedOutputs {

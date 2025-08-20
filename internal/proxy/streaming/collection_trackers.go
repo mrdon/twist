@@ -41,9 +41,9 @@ func (sc *SectorCollections) AddPlanet(name, owner string, fighters int, citadel
 
 // HasData returns true if any collections have data
 func (sc *SectorCollections) HasData() bool {
-	return sc.shipsTracker.HasShips() || 
-	       sc.tradersTracker.HasTraders() || 
-	       sc.planetsTracker.HasPlanets()
+	return sc.shipsTracker.HasShips() ||
+		sc.tradersTracker.HasTraders() ||
+		sc.planetsTracker.HasPlanets()
 }
 
 // Execute performs atomic replacement of all collections in the sector
@@ -54,19 +54,19 @@ func (sc *SectorCollections) Execute(db *sql.DB) error {
 			return err
 		}
 	}
-	
+
 	if sc.tradersTracker.HasTraders() {
 		if err := sc.tradersTracker.Execute(db); err != nil {
 			return err
 		}
 	}
-	
+
 	if sc.planetsTracker.HasPlanets() {
 		if err := sc.planetsTracker.Execute(db); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -96,7 +96,7 @@ func NewShipsCollectionTracker(sectorIndex int) *ShipsCollectionTracker {
 func (s *ShipsCollectionTracker) AddShip(name, owner, shipType string, fighters int) {
 	s.ships = append(s.ships, ShipData{
 		Name:     name,
-		Owner:    owner, 
+		Owner:    owner,
 		ShipType: shipType,
 		Fighters: fighters,
 	})
@@ -113,14 +113,14 @@ func (s *ShipsCollectionTracker) Execute(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Clear existing ships for this sector
 	_, err = tx.Exec("DELETE FROM ships WHERE sector_index = ?", s.sectorIndex)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	
+
 	// Insert discovered ships
 	for _, ship := range s.ships {
 		_, err = tx.Exec(`
@@ -132,12 +132,12 @@ func (s *ShipsCollectionTracker) Execute(db *sql.DB) error {
 			return err
 		}
 	}
-	
+
 	err = tx.Commit()
 	if err != nil {
 		return err
 	}
-	
+
 	debug.Log("COLLECTIONS: Updated %d ships for sector %d", len(s.ships), s.sectorIndex)
 	return nil
 }
@@ -185,14 +185,14 @@ func (t *TradersCollectionTracker) Execute(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Clear existing traders for this sector
 	_, err = tx.Exec("DELETE FROM traders WHERE sector_index = ?", t.sectorIndex)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	
+
 	// Insert discovered traders
 	for _, trader := range t.traders {
 		_, err = tx.Exec(`
@@ -204,12 +204,12 @@ func (t *TradersCollectionTracker) Execute(db *sql.DB) error {
 			return err
 		}
 	}
-	
+
 	err = tx.Commit()
 	if err != nil {
 		return err
 	}
-	
+
 	debug.Log("COLLECTIONS: Updated %d traders for sector %d", len(t.traders), t.sectorIndex)
 	return nil
 }
@@ -259,14 +259,14 @@ func (p *PlanetsCollectionTracker) Execute(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	
+
 	// Clear existing planets for this sector
 	_, err = tx.Exec("DELETE FROM planets WHERE sector_index = ?", p.sectorIndex)
 	if err != nil {
 		tx.Rollback()
 		return err
 	}
-	
+
 	// Insert discovered planets
 	for _, planet := range p.planets {
 		_, err = tx.Exec(`
@@ -278,12 +278,12 @@ func (p *PlanetsCollectionTracker) Execute(db *sql.DB) error {
 			return err
 		}
 	}
-	
+
 	err = tx.Commit()
 	if err != nil {
 		return err
 	}
-	
+
 	debug.Log("COLLECTIONS: Updated %d planets for sector %d", len(p.planets), p.sectorIndex)
 	return nil
 }

@@ -1,5 +1,3 @@
-
-
 package parsing
 
 import (
@@ -35,7 +33,7 @@ func (m *MockTuiAPI) OnConnectionStatusChanged(status api.ConnectionStatus, addr
 	}
 }
 
-// OnConnectionError implements TuiAPI interface  
+// OnConnectionError implements TuiAPI interface
 func (m *MockTuiAPI) OnConnectionError(err error) {
 	call := fmt.Sprintf("OnConnectionError(err=%v)", err)
 	m.calls = append(m.calls, call)
@@ -51,7 +49,7 @@ func (m *MockTuiAPI) OnData(data []byte) {
 
 // OnScriptStatusChanged implements TuiAPI interface
 func (m *MockTuiAPI) OnScriptStatusChanged(status api.ScriptStatusInfo) {
-	call := fmt.Sprintf("OnScriptStatusChanged(active=%d, total=%d, names=%v)", 
+	call := fmt.Sprintf("OnScriptStatusChanged(active=%d, total=%d, names=%v)",
 		status.ActiveCount, status.TotalCount, status.ScriptNames)
 	m.calls = append(m.calls, call)
 	if m.t != nil {
@@ -70,7 +68,7 @@ func (m *MockTuiAPI) OnScriptError(scriptName string, err error) {
 
 // OnDatabaseStateChanged implements TuiAPI interface
 func (m *MockTuiAPI) OnDatabaseStateChanged(info api.DatabaseStateInfo) {
-	call := fmt.Sprintf("OnDatabaseStateChanged(game=%s, host=%s, port=%s, db=%s, loaded=%t)", 
+	call := fmt.Sprintf("OnDatabaseStateChanged(game=%s, host=%s, port=%s, db=%s, loaded=%t)",
 		info.GameName, info.ServerHost, info.ServerPort, info.DatabaseName, info.IsLoaded)
 	m.calls = append(m.calls, call)
 	if m.t != nil {
@@ -90,7 +88,7 @@ func (m *MockTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo) {
 		call := fmt.Sprintf("OnCurrentSectorChanged(%s)", string(jsonData))
 		m.calls = append(m.calls, call)
 	}
-	
+
 	if m.t != nil {
 		m.t.Logf("MockTuiAPI: %s", m.calls[len(m.calls)-1])
 	}
@@ -98,7 +96,7 @@ func (m *MockTuiAPI) OnCurrentSectorChanged(sectorInfo api.SectorInfo) {
 
 // OnPlayerStatsUpdated implements TuiAPI interface
 func (m *MockTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {
-	call := fmt.Sprintf("OnPlayerStatsUpdated(turns=%d, credits=%d, fighters=%d, shields=%d)", 
+	call := fmt.Sprintf("OnPlayerStatsUpdated(turns=%d, credits=%d, fighters=%d, shields=%d)",
 		stats.Turns, stats.Credits, stats.Fighters, stats.Shields)
 	m.calls = append(m.calls, call)
 	if m.t != nil {
@@ -108,7 +106,7 @@ func (m *MockTuiAPI) OnPlayerStatsUpdated(stats api.PlayerStatsInfo) {
 
 // OnTraderDataUpdated implements TuiAPI interface
 func (m *MockTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.TraderInfo) {
-	call := fmt.Sprintf("OnTraderDataUpdated(sector=%d, traders_count=%d)", 
+	call := fmt.Sprintf("OnTraderDataUpdated(sector=%d, traders_count=%d)",
 		sectorNumber, len(traders))
 	m.calls = append(m.calls, call)
 	if m.t != nil {
@@ -118,7 +116,7 @@ func (m *MockTuiAPI) OnTraderDataUpdated(sectorNumber int, traders []api.TraderI
 
 // OnPortUpdated implements TuiAPI interface
 func (m *MockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
-	call := fmt.Sprintf("OnPortUpdated(sector=%d, name=%s, class=%s)", 
+	call := fmt.Sprintf("OnPortUpdated(sector=%d, name=%s, class=%s)",
 		portInfo.SectorID, portInfo.Name, portInfo.ClassType.String())
 	m.calls = append(m.calls, call)
 	if m.t != nil {
@@ -128,7 +126,7 @@ func (m *MockTuiAPI) OnPortUpdated(portInfo api.PortInfo) {
 
 // OnSectorUpdated implements TuiAPI interface
 func (m *MockTuiAPI) OnSectorUpdated(sectorInfo api.SectorInfo) {
-	call := fmt.Sprintf("OnSectorUpdated(sector=%d, visited=%t)", 
+	call := fmt.Sprintf("OnSectorUpdated(sector=%d, visited=%t)",
 		sectorInfo.Number, sectorInfo.Visited)
 	m.calls = append(m.calls, call)
 	if m.t != nil {

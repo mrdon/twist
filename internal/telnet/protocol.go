@@ -15,52 +15,52 @@ const (
 
 // Telnet option constants
 const (
-	ECHO             = 0x01
+	ECHO              = 0x01
 	SUPPRESS_GO_AHEAD = 0x03
-	TERMINAL_TYPE    = 0x18
-	NAWS            = 0x1F // Negotiate About Window Size
+	TERMINAL_TYPE     = 0x18
+	NAWS              = 0x1F // Negotiate About Window Size
 )
 
 // Handler manages telnet protocol negotiation
 type Handler struct {
 	writer func([]byte) error
-	
+
 	// SAUCE detection state
-	sauceBuffer  []byte
-	sauceTarget  []byte
+	sauceBuffer []byte
+	sauceTarget []byte
 }
 
 // NewHandler creates a new telnet protocol handler
 func NewHandler(writer func([]byte) error) *Handler {
 	return &Handler{
-		writer: writer,
+		writer:      writer,
 		sauceTarget: []byte{0x1A, 'S', 'A', 'U', 'C', 'E', '0', '0'},
 	}
 }
 
 // SendInitialNegotiation sends the initial telnet option negotiations
 func (h *Handler) SendInitialNegotiation() error {
-	
+
 	// If no writer is available, skip telnet negotiation
 	if h.writer == nil {
 		return nil // Success - no negotiation needed
 	}
-	
+
 	// Send basic telnet client capabilities
 	commands := [][]byte{
-		{IAC, WILL, TERMINAL_TYPE},    // We support terminal type
-		{IAC, WILL, NAWS},             // We support window size negotiation
-		{IAC, DO, ECHO},               // Server should handle echo
+		{IAC, WILL, TERMINAL_TYPE},     // We support terminal type
+		{IAC, WILL, NAWS},              // We support window size negotiation
+		{IAC, DO, ECHO},                // Server should handle echo
 		{IAC, WILL, SUPPRESS_GO_AHEAD}, // We support suppress go ahead
 		{IAC, DO, SUPPRESS_GO_AHEAD},   // Server should suppress go ahead
 	}
-	
+
 	for _, cmd := range commands {
 		if err := h.writer(cmd); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -68,11 +68,11 @@ func (h *Handler) SendInitialNegotiation() error {
 func (h *Handler) ProcessData(data []byte) []byte {
 	var result []byte
 	i := 0
-	
+
 	for i < len(data) {
 		if data[i] == IAC && i+1 < len(data) {
 			cmd := data[i+1]
-			
+
 			switch cmd {
 			case DONT, DO, WONT, WILL:
 				// Three-byte commands: IAC + command + option
@@ -84,7 +84,7 @@ func (h *Handler) ProcessData(data []byte) []byte {
 					// Incomplete command, skip what we have
 					i = len(data)
 				}
-				
+
 			case SB:
 				// Subnegotiation: skip until IAC SE
 				i += 2
@@ -95,16 +95,16 @@ func (h *Handler) ProcessData(data []byte) []byte {
 					}
 					i++
 				}
-				
+
 			case SE:
 				// Subnegotiation end (should be handled above)
 				i += 2
-				
+
 			case IAC:
 				// Escaped IAC (0xFF 0xFF represents literal 0xFF)
 				result = append(result, IAC)
 				i += 2
-				
+
 			default:
 				// Other two-byte commands
 				i += 2
@@ -115,22 +115,21 @@ func (h *Handler) ProcessData(data []byte) []byte {
 			i++
 		}
 	}
-	
+
 	// Filter out SAUCE records (ANSI art metadata)
 	result = h.filterSAUCE(result)
-	
-	
+
 	return result
 }
 
 // filterSAUCE removes SAUCE records (ANSI art metadata) from streaming data
 func (h *Handler) filterSAUCE(data []byte) []byte {
 	var result []byte
-	
+
 	for _, b := range data {
 		// Add byte to SAUCE buffer
 		h.sauceBuffer = append(h.sauceBuffer, b)
-		
+
 		// Check if we're building toward SAUCE header
 		if len(h.sauceBuffer) <= len(h.sauceTarget) {
 			// Still potentially matching SAUCE header
@@ -138,7 +137,7 @@ func (h *Handler) filterSAUCE(data []byte) []byte {
 				// Byte matches, continue building
 				if len(h.sauceBuffer) == len(h.sauceTarget) {
 					// Complete SAUCE header detected - drop everything in buffer
-						h.sauceBuffer = nil
+					h.sauceBuffer = nil
 					// From here on, drop all remaining data (SAUCE record continues)
 					return result
 				}
@@ -155,15 +154,15 @@ func (h *Handler) filterSAUCE(data []byte) []byte {
 			continue
 		}
 	}
-	
+
 	return result
 }
 
 // handleNegotiation processes telnet option negotiations
 func (h *Handler) handleNegotiation(cmd byte, option byte) {
-	
+
 	var response []byte
-	
+
 	switch cmd {
 	case DO: // Server wants us to enable option
 		switch option {
@@ -183,11 +182,11 @@ func (h *Handler) handleNegotiation(cmd byte, option byte) {
 			// Don't support unknown options
 			response = []byte{IAC, WONT, option}
 		}
-		
+
 	case DONT: // Server doesn't want us to use option
 		// Acknowledge by saying we won't
 		response = []byte{IAC, WONT, option}
-		
+
 	case WILL: // Server will enable option
 		switch option {
 		case ECHO:
@@ -200,12 +199,12 @@ func (h *Handler) handleNegotiation(cmd byte, option byte) {
 			// Don't care about other options server enables
 			response = []byte{IAC, DONT, option}
 		}
-		
+
 	case WONT: // Server won't enable option
 		// Acknowledge
 		response = []byte{IAC, DONT, option}
 	}
-	
+
 	if response != nil {
 		if err := h.writer(response); err != nil {
 			// Failed to send response

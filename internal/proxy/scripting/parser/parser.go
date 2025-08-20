@@ -90,26 +90,26 @@ func (p *Parser) Parse() (*ASTNode, error) {
 		Type:     NodeProgram,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	for p.current.Type != TokenEOF {
 		// Skip comments and newlines at the top level
 		if p.current.Type == TokenComment || p.current.Type == TokenNewline {
 			p.advance()
 			continue
 		}
-		
+
 		stmt, err := p.parseStatement()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		if stmt != nil {
 			program.Children = append(program.Children, stmt)
 		}
-		
+
 		p.skipNewlines()
 	}
-	
+
 	return program, nil
 }
 
@@ -167,18 +167,18 @@ func (p *Parser) parseIf() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	p.advance() // skip 'if'
-	
+
 	// Parse condition
 	condition, err := p.parseExpression()
 	if err != nil {
 		return nil, err
 	}
 	node.Children = append(node.Children, condition)
-	
+
 	p.skipNewlines()
-	
+
 	// Parse statements until 'elseif', 'else', or 'end'
 	for p.current.Type != TokenElseif && p.current.Type != TokenElse && p.current.Type != TokenEnd && p.current.Type != TokenEOF {
 		stmt, err := p.parseStatement()
@@ -190,24 +190,24 @@ func (p *Parser) parseIf() (*ASTNode, error) {
 		}
 		p.skipNewlines()
 	}
-	
+
 	// Handle elseif/else clauses
 	for p.current.Type == TokenElseif {
 		p.advance() // skip 'elseif'
-		
+
 		elseifCondition, err := p.parseExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		elseifNode := &ASTNode{
 			Type:     NodeIf,
 			Value:    "elseif",
 			Children: []*ASTNode{elseifCondition},
 		}
-		
+
 		p.skipNewlines()
-		
+
 		for p.current.Type != TokenElseif && p.current.Type != TokenElse && p.current.Type != TokenEnd && p.current.Type != TokenEOF {
 			stmt, err := p.parseStatement()
 			if err != nil {
@@ -218,21 +218,21 @@ func (p *Parser) parseIf() (*ASTNode, error) {
 			}
 			p.skipNewlines()
 		}
-		
+
 		node.Children = append(node.Children, elseifNode)
 	}
-	
+
 	// Handle else clause
 	if p.current.Type == TokenElse {
 		p.advance() // skip 'else'
 		p.skipNewlines()
-		
+
 		elseNode := &ASTNode{
 			Type:     NodeIf,
 			Value:    "else",
 			Children: make([]*ASTNode, 0),
 		}
-		
+
 		for p.current.Type != TokenEnd && p.current.Type != TokenEOF {
 			stmt, err := p.parseStatement()
 			if err != nil {
@@ -243,15 +243,15 @@ func (p *Parser) parseIf() (*ASTNode, error) {
 			}
 			p.skipNewlines()
 		}
-		
+
 		node.Children = append(node.Children, elseNode)
 	}
-	
+
 	// Expect 'end'
 	if err := p.expect(TokenEnd); err != nil {
 		return nil, err
 	}
-	
+
 	return node, nil
 }
 
@@ -263,18 +263,18 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	p.advance() // skip 'while'
-	
+
 	// Parse condition
 	condition, err := p.parseExpression()
 	if err != nil {
 		return nil, err
 	}
 	node.Children = append(node.Children, condition)
-	
+
 	p.skipNewlines()
-	
+
 	// Parse statements until 'end'
 	for p.current.Type != TokenEnd && p.current.Type != TokenEOF {
 		stmt, err := p.parseStatement()
@@ -286,12 +286,12 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 		}
 		p.skipNewlines()
 	}
-	
+
 	// Expect 'end'
 	if err := p.expect(TokenEnd); err != nil {
 		return nil, err
 	}
-	
+
 	return node, nil
 }
 
@@ -299,25 +299,25 @@ func (p *Parser) parseWhile() (*ASTNode, error) {
 func (p *Parser) parseAssignmentOrCommand() (*ASTNode, error) {
 	// Look ahead to see if this is an assignment
 	nextToken := p.peek()
-	
+
 	if nextToken.Type == TokenLeftBracket ||
-		nextToken.Type == TokenEqual ||  // Support TWX-style = assignments
+		nextToken.Type == TokenEqual || // Support TWX-style = assignments
 		nextToken.Type == TokenPlusAssign || nextToken.Type == TokenMinusAssign ||
 		nextToken.Type == TokenMultiplyAssign || nextToken.Type == TokenDivideAssign ||
 		nextToken.Type == TokenConcatAssign {
 		return p.parseAssignment()
 	}
-	
+
 	// Check for Go-style assignment and reject it explicitly
 	if nextToken.Type == TokenAssign {
 		return nil, fmt.Errorf("invalid syntax: Go-style assignment ':=' not supported in TWX scripts. Use 'setVar %s value' instead at line %d", p.current.Value, nextToken.Line)
 	}
-	
+
 	// Check for increment/decrement operators
 	if nextToken.Type == TokenIncrement || nextToken.Type == TokenDecrement {
 		return p.parseIncrementDecrement()
 	}
-	
+
 	// Otherwise, it's a command
 	return p.parseCommand()
 }
@@ -329,7 +329,7 @@ func (p *Parser) parseAssignment() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Check what kind of assignment this is
 	if p.current.Type == TokenEqual {
 		// Regular assignment (TWX style: variable = value)
@@ -340,22 +340,22 @@ func (p *Parser) parseAssignment() (*ASTNode, error) {
 			Column:   p.current.Column,
 			Children: []*ASTNode{variable},
 		}
-		
+
 		p.advance() // skip = operator
-		
+
 		// Parse expression
 		expr, err := p.parseExpression()
 		if err != nil {
 			return nil, err
 		}
 		node.Children = append(node.Children, expr)
-		
+
 		return node, nil
-		
+
 	} else if p.current.Type == TokenPlusAssign || p.current.Type == TokenMinusAssign ||
 		p.current.Type == TokenMultiplyAssign || p.current.Type == TokenDivideAssign ||
 		p.current.Type == TokenConcatAssign {
-		
+
 		// Compound assignment
 		node := &ASTNode{
 			Type:     NodeCompoundAssignment,
@@ -364,19 +364,19 @@ func (p *Parser) parseAssignment() (*ASTNode, error) {
 			Column:   p.current.Column,
 			Children: []*ASTNode{variable},
 		}
-		
+
 		p.advance() // skip compound operator
-		
+
 		// Parse expression
 		expr, err := p.parseExpression()
 		if err != nil {
 			return nil, err
 		}
 		node.Children = append(node.Children, expr)
-		
+
 		return node, nil
 	}
-	
+
 	return nil, fmt.Errorf("expected assignment operator at line %d", p.current.Line)
 }
 
@@ -387,12 +387,12 @@ func (p *Parser) parseIncrementDecrement() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Check for increment/decrement operator
 	if p.current.Type != TokenIncrement && p.current.Type != TokenDecrement {
 		return nil, fmt.Errorf("expected ++ or -- at line %d", p.current.Line)
 	}
-	
+
 	node := &ASTNode{
 		Type:     NodeIncrementDecrement,
 		Value:    p.current.Value,
@@ -400,9 +400,9 @@ func (p *Parser) parseIncrementDecrement() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: []*ASTNode{variable},
 	}
-	
+
 	p.advance() // skip ++ or --
-	
+
 	return node, nil
 }
 
@@ -414,24 +414,24 @@ func (p *Parser) parseInclude() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	p.advance() // skip 'include'
-	
+
 	// Parse filename parameter
 	if p.current.Type != TokenString && p.current.Type != TokenCommand {
 		return nil, fmt.Errorf("INCLUDE expects a filename at line %d", p.current.Line)
 	}
-	
+
 	filename := &ASTNode{
 		Type:   NodeLiteral,
 		Value:  p.current.Value,
 		Line:   p.current.Line,
 		Column: p.current.Column,
 	}
-	
+
 	node.Children = append(node.Children, filename)
 	p.advance()
-	
+
 	return node, nil
 }
 
@@ -442,7 +442,7 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 	if p.current.Type != TokenVariable && p.current.Type != TokenCommand {
 		return nil, fmt.Errorf("expected variable at line %d, got %v", p.current.Line, p.current.Type)
 	}
-	
+
 	node := &ASTNode{
 		Type:   NodeVariable,
 		Value:  p.current.Value,
@@ -450,7 +450,7 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 		Column: p.current.Column,
 	}
 	p.advance()
-	
+
 	// Check for array access (supports multi-dimensional arrays)
 	if p.current.Type == TokenLeftBracket {
 		variable := node
@@ -458,25 +458,25 @@ func (p *Parser) parseVariableAccess() (*ASTNode, error) {
 			Type:     NodeArrayAccess,
 			Children: []*ASTNode{variable},
 		}
-		
+
 		// Parse all bracket pairs for multi-dimensional arrays
 		for p.current.Type == TokenLeftBracket {
 			p.advance() // skip '['
-			
+
 			index, err := p.parseExpression()
 			if err != nil {
 				return nil, err
 			}
 			arrayAccess.Children = append(arrayAccess.Children, index)
-			
+
 			if err := p.expect(TokenRightBracket); err != nil {
 				return nil, err
 			}
 		}
-		
+
 		return arrayAccess, nil
 	}
-	
+
 	return node, nil
 }
 
@@ -485,7 +485,7 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 	if p.current.Type == TokenEOF {
 		return nil, nil
 	}
-	
+
 	node := &ASTNode{
 		Type:     NodeCommand,
 		Value:    strings.ToUpper(p.current.Value),
@@ -493,9 +493,9 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	p.advance()
-	
+
 	// Parse parameters
 	for p.current.Type != TokenNewline && p.current.Type != TokenEOF && p.current.Type != TokenComment {
 		param, err := p.parseCommandParameter()
@@ -503,13 +503,13 @@ func (p *Parser) parseCommand() (*ASTNode, error) {
 			return nil, fmt.Errorf("error parsing parameter for command %s: %v", node.Value, err)
 		}
 		node.Children = append(node.Children, param)
-		
+
 		// Skip optional comma
 		if p.current.Type == TokenComma {
 			p.advance()
 		}
 	}
-	
+
 	return node, nil
 }
 
@@ -523,12 +523,12 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 		p.advance() // skip minus
 		numberToken := p.current
 		p.advance() // skip number
-		
+
 		return &ASTNode{
-			Type:     NodeExpression,
-			Value:    "-",
-			Line:     minusToken.Line,
-			Column:   minusToken.Column,
+			Type:   NodeExpression,
+			Value:  "-",
+			Line:   minusToken.Line,
+			Column: minusToken.Column,
 			Children: []*ASTNode{
 				{
 					Type:   NodeLiteral,
@@ -539,12 +539,12 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 			},
 		}, nil
 	}
-	
+
 	// Handle variables (including array access)
 	if p.current.Type == TokenVariable {
 		return p.parseVariableAccess()
 	}
-	
+
 	// Handle identifiers that should be treated as variables in command parameters
 	// In TWX, bare identifiers (without quotes) in command parameters are variable references
 	if p.current.Type == TokenCommand {
@@ -559,7 +559,7 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 			Column: token.Column,
 		}, nil
 	}
-	
+
 	// For other cases, parse as primary expression
 	return p.parsePrimaryExpression()
 }
@@ -567,8 +567,8 @@ func (p *Parser) parseCommandParameter() (*ASTNode, error) {
 // isSystemConstant checks if a token value is a known system constant
 func (p *Parser) isSystemConstant(value string) bool {
 	switch strings.ToUpper(value) {
-	case "TRUE", "FALSE", "CURRENTLINE", "CURRENTANSILINE", "VERSION", "GAME", 
-		 "CURRENTSECTOR", "CONNECTED", "DATE", "TIME", "GAMENAME", "TWXVERSION":
+	case "TRUE", "FALSE", "CURRENTLINE", "CURRENTANSILINE", "VERSION", "GAME",
+		"CURRENTSECTOR", "CONNECTED", "DATE", "TIME", "GAMENAME", "TWXVERSION":
 		return true
 	default:
 		return false
@@ -584,10 +584,10 @@ func (p *Parser) parseControlFlow() (*ASTNode, error) {
 		Column:   p.current.Column,
 		Children: make([]*ASTNode, 0),
 	}
-	
+
 	command := p.current.Value
 	p.advance()
-	
+
 	// Parse parameters for goto/gosub
 	if strings.ToUpper(command) == "GOTO" || strings.ToUpper(command) == "GOSUB" {
 		if p.current.Type != TokenNewline && p.current.Type != TokenEOF {
@@ -598,7 +598,7 @@ func (p *Parser) parseControlFlow() (*ASTNode, error) {
 			node.Children = append(node.Children, param)
 		}
 	}
-	
+
 	return node, nil
 }
 
@@ -618,23 +618,23 @@ func (p *Parser) parseOrExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenOr {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseAndExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -644,23 +644,23 @@ func (p *Parser) parseAndExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenAnd || p.current.Type == TokenXor {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseEqualityExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -670,23 +670,23 @@ func (p *Parser) parseEqualityExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenEqual || p.current.Type == TokenNotEqual {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseRelationalExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -696,24 +696,24 @@ func (p *Parser) parseRelationalExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
-	for p.current.Type == TokenLess || p.current.Type == TokenLessEq || 
+
+	for p.current.Type == TokenLess || p.current.Type == TokenLessEq ||
 		p.current.Type == TokenGreater || p.current.Type == TokenGreaterEq {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseAdditiveExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -723,23 +723,23 @@ func (p *Parser) parseAdditiveExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenPlus || p.current.Type == TokenMinus {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseConcatenationExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -749,23 +749,23 @@ func (p *Parser) parseConcatenationExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenConcat {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseMultiplicativeExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -775,23 +775,23 @@ func (p *Parser) parseMultiplicativeExpression() (*ASTNode, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	for p.current.Type == TokenMultiply || p.current.Type == TokenDivide || p.current.Type == TokenModulus {
 		op := p.current.Value
 		p.advance()
-		
+
 		right, err := p.parseUnaryExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		left = &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{left, right},
 		}
 	}
-	
+
 	return left, nil
 }
 
@@ -800,19 +800,19 @@ func (p *Parser) parseUnaryExpression() (*ASTNode, error) {
 	if p.current.Type == TokenNot || p.current.Type == TokenMinus || p.current.Type == TokenPlus {
 		op := p.current.Value
 		p.advance()
-		
+
 		expr, err := p.parseUnaryExpression()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		return &ASTNode{
 			Type:     NodeExpression,
 			Value:    op,
 			Children: []*ASTNode{expr},
 		}, nil
 	}
-	
+
 	return p.parsePrimaryExpression()
 }
 
@@ -828,7 +828,7 @@ func (p *Parser) parsePrimaryExpression() (*ASTNode, error) {
 		}
 		p.advance()
 		return node, nil
-		
+
 	case TokenNumber:
 		node := &ASTNode{
 			Type:   NodeLiteral,
@@ -838,10 +838,10 @@ func (p *Parser) parsePrimaryExpression() (*ASTNode, error) {
 		}
 		p.advance()
 		return node, nil
-		
+
 	case TokenVariable:
 		return p.parseVariableAccess()
-		
+
 	case TokenLabel:
 		node := &ASTNode{
 			Type:   NodeLiteral,
@@ -851,7 +851,7 @@ func (p *Parser) parsePrimaryExpression() (*ASTNode, error) {
 		}
 		p.advance()
 		return node, nil
-		
+
 	case TokenLeftParen:
 		p.advance() // skip '('
 		expr, err := p.parseExpression()
@@ -862,7 +862,7 @@ func (p *Parser) parsePrimaryExpression() (*ASTNode, error) {
 			return nil, err
 		}
 		return expr, nil
-		
+
 	case TokenCommand:
 		// Command as expression (for function calls)
 		node := &ASTNode{
@@ -874,7 +874,7 @@ func (p *Parser) parsePrimaryExpression() (*ASTNode, error) {
 		}
 		p.advance()
 		return node, nil
-		
+
 	default:
 		// Try to parse as a command
 		if p.current.Type != TokenEOF {

@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (

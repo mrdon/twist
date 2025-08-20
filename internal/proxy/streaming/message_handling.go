@@ -20,12 +20,12 @@ func NewMessageHandler() *MessageHandler {
 // parseTransmissionDetails extracts details from transmission lines (mirrors Pascal Process.pas lines 1199-1228)
 func (p *TWXParser) parseTransmissionDetails(line string) (string, int, MessageType) {
 	// Mirror Pascal logic exactly for transmission parsing
-	
+
 	// Handle "Incoming transmission from" or "Continuing transmission from"
 	if strings.HasPrefix(line, "Incoming transmission from") || strings.HasPrefix(line, "Continuing transmission from") {
 		return p.parseIncomingTransmission(line)
 	}
-	
+
 	// Handle "Fighter message from sector" (as expected by tests)
 	if strings.HasPrefix(line, "Fighter message from sector") {
 		// Extract sector info from "Fighter message from sector 1234:"
@@ -39,24 +39,24 @@ func (p *TWXParser) parseTransmissionDetails(line string) (string, int, MessageT
 		}
 		return "", 0, MessageFighter
 	}
-	
+
 	// Handle "Computer message:" (as expected by tests)
 	if strings.HasPrefix(line, "Computer message") {
 		return "Computer", 0, MessageComputer
 	}
-	
+
 	// Handle "Deployed Fighters Report Sector"
 	if strings.HasPrefix(line, "Deployed Fighters Report Sector") {
 		// Extract sector info from fighter report
 		sector := p.extractSectorFromFighterReport(line)
 		return "sector " + sector, 0, MessageDeployed
 	}
-	
+
 	// Handle "Shipboard Computers "
 	if strings.HasPrefix(line, "Shipboard Computers ") {
 		return "Computer", 0, MessageShipboard
 	}
-	
+
 	return "", 0, MessageGeneral
 }
 
@@ -97,7 +97,7 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 	if len(parts) < 4 {
 		return "", 0, MessageGeneral
 	}
-	
+
 	// Check for Federation comm-link (Pascal: Copy(Line, Length(Line) - 9, 10) = 'comm-link:')
 	if strings.HasSuffix(line, "comm-link:") {
 		// Pascal: FCurrentMessage := 'F ' + Copy(Line, I, Pos(' on Federation', Line) - I) + ' ';
@@ -112,21 +112,21 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 		p.currentMessage = "F  "
 		return "", 0, MessageFedlink
 	}
-	
+
 	// Check for Fighters (Pascal: GetParameter(Line, 5) = 'Fighters:')
 	if len(parts) >= 4 && parts[3] == "Fighters:" {
 		// Pascal: FCurrentMessage := 'Figs';
 		p.currentMessage = "Figs"
 		return "Fighters", 0, MessageFighter
 	}
-	
+
 	// Check for Computers (Pascal: GetParameter(Line, 5) = 'Computers:')
 	if len(parts) >= 4 && parts[3] == "Computers:" {
 		// Pascal: FCurrentMessage := 'Comp';
 		p.currentMessage = "Comp"
 		return "Computer", 0, MessageComputer
 	}
-	
+
 	// Check for radio transmission on channel (Pascal: Pos(' on channel ', Line) <> 0)
 	if strings.Contains(line, " on channel ") {
 		// Pascal: FCurrentMessage := 'R ' + Copy(Line, I, Pos(' on channel ', Line) - I) + ' ';
@@ -134,7 +134,7 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 		if channelPos > 0 && len(parts) >= 4 {
 			senderStart := strings.Index(line, parts[3]) // Start of 4th parameter
 			sender := line[senderStart:channelPos]
-			
+
 			// Extract channel number
 			channelStr := line[channelPos+12:] // After " on channel "
 			channelParts := strings.Fields(channelStr)
@@ -144,15 +144,15 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 				// This is the correct Pascal behavior - don't strip colon
 				channel = p.parseIntSafe(channelParts[0])
 			}
-			
+
 			// Store channel for message context (mirrors Pascal FCurrentMessage logic)
 			p.currentChannel = channel
 			p.currentMessage = "R " + strings.TrimSpace(sender) + " "
-			
+
 			return strings.TrimSpace(sender), channel, MessageRadio
 		}
 	}
-	
+
 	// Default case - personal hail (Pascal: FCurrentMessage := 'P ' + Copy(Line, I, Length(Line) - I) + ' ';)
 	if len(parts) >= 4 {
 		senderStart := strings.Index(line, parts[3]) // Start of 4th parameter
@@ -162,7 +162,7 @@ func (p *TWXParser) parseIncomingTransmission(line string) (string, int, Message
 		p.currentMessage = "P " + sender + " "
 		return sender, 0, MessagePersonal
 	}
-	
+
 	return "", 0, MessageGeneral
 }
 
@@ -181,10 +181,10 @@ func (p *TWXParser) extractSectorFromFighterReport(line string) string {
 
 // handleEnhancedMessageLine processes message content with database integration
 func (p *TWXParser) handleEnhancedMessageLine(line string) {
-	
+
 	// Determine message type and extract sender/channel info
 	msgType, sender, channel := p.parseMessageContent(line)
-	
+
 	// Add to history with database integration
 	if err := p.addToHistory(msgType, line, sender, channel); err != nil {
 	}
@@ -192,7 +192,7 @@ func (p *TWXParser) handleEnhancedMessageLine(line string) {
 
 // parseMessageContent parses message content to extract type, sender, and channel (mirrors Pascal lines 1192-1228)
 func (p *TWXParser) parseMessageContent(line string) (MessageType, string, int) {
-	// Mirror Pascal logic exactly: 
+	// Mirror Pascal logic exactly:
 	// else if (Copy(Line, 1, 2) = 'R ') or (Copy(Line, 1, 2) = 'F ') then
 	//   TWXGUI.AddToHistory(htMsg, TimeToStr(Time) + '  ' + StripChars(Line))
 	if strings.HasPrefix(line, "R ") || strings.HasPrefix(line, "F ") {
@@ -206,7 +206,7 @@ func (p *TWXParser) parseMessageContent(line string) (MessageType, string, int) 
 		}
 		return MessageGeneral, "", 0
 	}
-	
+
 	// Pascal: else if (Copy(Line, 1, 2) = 'P ') then
 	if strings.HasPrefix(line, "P ") {
 		// Pascal: if (GetParameter(Line, 2) <> 'indicates') then
@@ -218,17 +218,17 @@ func (p *TWXParser) parseMessageContent(line string) (MessageType, string, int) 
 		// Personal message - extract sender from currentMessage
 		return p.parseCurrentPersonalMessage(line)
 	}
-	
+
 	// Handle direct message lines (not part of transmission context)
 	if strings.HasPrefix(line, "Deployed Fighters Report Sector") {
 		sector := p.extractSectorFromFighterReport(line)
 		return MessageDeployed, "sector " + sector, 0
 	}
-	
+
 	if strings.HasPrefix(line, "Shipboard Computers") {
 		return MessageShipboard, "Computer", 0
 	}
-	
+
 	// Handle based on current message context set by transmission headers
 	if p.currentMessage == "Figs" {
 		return MessageFighter, "", 0
@@ -241,7 +241,7 @@ func (p *TWXParser) parseMessageContent(line string) (MessageType, string, int) 
 	} else if strings.HasPrefix(p.currentMessage, "F ") {
 		return MessageFedlink, p.extractSenderFromCurrentMessage(), 0
 	}
-	
+
 	return MessageGeneral, "", 0
 }
 
@@ -321,12 +321,12 @@ func (p *TWXParser) GetRecentMessages(count int) []MessageHistory {
 	if count <= 0 || len(p.messageHistory) == 0 {
 		return []MessageHistory{}
 	}
-	
+
 	start := len(p.messageHistory) - count
 	if start < 0 {
 		start = 0
 	}
-	
+
 	return p.messageHistory[start:]
 }
 
@@ -340,14 +340,14 @@ func (p *TWXParser) addToHistory(msgType MessageType, content, sender string, ch
 		Sender:    sender,
 		Channel:   channel,
 	}
-	
+
 	// Add to in-memory history (with size limit)
 	p.messageHistory = append(p.messageHistory, message)
 	if len(p.messageHistory) > p.maxHistorySize {
 		// Remove oldest messages
 		p.messageHistory = p.messageHistory[len(p.messageHistory)-p.maxHistorySize:]
 	}
-	
+
 	// Save to database (required) - convert inline without converter
 	dbMessage := database.TMessageHistory{
 		Type:      database.TMessageType(message.Type),
@@ -359,6 +359,6 @@ func (p *TWXParser) addToHistory(msgType MessageType, content, sender string, ch
 	if err := p.database.AddMessageToHistory(dbMessage); err != nil {
 		return err
 	}
-	
+
 	return nil
 }

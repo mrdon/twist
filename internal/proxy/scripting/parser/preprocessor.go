@@ -15,7 +15,7 @@ type ConditionStruct struct {
 	AtElse   bool   // true if we've seen ELSE in this IF block
 }
 
-// Preprocessor handles macro expansion (IF/ELSE/END, WHILE/END) 
+// Preprocessor handles macro expansion (IF/ELSE/END, WHILE/END)
 // This mirrors the functionality in TWX ScriptCmp.pas
 type Preprocessor struct {
 	ifStack      []*ConditionStruct // Stack of nested control structures
@@ -41,7 +41,7 @@ func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 
 	for lineNum, line := range lines {
 		line = strings.TrimSpace(line)
-		
+
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
 			p.output = append(p.output, line)
@@ -56,7 +56,7 @@ func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 		}
 
 		cmd := strings.ToUpper(parts[0])
-		
+
 		// Process macro commands
 		switch cmd {
 		case "IF":
@@ -105,22 +105,22 @@ func (p *Preprocessor) processIf(parts []string, lineNum int) error {
 		AtElse:  false,
 		IsWhile: false,
 	}
-	
+
 	// Generate unique labels
 	p.ifLabelCount++
 	conStruct.ConLabel = "::" + strconv.Itoa(p.ifLabelCount)
 	p.ifLabelCount++
 	conStruct.EndLabel = "::" + strconv.Itoa(p.ifLabelCount)
-	
+
 	// Push onto stack
 	p.ifStack = append(p.ifStack, conStruct)
-	
+
 	// Generate BRANCH command: if condition is false, jump to ConLabel
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
 	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel))
-	
+
 	return nil
 }
 
@@ -144,11 +144,11 @@ func (p *Preprocessor) processElse(parts []string, lineNum int) error {
 	}
 
 	conStruct.AtElse = true
-	
+
 	// Generate GOTO to end and place the condition label
 	p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.EndLabel))
 	p.output = append(p.output, conStruct.ConLabel)
-	
+
 	return nil
 }
 
@@ -174,17 +174,17 @@ func (p *Preprocessor) processElseIf(parts []string, lineNum int) error {
 	// Generate GOTO to end and place the old condition label
 	p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.EndLabel))
 	p.output = append(p.output, conStruct.ConLabel)
-	
+
 	// Generate new condition label for this ELSEIF
 	p.ifLabelCount++
 	conStruct.ConLabel = "::" + strconv.Itoa(p.ifLabelCount)
-	
+
 	// Generate new BRANCH command
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
 	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel))
-	
+
 	return nil
 }
 
@@ -199,23 +199,23 @@ func (p *Preprocessor) processWhile(parts []string, lineNum int) error {
 	conStruct := &ConditionStruct{
 		IsWhile: true,
 	}
-	
+
 	// Generate unique labels
 	p.ifLabelCount++
 	conStruct.ConLabel = "::" + strconv.Itoa(p.ifLabelCount)
 	p.ifLabelCount++
 	conStruct.EndLabel = "::" + strconv.Itoa(p.ifLabelCount)
-	
+
 	// Push onto stack
 	p.ifStack = append(p.ifStack, conStruct)
-	
+
 	// Generate loop start label and BRANCH command
 	p.output = append(p.output, conStruct.ConLabel)
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
 	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.EndLabel))
-	
+
 	return nil
 }
 
@@ -232,7 +232,7 @@ func (p *Preprocessor) processEnd(parts []string, lineNum int) error {
 	// Pop condition structure from stack
 	conStruct := p.ifStack[len(p.ifStack)-1]
 	p.ifStack = p.ifStack[:len(p.ifStack)-1]
-	
+
 	if conStruct.IsWhile {
 		// For WHILE: jump back to loop start, then place end label
 		p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.ConLabel))
@@ -240,9 +240,9 @@ func (p *Preprocessor) processEnd(parts []string, lineNum int) error {
 		// For IF: place the condition label (in case there was no ELSE)
 		p.output = append(p.output, conStruct.ConLabel)
 	}
-	
+
 	// Place the end label
 	p.output = append(p.output, conStruct.EndLabel)
-	
+
 	return nil
 }

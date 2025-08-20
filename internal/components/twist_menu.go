@@ -15,10 +15,10 @@ type MenuItem struct {
 type MenuBorderStyle int
 
 const (
-	MenuBorderStyleSingle MenuBorderStyle = iota // Single-line box drawing characters
-	MenuBorderStyleDouble                        // Double-line box drawing characters  
-	MenuBorderStyleHeavy                         // Heavy/thick box drawing characters
-	MenuBorderStyleRounded                       // Rounded corner characters
+	MenuBorderStyleSingle  MenuBorderStyle = iota // Single-line box drawing characters
+	MenuBorderStyleDouble                         // Double-line box drawing characters
+	MenuBorderStyleHeavy                          // Heavy/thick box drawing characters
+	MenuBorderStyleRounded                        // Rounded corner characters
 )
 
 // BorderChars defines the characters used for drawing borders
@@ -58,17 +58,17 @@ func getRunes(style MenuBorderStyle) (horizontal, vertical, topLeft, topRight, b
 
 // ToTviewBorders converts our BorderChars to tview's global Borders struct type
 func (bc *BorderChars) ToTviewBorders() struct {
-	Horizontal  rune
-	Vertical    rune
-	TopLeft     rune
-	TopRight    rune
-	BottomLeft  rune
-	BottomRight rune
-	LeftT       rune
-	RightT      rune
-	TopT        rune
-	BottomT     rune
-	Cross       rune
+	Horizontal       rune
+	Vertical         rune
+	TopLeft          rune
+	TopRight         rune
+	BottomLeft       rune
+	BottomRight      rune
+	LeftT            rune
+	RightT           rune
+	TopT             rune
+	BottomT          rune
+	Cross            rune
 	HorizontalFocus  rune
 	VerticalFocus    rune
 	TopLeftFocus     rune
@@ -80,19 +80,19 @@ func (bc *BorderChars) ToTviewBorders() struct {
 	normalH, normalV, normalTL, normalTR, normalBL, normalBR := getRunes(bc.Normal)
 	// Get runes for focus state
 	focusH, focusV, focusTL, focusTR, focusBL, focusBR := getRunes(bc.Focus)
-	
+
 	return struct {
-		Horizontal  rune
-		Vertical    rune
-		TopLeft     rune
-		TopRight    rune
-		BottomLeft  rune
-		BottomRight rune
-		LeftT       rune
-		RightT      rune
-		TopT        rune
-		BottomT     rune
-		Cross       rune
+		Horizontal       rune
+		Vertical         rune
+		TopLeft          rune
+		TopRight         rune
+		BottomLeft       rune
+		BottomRight      rune
+		LeftT            rune
+		RightT           rune
+		TopT             rune
+		BottomT          rune
+		Cross            rune
 		HorizontalFocus  rune
 		VerticalFocus    rune
 		TopLeftFocus     rune
@@ -100,12 +100,12 @@ func (bc *BorderChars) ToTviewBorders() struct {
 		BottomLeftFocus  rune
 		BottomRightFocus rune
 	}{
-		Horizontal:       normalH,
-		Vertical:         normalV,
-		TopLeft:          normalTL,
-		TopRight:         normalTR,
-		BottomLeft:       normalBL,
-		BottomRight:      normalBR,
+		Horizontal:  normalH,
+		Vertical:    normalV,
+		TopLeft:     normalTL,
+		TopRight:    normalTR,
+		BottomLeft:  normalBL,
+		BottomRight: normalBR,
 		// Use standard junction characters for T-joints and cross
 		LeftT:            '├',
 		RightT:           '┤',
@@ -120,7 +120,6 @@ func (bc *BorderChars) ToTviewBorders() struct {
 		BottomRightFocus: focusBR,
 	}
 }
-
 
 // TwistMenu wraps a tview.List to provide custom border character support
 // This allows us to have different border styles for menus without affecting
@@ -151,10 +150,10 @@ func (tm *TwistMenu) SetBorderChars(borderChars *BorderChars) *TwistMenu {
 // AddMenuItem adds a menu item with automatic shortcut registration
 func (tm *TwistMenu) AddMenuItem(item MenuItem, callback func()) {
 	tm.menuItems = append(tm.menuItems, item)
-	
+
 	// Add to the underlying tview.List
 	tm.List.AddItem(item.Label, "", 0, callback)
-	
+
 	// Register shortcut if present
 	if item.Shortcut != "" {
 		tm.shortcutManager.RegisterShortcut(item.Shortcut, callback)
@@ -167,12 +166,12 @@ func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 	tm.List.Clear()
 	tm.shortcutManager = NewShortcutManager() // Reset shortcuts
 	tm.menuItems = items
-	
+
 	// Check if any items have shortcuts to determine layout
 	hasAnyShortcuts := false
 	maxLabelWidth := 0
 	maxShortcutWidth := 0
-	
+
 	for _, item := range items {
 		if len(item.Label) > maxLabelWidth {
 			maxLabelWidth = len(item.Label)
@@ -184,14 +183,14 @@ func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 			}
 		}
 	}
-	
+
 	// Add items with proper display formatting
 	for i, item := range items {
 		var callback func()
 		if i < len(callbacks) {
 			callback = callbacks[i]
 		}
-		
+
 		// Format display text with shortcut if present
 		displayText := item.Label
 		if hasAnyShortcuts && item.Shortcut != "" {
@@ -203,10 +202,10 @@ func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 			}
 			displayText = item.Label + spaces + item.Shortcut
 		}
-		
+
 		// Add to the underlying tview.List with formatted display text
 		tm.List.AddItem(displayText, "", 0, callback)
-		
+
 		// Register shortcut if present
 		if item.Shortcut != "" {
 			tm.shortcutManager.RegisterShortcut(item.Shortcut, callback)
@@ -234,13 +233,13 @@ func (tm *TwistMenu) Draw(screen tcell.Screen) {
 	if tm.borderChars != nil {
 		// Save the original tview border characters
 		originalBorders := tview.Borders
-		
+
 		// Apply our custom border characters globally
 		tview.Borders = tm.borderChars.ToTviewBorders()
-		
+
 		// Call the original List.Draw method with our custom borders
 		tm.List.Draw(screen)
-		
+
 		// Restore the original border characters to avoid affecting other components
 		tview.Borders = originalBorders
 	} else {

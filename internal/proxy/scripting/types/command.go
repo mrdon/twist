@@ -44,18 +44,18 @@ type VMInterface interface {
 	SetVariable(name string, value *Value)
 	GetVarParam(name string) *VarParam
 	SetVarParam(name string, varParam *VarParam)
-	
+
 	// Script control
 	Goto(label string) error
 	Gosub(label string) error
 	Return() error
 	Halt() error
 	Pause() error
-	
+
 	// Output
 	Echo(message string) error
 	ClientMessage(message string) error
-	
+
 	// Input
 	GetInput(prompt string) (string, error)
 	IsWaitingForInput() bool
@@ -64,33 +64,33 @@ type VMInterface interface {
 	JustResumedFromInput() bool
 	ClearPendingInput()
 	WaitFor(text string) error
-	
+
 	// Network
 	Send(data string) error
-	
+
 	// Game interface
 	GetGameInterface() GameInterface
-	
+
 	// Script management
 	GetCurrentScript() ScriptInterface
 	GetCurrentLine() int
 	LoadAdditionalScript(filename string) (ScriptInterface, error)
 	StopScript(scriptID string) error
 	GetScriptManager() interface{} // Returns the script manager for advanced operations
-	
+
 	// Trigger management
 	SetTrigger(trigger TriggerInterface) error
 	KillTrigger(triggerID string) error
 	GetActiveTriggersCount() int
 	KillAllTriggers()
-	
+
 	// Error handling
 	Error(message string) error
-	
+
 	// Processing filters (for testing)
 	ProcessInput(filter string) error
 	ProcessOutput(filter string) error
-	
+
 	// Expression evaluation
 	EvaluateExpression(expression string) (*Value, error)
 }
@@ -102,25 +102,25 @@ type GameInterface interface {
 	SetSectorParameter(sector int, name, value string) error
 	GetSectorParameter(sector int, name string) (string, error)
 	GetDatabase() interface{} // Returns the underlying database for script management
-	
+
 	// Navigation
 	GetCourse(from, to int) ([]int, error)
 	GetDistance(from, to int) (int, error)
 	GetAllCourses(from int) (map[int][]int, error)
 	GetNearestWarps(sector int, count int) ([]int, error)
-	
+
 	// Current state
 	GetCurrentSector() int
 	GetCurrentPrompt() string
-	
+
 	// Network
 	SendCommand(cmd string) error
 	GetLastOutput() string
-	
+
 	// Script variable persistence
 	SaveScriptVariable(name string, value *Value) error
 	LoadScriptVariable(name string) (*Value, error)
-	
+
 	// System constants
 	GetSystemConstants() SystemConstantsInterface
 }

@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -9,7 +7,7 @@ import (
 // TestComprehensiveWorkflow_RealIntegration tests comprehensive TWX script combining multiple features
 func TestComprehensiveWorkflow_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Comprehensive TWX Script Test
 # Testing core functionality
@@ -54,10 +52,10 @@ echo "100 / 4 = " $quotient
 
 echo "Comprehensive test completed!"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Testing basic assignment and concatenation",
 		"Name: TWX Test",
@@ -71,14 +69,14 @@ echo "Comprehensive test completed!"
 		"100 / 4 = 25",
 		"Comprehensive test completed!",
 	}
-	
+
 	tester.AssertOutput(result, expectedOutputs)
 }
 
 // TestGameScriptSimulation_RealIntegration tests a realistic TWX game automation scenario
 func TestGameScriptSimulation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Simulate a simple TWX game interaction script
 echo "Starting game automation..."
@@ -106,14 +104,14 @@ echo "First inventory item: " $item
 
 echo "Script completed successfully"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify game commands were sent
 	expectedCommands := []string{"look", "m 100", "p"}
 	tester.AssertCommands(result, expectedCommands)
-	
+
 	// Verify output
 	tester.AssertOutputContains(result, "Starting game automation...")
 	tester.AssertOutputContains(result, "Moving to sector 100")
@@ -124,7 +122,7 @@ echo "Script completed successfully"
 // TestMathAndLogicWorkflow_RealIntegration tests complex mathematical operations with conditional logic
 func TestMathAndLogicWorkflow_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test complex mathematical operations and logic
 setVar $base 10
@@ -150,26 +148,26 @@ end
 
 echo "Final factorial: " $factorial
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Calculation result: 35",
 		"Factorial step 1: 1",
-		"Factorial step 2: 2", 
+		"Factorial step 2: 2",
 		"Factorial step 3: 6",
 		"Factorial step 4: 24",
 		"Final factorial: 24",
 	}
-	
+
 	tester.AssertOutput(result, expectedOutputs)
 }
 
 // TestStringProcessingWorkflow_RealIntegration tests complex string processing workflows
 func TestStringProcessingWorkflow_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test complex string processing
 setVar $input "Hello World Test"
@@ -189,22 +187,22 @@ len $word3 $word3_len
 
 echo "Processed: " $upper_word1 " " $lower_word2 " (len=" $word3_len ")"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Words: Hello | World | Test",
 		"Processed: HELLO world (len=4)",
 	}
-	
+
 	tester.AssertOutput(result, expectedOutputs)
 }
 
 // TestArrayWorkflow_RealIntegration tests advanced array operations with loops
 func TestArrayWorkflow_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Test advanced array operations
 echo "Creating and populating arrays..."
@@ -249,10 +247,10 @@ int $average $average
 
 echo "Average score: " $average
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Creating and populating arrays...",
 		"Student Alice scored 95",
@@ -260,24 +258,24 @@ echo "Average score: " $average
 		"Student Charlie scored 92",
 		"Average score: 91",
 	}
-	
+
 	tester.AssertOutput(result, expectedOutputs)
 }
 
 // TestErrorHandlingWorkflow_RealIntegration tests error handling in workflow scenarios
 func TestErrorHandlingWorkflow_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	// Test script with array bounds error
 	script := `
 SETARRAY $test 2
 setVar $test[5] "Out of bounds"
 echo "This should not execute"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertError(result)
-	
+
 	// Should not contain the echo output
 	for _, output := range result.Output {
 		if output == "This should not execute" {

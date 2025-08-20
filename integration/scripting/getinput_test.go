@@ -8,7 +8,7 @@ import (
 // TestGetInputCommand_BasicUsage tests GETINPUT command with basic usage
 func TestGetInputCommand_BasicUsage_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test getinput command basic functionality
 		setVar $defaultValue "test_default"
@@ -16,12 +16,12 @@ func TestGetInputCommand_BasicUsage_RealIntegration(t *testing.T) {
 		echo "Got input: " $userInput
 		halt
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// The script should pause at getinput and display the prompt
 	// This is the correct TWX behavior - script waits for user input
 	expectedPrompt := "Enter test value [test_default]"
@@ -32,7 +32,7 @@ func TestGetInputCommand_BasicUsage_RealIntegration(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !found {
 		t.Errorf("Expected prompt containing %q, got outputs: %v", expectedPrompt, result.Output)
 	}
@@ -41,19 +41,19 @@ func TestGetInputCommand_BasicUsage_RealIntegration(t *testing.T) {
 // TestGetInputCommand_WithoutDefault tests GETINPUT without default value
 func TestGetInputCommand_WithoutDefault_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test getinput without default
 		getinput $userInput "Enter your name"
 		echo "Hello " $userInput "!"
 		halt
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// Script should pause and show prompt without default value brackets
 	expectedPrompt := "Enter your name"
 	found := false
@@ -63,7 +63,7 @@ func TestGetInputCommand_WithoutDefault_RealIntegration(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !found {
 		t.Errorf("Expected prompt %q, got outputs: %v", expectedPrompt, result.Output)
 	}
@@ -72,7 +72,7 @@ func TestGetInputCommand_WithoutDefault_RealIntegration(t *testing.T) {
 // TestGetInputCommand_MultipleInputs tests multiple GETINPUT commands
 func TestGetInputCommand_MultipleInputs_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test multiple getinput calls like the 1_Port.ts script
 		echo "Port Pair Trading Script"
@@ -82,12 +82,12 @@ func TestGetInputCommand_MultipleInputs_RealIntegration(t *testing.T) {
 		echo "Configuration: Sector=" $sector2 " Times=" $timesLeft " Percent=" $percent
 		halt
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// Should display the banner and pause at first getinput
 	bannerFound := false
 	promptFound := false
@@ -99,11 +99,11 @@ func TestGetInputCommand_MultipleInputs_RealIntegration(t *testing.T) {
 			promptFound = true
 		}
 	}
-	
+
 	if !bannerFound {
 		t.Error("Expected to see script banner in output")
 	}
-	
+
 	if !promptFound {
 		t.Errorf("Expected to see first input prompt, got outputs: %v", result.Output)
 	}
@@ -112,18 +112,18 @@ func TestGetInputCommand_MultipleInputs_RealIntegration(t *testing.T) {
 // TestGetInputCommand_PromptFormatting tests prompt formatting with and without defaults
 func TestGetInputCommand_PromptFormatting_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test prompt formatting - this should pause at first getinput
 		getinput $test "Test prompt without default"
 		halt
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// Should show prompt without brackets since no default provided
 	expectedPrompt := "Test prompt without default"
 	found := false
@@ -133,7 +133,7 @@ func TestGetInputCommand_PromptFormatting_RealIntegration(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !found {
 		t.Errorf("Expected prompt without brackets %q, got outputs: %v", expectedPrompt, result.Output)
 	}

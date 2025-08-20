@@ -7,8 +7,8 @@ import (
 // ScriptInterpreter implements the IScriptInterpreter interface
 // This is a stub implementation that mirrors Pascal TWXInterpreter functionality
 type ScriptInterpreter struct {
-	eventBus    IEventBus
-	scripts     map[string]interface{} // In a full implementation, this would hold script objects
+	eventBus        IEventBus
+	scripts         map[string]interface{} // In a full implementation, this would hold script objects
 	triggersEnabled bool
 }
 
@@ -23,11 +23,11 @@ func NewScriptInterpreter(eventBus IEventBus) *ScriptInterpreter {
 
 // TextEvent fires a text event to the script system (Pascal: TWXInterpreter.TextEvent)
 func (si *ScriptInterpreter) TextEvent(line string, outbound bool) {
-	
+
 	if si.eventBus != nil {
 		event := Event{
-			Type:      EventText,
-			Data:      map[string]interface{}{
+			Type: EventText,
+			Data: map[string]interface{}{
 				"line":     line,
 				"outbound": outbound,
 			},
@@ -40,11 +40,11 @@ func (si *ScriptInterpreter) TextEvent(line string, outbound bool) {
 
 // TextLineEvent fires a text line event to the script system (Pascal: TWXInterpreter.TextLineEvent)
 func (si *ScriptInterpreter) TextLineEvent(line string, outbound bool) {
-	
+
 	if si.eventBus != nil {
 		event := Event{
-			Type:      EventTextLine,
-			Data:      map[string]interface{}{
+			Type: EventTextLine,
+			Data: map[string]interface{}{
 				"line":     line,
 				"outbound": outbound,
 			},
@@ -60,12 +60,11 @@ func (si *ScriptInterpreter) ActivateTriggers() {
 	if !si.triggersEnabled {
 		return
 	}
-	
-	
+
 	if si.eventBus != nil {
 		event := Event{
-			Type:      EventTrigger,
-			Data:      map[string]interface{}{
+			Type: EventTrigger,
+			Data: map[string]interface{}{
 				"action": "activate",
 			},
 			Source:    "ScriptInterpreter",
@@ -77,11 +76,11 @@ func (si *ScriptInterpreter) ActivateTriggers() {
 
 // AutoTextEvent fires an auto text event to the script system (Pascal: TWXInterpreter.AutoTextEvent)
 func (si *ScriptInterpreter) AutoTextEvent(line string, outbound bool) {
-	
+
 	if si.eventBus != nil {
 		event := Event{
-			Type:      EventAutoText,
-			Data:      map[string]interface{}{
+			Type: EventAutoText,
+			Data: map[string]interface{}{
 				"line":     line,
 				"outbound": outbound,
 			},
@@ -94,7 +93,7 @@ func (si *ScriptInterpreter) AutoTextEvent(line string, outbound bool) {
 
 // LoadScript loads a script file (stub implementation)
 func (si *ScriptInterpreter) LoadScript(filename string) error {
-	
+
 	// In a full implementation, this would load and compile the script
 	si.scripts[filename] = nil // Placeholder
 	return nil
@@ -102,22 +101,22 @@ func (si *ScriptInterpreter) LoadScript(filename string) error {
 
 // UnloadScript unloads a script (stub implementation)
 func (si *ScriptInterpreter) UnloadScript(name string) error {
-	
+
 	if _, exists := si.scripts[name]; !exists {
 		return fmt.Errorf("script '%s' not found", name)
 	}
-	
+
 	delete(si.scripts, name)
 	return nil
 }
 
 // ExecuteScript executes a loaded script (stub implementation)
 func (si *ScriptInterpreter) ExecuteScript(name string, params map[string]interface{}) error {
-	
+
 	if _, exists := si.scripts[name]; !exists {
 		return fmt.Errorf("script '%s' not found", name)
 	}
-	
+
 	// In a full implementation, this would execute the script with the given parameters
 	return nil
 }

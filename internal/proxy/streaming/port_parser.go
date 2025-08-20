@@ -12,10 +12,10 @@ import (
 
 // initializePortData initializes port data structure for the current sector
 func (p *TWXParser) initializePortData(portName string) {
-	
+
 	// Store port name for database saving
 	p.currentPortName = portName
-	
+
 	// Clear any existing port data
 	// Phase 3: Product data clearing no longer needed with trackers
 }
@@ -26,13 +26,13 @@ func (p *TWXParser) handlePortCommodity(line string) {
 	if p.currentDisplay != DisplayPortCR && p.currentDisplay != DisplayPort {
 		return
 	}
-	
+
 	debug.Log("PORT: Processing commodity line: '%s' (len=%d)", line, len(line))
-	
+
 	// Find the position of '%' character
 	percentPos := strings.Index(line, "%")
 	debug.Log("PORT: percent found at position %d", percentPos)
-	
+
 	// Check if this line has the '%' character at position 33 (TWX pattern)
 	if len(line) > 33 && line[32] == '%' {
 		debug.Log("PORT: Using TWX pattern parsing (%% at pos 33)")
@@ -54,23 +54,23 @@ func (p *TWXParser) handlePortCommodity(line string) {
 // parsePortCommodityLine parses commodity lines using TWX Pascal patterns
 func (p *TWXParser) parsePortCommodityLine(line string) {
 	debug.Log("PORT: parsePortCommodityLine called with: '%s'", line)
-	
+
 	// TWX Pascal parsing logic:
 	// Line := StringReplace(Line, '%', '', [rfReplaceAll]);
-	// StatFuel := GetParameter(Line, 3);    // 'Buying' or 'Selling'  
+	// StatFuel := GetParameter(Line, 3);    // 'Buying' or 'Selling'
 	// QtyFuel := StrToIntSafe(GetParameter(Line, 4));    // Quantity
 	// PercFuel := StrToIntSafe(GetParameter(Line, 5));   // Percentage
-	
+
 	// Remove '%' character and split into parameters
 	cleanLine := strings.ReplaceAll(line, "%", "")
 	parts := strings.Fields(cleanLine)
 	debug.Log("PORT: cleanLine='%s', parts=%v (len=%d)", cleanLine, parts, len(parts))
-	
+
 	if len(parts) < 5 {
 		debug.Log("PORT: Not enough parts (%d), skipping", len(parts))
 		return
 	}
-	
+
 	// Determine commodity type from the line
 	productType := p.getProductTypeFromLine(line)
 	debug.Log("PORT: productType=%d for line: '%s'", productType, line)
@@ -78,7 +78,7 @@ func (p *TWXParser) parsePortCommodityLine(line string) {
 		debug.Log("PORT: Unknown product type, skipping")
 		return
 	}
-	
+
 	// Find the status word ("Selling" or "Buying") position to handle multi-word commodity names
 	statusPos := -1
 	for i, part := range parts {
@@ -88,26 +88,26 @@ func (p *TWXParser) parsePortCommodityLine(line string) {
 		}
 	}
 	debug.Log("PORT: statusPos=%d", statusPos)
-	
+
 	if statusPos == -1 || statusPos+2 >= len(parts) {
 		debug.Log("PORT: Invalid status position (%d) or not enough parts after status", statusPos)
 		return
 	}
-	
+
 	// Extract data based on status position
-	status := parts[statusPos]           // "Selling" or "Buying"
-	quantityStr := parts[statusPos+1]    // Quantity after status
-	percentStr := parts[statusPos+2]     // Percentage after quantity
-	
+	status := parts[statusPos]        // "Selling" or "Buying"
+	quantityStr := parts[statusPos+1] // Quantity after status
+	percentStr := parts[statusPos+2]  // Percentage after quantity
+
 	debug.Log("PORT: status='%s', quantityStr='%s', percentStr='%s'", status, quantityStr, percentStr)
-	
+
 	// Parse values
 	quantity := p.parseIntSafeWithCommas(quantityStr)
 	percent := p.parseIntSafe(percentStr)
 	isBuying := strings.EqualFold(status, "Buying")
-	
+
 	debug.Log("PORT: parsed quantity=%d, percent=%d, isBuying=%v", quantity, percent, isBuying)
-	
+
 	// Phase 3: Track product data directly in PortTracker
 	if p.portTracker != nil {
 		debug.Log("PORT: portTracker exists, updating product data")
@@ -137,46 +137,46 @@ func (p *TWXParser) processLineInPortContext(line string) {
 		debug.Log("PORT: processLineInPortContext skipping line (display=%d): '%s'", p.currentDisplay, line)
 		return
 	}
-	
+
 	debug.Log("PORT: processLineInPortContext processing line (display=%d): '%s'", p.currentDisplay, line)
-	
+
 	// Check for commodity selection lines ("How many holds of X do you want to buy")
 	if strings.Contains(line, "How many holds of") && strings.Contains(line, "do you want to buy") {
 		p.parseCurrentCommodityContext(line)
 	}
-	
+
 	// Check for commodity lines with different patterns
 	lineLower := strings.ToLower(line)
-	
+
 	// Pattern 1: Standard commodity lines with '%' character
 	if strings.Contains(line, "%") {
 		if strings.Contains(lineLower, "fuel ore") ||
-		   strings.Contains(lineLower, "organics") ||
-		   strings.Contains(lineLower, "equipment") {
+			strings.Contains(lineLower, "organics") ||
+			strings.Contains(lineLower, "equipment") {
 			p.handlePortCommodity(line)
 		}
 	}
-	
+
 	// Pattern 2: Trading transaction confirmations ("Agreed, X units.")
 	if strings.Contains(line, "Agreed,") && strings.Contains(line, "units.") {
 		p.parseTradeTransaction(line)
 	}
-	
+
 	// Pattern 3: Player status updates during trading
 	if strings.Contains(line, "You have ") && strings.Contains(line, "credits") {
 		p.parsePlayerStatsFromPortLine(line)
 	}
-	
+
 	// Pattern 4: Experience and promotion notifications
 	if strings.Contains(line, "experience point") || strings.Contains(line, "promoted to") {
 		p.parseExperienceFromPortLine(line)
 	}
-	
+
 	// Pattern 5: Turn deduction
 	if strings.Contains(line, "turn deducted") || strings.Contains(line, "turns left") {
 		p.parseTurnsFromPortLine(line)
 	}
-	
+
 	// Pattern 5: Command prompt - exit port context
 	if strings.Contains(line, "Command [") {
 		debug.Log("PORT: Found Command prompt line: '%s'", line)
@@ -189,7 +189,7 @@ func (p *TWXParser) processLineInPortContext(line string) {
 
 // parsePlayerStatsFromPortLine extracts player stats from port trading lines
 func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
-	
+
 	// Example: "You have 374,916 credits and 15 empty cargo holds."
 	// Extract credits
 	if strings.Contains(line, "credits") {
@@ -203,7 +203,7 @@ func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
 						p.playerStatsTracker = NewPlayerStatsTracker()
 					}
 					p.playerStatsTracker.SetCredits(credits)
-					
+
 					// Save and fire event with fresh database read
 					p.errorRecoveryHandler("savePlayerStatsFromPort", func() error {
 						err := p.playerStatsTracker.Execute(p.database.GetDB())
@@ -214,7 +214,7 @@ func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
 						}
 						return err
 					})
-					
+
 					// Also execute port tracker if it has updates, since port trading might be ending
 					if p.portTracker != nil && p.portTracker.HasUpdates() {
 						updates := p.portTracker.GetUpdates()
@@ -235,7 +235,7 @@ func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
 			}
 		}
 	}
-	
+
 	// Extract cargo holds - track actual values, don't guess
 	if strings.Contains(line, "cargo holds") {
 		parts := strings.Fields(line)
@@ -243,11 +243,11 @@ func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
 			if strings.EqualFold(part, "and") && i+1 < len(parts) {
 				holdsStr := parts[i+1]
 				if emptyHolds := p.parseIntSafe(holdsStr); emptyHolds >= 0 {
-					// Update player stats using straight-sql tracker  
+					// Update player stats using straight-sql tracker
 					if p.playerStatsTracker == nil {
 						p.playerStatsTracker = NewPlayerStatsTracker()
 					}
-					
+
 					// Calculate total holds: empty holds + cargo holds
 					// First get current cargo to determine total capacity
 					if currentStats, err := p.database.GetPlayerStatsInfo(); err == nil {
@@ -269,7 +269,7 @@ func (p *TWXParser) parsePlayerStatsFromPortLine(line string) {
 
 // parseExperienceFromPortLine extracts experience changes from port activity
 func (p *TWXParser) parseExperienceFromPortLine(line string) {
-	
+
 	// Example: "For your great trading you receive 2 experience point(s)."
 	if strings.Contains(line, "experience point") {
 		parts := strings.Fields(line)
@@ -286,7 +286,7 @@ func (p *TWXParser) parseExperienceFromPortLine(line string) {
 					if currentStats, err := p.database.GetPlayerStatsInfo(); err == nil {
 						p.playerStatsTracker.SetExperience(currentStats.Experience + expGain)
 					}
-					
+
 					// Save player stats to database and fire event
 					// Execute tracker and fire fresh database event
 					p.errorRecoveryHandler("savePlayerStatsFromPort", func() error {
@@ -307,7 +307,7 @@ func (p *TWXParser) parseExperienceFromPortLine(line string) {
 
 // parseTurnsFromPortLine extracts turn changes from port activity
 func (p *TWXParser) parseTurnsFromPortLine(line string) {
-	
+
 	// Example: "One turn deducted, 19993 turns left."
 	if strings.Contains(line, "turns left") {
 		parts := strings.Fields(line)
@@ -321,7 +321,7 @@ func (p *TWXParser) parseTurnsFromPortLine(line string) {
 						p.playerStatsTracker = NewPlayerStatsTracker()
 					}
 					p.playerStatsTracker.SetTurns(turns)
-					
+
 					// Save player stats to database and fire event
 					// Execute tracker and fire fresh database event
 					p.errorRecoveryHandler("savePlayerStatsFromPort", func() error {
@@ -342,30 +342,29 @@ func (p *TWXParser) parseTurnsFromPortLine(line string) {
 
 // exitPortContext exits port parsing context and saves port data
 func (p *TWXParser) exitPortContext() {
-	
+
 	// Phase 3: Port data including class is tracked in PortTracker during parsing
 	p.savePortData()
-	
+
 	// Reset display mode
 	p.currentDisplay = DisplayNone
-	
+
 	// Clear product data
 	// Phase 3: Product data clearing no longer needed with trackers
 }
 
-
 // savePortData saves port data to the database
 func (p *TWXParser) savePortData() {
-	
+
 	if p.database == nil || p.portSectorIndex <= 0 {
 		return
 	}
-	
+
 	// Phase 3: Port data is tracked using PortTracker (no intermediate objects needed)
 	if p.portTracker != nil {
 		p.portTracker.SetName(p.currentPortName)
 		debug.Log("PORT: Tracker updated with port name")
-		
+
 		// Execute the port tracker to save data to database
 		if p.portTracker.HasUpdates() {
 			err := p.portTracker.Execute(p.database.GetDB())
@@ -373,7 +372,7 @@ func (p *TWXParser) savePortData() {
 				debug.Log("PORT: Failed to execute port tracker: %v", err)
 			} else {
 				debug.Log("PORT: Successfully executed port tracker")
-				
+
 				// Fire OnPortUpdated API event with fresh database read
 				if p.tuiAPI != nil {
 					if portInfo, portErr := p.database.GetPortInfo(p.portSectorIndex); portErr == nil && portInfo != nil {
@@ -390,11 +389,11 @@ func (p *TWXParser) savePortData() {
 
 // parseCurrentCommodityContext extracts which commodity is currently being traded
 func (p *TWXParser) parseCurrentCommodityContext(line string) {
-	
+
 	// Example: "How many holds of Fuel Ore do you want to buy [20]?"
 	// Iterate through all known product types to find a match
 	allProductTypes := []ProductType{ProductFuelOre, ProductOrganics, ProductEquipment}
-	
+
 	for _, productType := range allProductTypes {
 		productName := p.getProductTypeName(productType)
 		if strings.Contains(line, productName) {
@@ -402,15 +401,15 @@ func (p *TWXParser) parseCurrentCommodityContext(line string) {
 			return
 		}
 	}
-	
+
 }
 
 // parseTradeTransaction processes "Agreed, X units." lines to track purchases
 func (p *TWXParser) parseTradeTransaction(line string) {
-	
+
 	// Example: "Agreed, 2 units."
 	parts := strings.Fields(line)
-	
+
 	// Look for pattern: ["Agreed,", "X", "units."]
 	for i, part := range parts {
 		if strings.EqualFold(part, "units.") && i > 0 {
@@ -421,7 +420,7 @@ func (p *TWXParser) parseTradeTransaction(line string) {
 				if p.playerStatsTracker == nil {
 					p.playerStatsTracker = NewPlayerStatsTracker()
 				}
-				
+
 				// Read current values and increment them
 				if currentStats, err := p.database.GetPlayerStatsInfo(); err == nil {
 					switch p.currentTradingCommodity {
@@ -443,19 +442,19 @@ func (p *TWXParser) parseTradeTransaction(line string) {
 func (p *TWXParser) getPortDataFromTracker() ([3]int, [3]int, [3]bool) {
 	// Arrays for [fuelore, organics, equipment]
 	amounts := [3]int{0, 0, 0}
-	percents := [3]int{0, 0, 0}  
+	percents := [3]int{0, 0, 0}
 	buys := [3]bool{false, false, false}
-	
+
 	debug.Log("PORT: getPortDataFromTracker called for sector %d", p.portSectorIndex)
-	
+
 	// Try to get existing data from database for this sector
 	if p.database != nil && p.portSectorIndex > 0 {
 		if portInfo, err := p.database.GetPortInfo(p.portSectorIndex); err == nil && portInfo != nil {
 			debug.Log("PORT: Found existing port data with %d products", len(portInfo.Products))
-			// Port exists - use current values  
+			// Port exists - use current values
 			if len(portInfo.Products) >= 3 {
 				amounts[0] = portInfo.Products[0].Quantity
-				amounts[1] = portInfo.Products[1].Quantity  
+				amounts[1] = portInfo.Products[1].Quantity
 				amounts[2] = portInfo.Products[2].Quantity
 				percents[0] = portInfo.Products[0].Percentage
 				percents[1] = portInfo.Products[1].Percentage
@@ -473,7 +472,7 @@ func (p *TWXParser) getPortDataFromTracker() ([3]int, [3]int, [3]bool) {
 	} else {
 		debug.Log("PORT: No database or invalid sector index")
 	}
-	
+
 	return amounts, percents, buys
 }
 

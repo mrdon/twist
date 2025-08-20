@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -34,11 +32,11 @@ func TestSystemConstants_RealIntegration(t *testing.T) {
 	expectedOutputs := []string{
 		"Testing system constants",
 		"TRUE constant: 1",
-		"FALSE constant: 0", 
+		"FALSE constant: 0",
 		"VERSION constant: 3.09",
 		"GAME constant: TradeWars 2002",
 		"CURRENTSECTOR: 1",
-		"CURRENTLINE: Command [TL=00:00:00]:",  // Should contain command prompt
+		"CURRENTLINE: Command [TL=00:00:00]:", // Should contain command prompt
 	}
 
 	for i, expected := range expectedOutputs {
@@ -80,7 +78,7 @@ func TestSystemConstantsWithExpressions_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"FALSE constant works in expressions", 
+		"FALSE constant works in expressions",
 		"GAME constant matches expected value",
 	}
 

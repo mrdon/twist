@@ -19,16 +19,16 @@ import (
 // ProxyState interface for state pattern implementation
 type ProxyState interface {
 	// Core operations that vary by connection state
-	SendToTUI(output string) error      // Script output → pipeline → TUI
-	SendToServer(input string) error    // User input → script processing → server
+	SendToTUI(output string) error   // Script output → pipeline → TUI
+	SendToServer(input string) error // User input → script processing → server
 	IsConnected() bool
 	GetParser() *streaming.TWXParser
-	
+
 	// Internal operations for I/O handlers
-	writeServerData(data string) error      // Direct write to server connection
-	readServerData(buffer []byte) (int, error)  // Direct read from server connection
-	processServerData(data []byte)          // Process server data → pipeline → TUI
-	
+	writeServerData(data string) error         // Direct write to server connection
+	readServerData(buffer []byte) (int, error) // Direct read from server connection
+	processServerData(data []byte)             // Process server data → pipeline → TUI
+
 	// Resource cleanup
 	Close() error
 }
@@ -81,7 +81,7 @@ type ConnectedState struct {
 	reader   *bufio.Reader
 	writer   *bufio.Writer
 	pipeline *streaming.Pipeline
-	
+
 	// Processing components - always present when connected
 	scriptManager *scripting.ScriptManager
 	gameDetector  *GameDetector
@@ -90,7 +90,7 @@ type ConnectedState struct {
 func NewConnectedState(conn net.Conn, reader *bufio.Reader, writer *bufio.Writer, pipeline *streaming.Pipeline, scriptManager *scripting.ScriptManager, gameDetector *GameDetector) *ConnectedState {
 	return &ConnectedState{
 		conn:          conn,
-		reader:        reader, 
+		reader:        reader,
 		writer:        writer,
 		pipeline:      pipeline,
 		scriptManager: scriptManager,
@@ -109,10 +109,10 @@ func (s *ConnectedState) SendToTUI(output string) error {
 func (s *ConnectedState) SendToServer(input string) error {
 	// Process through script manager - no nil check needed, always present
 	s.scriptManager.ProcessOutgoingText(input)
-	
-	// Process through game detector - no nil check needed, always present  
+
+	// Process through game detector - no nil check needed, always present
 	s.gameDetector.ProcessUserInput(input)
-	
+
 	// Then write directly to server
 	return s.writeServerData(input)
 }
@@ -151,7 +151,7 @@ func (s *ConnectedState) Close() error {
 	if s.pipeline != nil {
 		s.pipeline.Stop()
 	}
-	
+
 	// Close connection
 	if s.conn != nil {
 		return s.conn.Close()
@@ -231,7 +231,7 @@ type Proxy struct {
 func (p *Proxy) getState() ProxyState {
 	p.stateMu.RLock()
 	defer p.stateMu.RUnlock()
-	
+
 	state := p.state
 	if state == nil {
 		return NewDisconnectedState()
@@ -242,10 +242,10 @@ func (p *Proxy) getState() ProxyState {
 func (p *Proxy) setState(newState ProxyState) {
 	p.stateMu.Lock()
 	defer p.stateMu.Unlock()
-	
+
 	oldState := p.state
 	p.state = newState
-	
+
 	// Close old state's resources after storing new state
 	if oldState != nil {
 		oldState.Close()
@@ -384,7 +384,7 @@ func extractContext(data []byte, target string) string {
 }
 
 func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
-	
+
 	// Parse options
 	var opts *api.ConnectOptions
 	if len(options) > 0 && options[0] != nil {
@@ -542,10 +542,9 @@ func (p *Proxy) SendToTUI(output string) {
 	}
 }
 
-
 func (p *Proxy) SendToServer(input string) {
 	state := p.getState()
-	
+
 	if !state.IsConnected() {
 		return
 	}
@@ -556,7 +555,6 @@ func (p *Proxy) SendToServer(input string) {
 		p.errorChan <- fmt.Errorf("write error: %w", err)
 	}
 }
-
 
 func (p *Proxy) GetOutputChan() <-chan string {
 	return p.outputChan
@@ -691,20 +689,20 @@ func (p *Proxy) handleInput() {
 func (p *Proxy) handleOutput() {
 	// Use a buffer for continuous reading
 	buffer := make([]byte, 4096)
-	
+
 	for {
 		state := p.getState()
 		if !state.IsConnected() {
 			break
 		}
-		
+
 		// Cast to ConnectedState to access methods directly (avoid repeated state calls)
 		connectedState, ok := state.(*ConnectedState)
 		if !ok {
 			break
 		}
 
-		// Read raw bytes from connection  
+		// Read raw bytes from connection
 		n, err := connectedState.readServerData(buffer)
 		if err != nil {
 			// Read error in handleOutput - connection likely closed

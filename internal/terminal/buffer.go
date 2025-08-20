@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 )
 
-
 // ColorChange represents a position where color attributes change
 type ColorChange struct {
 	X, Y     int    // Position where color changes
@@ -19,13 +18,13 @@ type ColorChange struct {
 
 // Terminal represents a virtual terminal with a screen buffer
 type Terminal struct {
-	width     int
-	height    int
-	
+	width  int
+	height int
+
 	// Efficient storage
-	runes        [][]rune        // Just the characters (2D grid)
-	colorChanges []ColorChange  // Sparse color data
-	
+	runes        [][]rune      // Just the characters (2D grid)
+	colorChanges []ColorChange // Sparse color data
+
 	cursorX   int
 	cursorY   int
 	scrollTop int // Top of scrollable region
@@ -37,7 +36,6 @@ type Terminal struct {
 	// ANSI converter for immediate color conversion
 	ansiConverter *ansi.ColorConverter
 
-
 	// Fixed-size buffer for streaming data processing
 	buffer    [8192]byte // 8KB fixed buffer
 	bufferLen int        // Current length of data in buffer
@@ -45,7 +43,6 @@ type Terminal struct {
 	// Update tracking
 	dirty      bool
 	lastUpdate time.Time
-
 
 	// Update callback for UI notifications
 	onUpdate func()
@@ -69,17 +66,17 @@ func NewTerminalWithConverter(width, height int, converter *ansi.ColorConverter)
 func NewTerminalWithConverterAndLogger(width, height int, converter *ansi.ColorConverter, pvpLogger interface{}) *Terminal {
 
 	t := &Terminal{
-		width:         width,
-		height:        height,
-		
+		width:  width,
+		height: height,
+
 		// Efficient storage
 		runes:        make([][]rune, height),
 		colorChanges: make([]ColorChange, 0, 100), // Start with capacity for 100 color changes
-		
-		scrollTop:     0,
-		scrollBot:     height - 1,
+
+		scrollTop:       0,
+		scrollBot:       height - 1,
 		currentColorTag: "[#c0c0c0:#000000]", // Default color tag
-		ansiConverter: converter,
+		ansiConverter:   converter,
 	}
 
 	// Initialize rune buffer
@@ -173,7 +170,6 @@ func (t *Terminal) Write(data []byte) {
 	t.newDataBuffer = append(t.newDataBuffer, data...)
 	t.newDataMutex.Unlock()
 
-
 	// Process ANSI escape sequences first, then handle remaining characters
 	t.processDataWithANSI(data)
 
@@ -186,31 +182,30 @@ func (t *Terminal) Write(data []byte) {
 	}
 }
 
-
 // processDataWithANSI processes input data with fixed-size buffer
 func (t *Terminal) processDataWithANSI(data []byte) {
 	// Add new data to buffer (handle case where data is larger than remaining buffer space)
 	for len(data) > 0 {
 		// How much space is left in buffer?
 		spaceLeft := len(t.buffer) - t.bufferLen
-		
+
 		// How much can we add this iteration?
 		toAdd := len(data)
 		if toAdd > spaceLeft {
 			toAdd = spaceLeft
 		}
-		
+
 		// Add data to buffer
 		copy(t.buffer[t.bufferLen:], data[:toAdd])
 		t.bufferLen += toAdd
 		data = data[toAdd:]
-		
+
 		// Process everything we can from the buffer
 		consumed := 0
 		for consumed < t.bufferLen {
 			// Try to consume starting from current position
 			bytesConsumed := t.tryConsumeSequence(t.buffer[consumed:t.bufferLen])
-			
+
 			if bytesConsumed > 0 {
 				// Successfully consumed some bytes
 				consumed += bytesConsumed
@@ -220,13 +215,13 @@ func (t *Terminal) processDataWithANSI(data []byte) {
 				break
 			}
 		}
-		
+
 		// Remove consumed data from buffer, keep unconsumed data
 		if consumed > 0 {
 			copy(t.buffer[:], t.buffer[consumed:t.bufferLen])
 			t.bufferLen -= consumed
 		}
-		
+
 		// Safety check: if buffer is full and we couldn't consume anything, force consume one character
 		if t.bufferLen == len(t.buffer) && consumed == 0 {
 			char, size := utf8.DecodeRune(t.buffer[:])
@@ -243,13 +238,13 @@ func (t *Terminal) tryConsumeSequence(data []byte) int {
 	if len(data) == 0 {
 		return 0
 	}
-	
+
 	if data[0] == '\x1b' {
 		// Try to consume escape sequence
 		if len(data) < 2 {
 			return 0 // Need more data
 		}
-		
+
 		if data[1] == '[' {
 			// ANSI escape sequence - find terminator
 			i := 2
@@ -303,7 +298,6 @@ func (t *Terminal) processANSISequence(sequence []byte) {
 		// Pass complete parameters to converter and get back tview color tag
 		colorTag := t.ansiConverter.ConvertANSIParams(params)
 
-
 		// New approach: Store color change only if color actually changed
 		if colorTag != t.currentColorTag {
 			t.colorChanges = append(t.colorChanges, ColorChange{
@@ -313,7 +307,6 @@ func (t *Terminal) processANSISequence(sequence []byte) {
 			})
 			t.currentColorTag = colorTag
 		}
-
 
 	case 'H', 'f': // Cursor position
 		t.handleCursorPosition(params)
@@ -340,7 +333,7 @@ func (t *Terminal) parseParams(params string) []int {
 	if params == "" {
 		return paramList
 	}
-	
+
 	parts := strings.Split(params, ";")
 	for _, part := range parts {
 		if num, err := strconv.Atoi(part); err == nil {
@@ -362,15 +355,15 @@ func (t *Terminal) handleCursorPosition(params string) {
 	if len(paramList) >= 2 && paramList[1] > 0 {
 		col = paramList[1]
 	}
-	
+
 	oldX, oldY := t.cursorX, t.cursorY
 	t.cursorY = row - 1
 	t.cursorX = col - 1
-	
+
 	// Debug suspicious cursor movements
 	if t.cursorX >= t.width || t.cursorY >= t.height {
 	}
-	
+
 	if t.cursorY >= t.height {
 		t.cursorY = t.height - 1
 	}
@@ -383,9 +376,9 @@ func (t *Terminal) handleCursorPosition(params string) {
 	if t.cursorX < 0 {
 		t.cursorX = 0
 	}
-	
+
 	// Debug significant cursor movements
-	if abs(t.cursorX - oldX) > 10 || abs(t.cursorY - oldY) > 5 {
+	if abs(t.cursorX-oldX) > 10 || abs(t.cursorY-oldY) > 5 {
 	}
 }
 
@@ -525,11 +518,11 @@ func (t *Terminal) putChar(char rune) {
 	if t.cursorY >= 0 && t.cursorY < t.height && t.cursorX >= 0 && t.cursorX < t.width {
 		// Store just the rune
 		t.runes[t.cursorY][t.cursorX] = char
-		
+
 		// Debug logging for characters at or near line boundaries
 		if t.cursorX >= t.width-3 {
 		}
-		
+
 		// Special debug for column 80 (should not happen)
 		if t.cursorX >= 80 {
 		}
@@ -558,11 +551,11 @@ func (t *Terminal) scroll() {
 	for x := 0; x < t.width; x++ {
 		t.runes[t.scrollBot][x] = ' '
 	}
-	
+
 	// Update color changes: remove any that scrolled off the top, adjust Y coordinates
 	newColorChanges := make([]ColorChange, 0, len(t.colorChanges))
 	var lastColorBeforeScrollTop string = "[#c0c0c0:#000000]" // Default color
-	
+
 	// Sort color changes by Y, then X to process them in order
 	for _, change := range t.colorChanges {
 		if change.Y < t.scrollTop {
@@ -584,7 +577,7 @@ func (t *Terminal) scroll() {
 			})
 		}
 	}
-	
+
 	// If we had color changes that scrolled off and the new top line doesn't start with the right color,
 	// add a color change at the beginning of the new top line to maintain color continuity
 	hasColorAtTopLeft := false
@@ -594,7 +587,7 @@ func (t *Terminal) scroll() {
 			break
 		}
 	}
-	
+
 	if !hasColorAtTopLeft && lastColorBeforeScrollTop != "[#c0c0c0:#000000]" {
 		// Add color change at top-left to maintain color from scrolled content
 		newColorChanges = append([]ColorChange{{
@@ -603,7 +596,7 @@ func (t *Terminal) scroll() {
 			TViewTag: lastColorBeforeScrollTop,
 		}}, newColorChanges...)
 	}
-	
+
 	t.colorChanges = newColorChanges
 }
 
@@ -615,11 +608,11 @@ func (t *Terminal) clear() {
 			t.runes[y][x] = ' '
 		}
 	}
-	
+
 	// Clear color changes (start fresh)
 	t.colorChanges = t.colorChanges[:0]
 	t.currentColorTag = "[#c0c0c0:#000000]" // Reset to default
-	
+
 	t.cursorX = 0
 	t.cursorY = 0
 }
@@ -646,8 +639,6 @@ func (t *Terminal) GetSize() (int, int) {
 	return t.width, t.height
 }
 
-
-
 // GetRunes returns the character data without color information
 func (t *Terminal) GetRunes() [][]rune {
 	return t.runes
@@ -663,7 +654,7 @@ func (t *Terminal) GetCurrentColors() (string, string, bool, bool, bool) {
 	// Parse the current color tag to extract hex colors and attributes
 	fgHex, bgHex := "#c0c0c0", "#000000" // defaults
 	bold, underline, reverse := false, false, false
-	
+
 	if t.currentColorTag != "" {
 		// This is a simplified parser for the current tview tag
 		// In the new system, we track colors differently, but for testing
@@ -691,12 +682,9 @@ func (t *Terminal) GetCurrentColors() (string, string, bool, bool, bool) {
 			}
 		}
 	}
-	
+
 	return fgHex, bgHex, bold, underline, reverse
 }
-
-
-
 
 // IsDirty returns whether the terminal has been updated since last check
 func (t *Terminal) IsDirty() bool {
@@ -729,7 +717,6 @@ func (t *Terminal) GetNewData() []byte {
 
 	return data
 }
-
 
 // Clear helper functions
 func (t *Terminal) clearFromCursor() {
@@ -775,4 +762,3 @@ func (t *Terminal) clearLine() {
 		t.runes[t.cursorY][x] = ' '
 	}
 }
-

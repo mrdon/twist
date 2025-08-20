@@ -49,7 +49,6 @@ func (s *Script) GetName() string {
 	return s.Name
 }
 
-
 // IsSystem implements ScriptInterface
 func (s *Script) IsSystem() bool {
 	return s.System
@@ -69,12 +68,12 @@ type Engine struct {
 	scriptsRef     atomic.Pointer[map[string]*Script]
 	gameInterface  types.GameInterface
 	triggerManager *triggers.Manager
-	mutex          sync.Mutex  // Only needed for writes now
+	mutex          sync.Mutex // Only needed for writes now
 	nextScriptID   atomic.Int32
-	
+
 	// ANSI stripper for streaming text processing
-	ansiStripper   *ansi.StreamingStripper
-	
+	ansiStripper *ansi.StreamingStripper
+
 	// Event handlers
 	outputHandler func(string) error
 	echoHandler   func(string) error
@@ -84,19 +83,19 @@ type Engine struct {
 // NewEngine creates a new scripting engine
 func NewEngine(gameInterface types.GameInterface) *Engine {
 	engine := &Engine{
-		gameInterface:  gameInterface,
-		ansiStripper:   ansi.NewStreamingStripper(),
+		gameInterface: gameInterface,
+		ansiStripper:  ansi.NewStreamingStripper(),
 	}
 	engine.nextScriptID.Store(1)
-	
+
 	// Initialize empty scripts map
 	initialScripts := make(map[string]*Script)
 	engine.scriptsRef.Store(&initialScripts)
-	
+
 	// Create a dummy VM for the trigger manager
 	dummyVM := vm.NewVirtualMachine(gameInterface)
 	engine.triggerManager = triggers.NewManager(dummyVM)
-	
+
 	return engine
 }
 
@@ -109,13 +108,13 @@ func (e *Engine) getScripts() map[string]*Script {
 func (e *Engine) updateScripts(updateFn func(map[string]*Script) map[string]*Script) {
 	e.mutex.Lock()
 	defer e.mutex.Unlock()
-	
+
 	// Load current scripts
 	currentScripts := *e.scriptsRef.Load()
-	
+
 	// Create a copy and apply update
 	newScripts := updateFn(currentScripts)
-	
+
 	// Store the new map
 	e.scriptsRef.Store(&newScripts)
 }
@@ -135,7 +134,7 @@ func (e *Engine) SetSendHandler(handler func(string) error) {
 	e.mutex.Lock()
 	e.sendHandler = handler
 	e.mutex.Unlock()
-	
+
 	// Update all existing script VMs with the new sendHandler (lockless read)
 	scripts := e.getScripts()
 	for _, script := range scripts {
@@ -156,20 +155,20 @@ func (e *Engine) LoadScript(filename string) (*Script, error) {
 	if len(content) < previewLen {
 		previewLen = len(content)
 	}
-	
+
 	// Parse script with proper base path for includes
 	basePath := filepath.Dir(filename)
 	ast, err := e.parseScriptWithBasePath(string(content), basePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse script %s: %v", filename, err)
 	}
-	
+
 	var script *Script
 	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 		// Create script object
 		scriptID := e.generateScriptID()
 		scriptName := strings.TrimSuffix(filepath.Base(filename), filepath.Ext(filename))
-		
+
 		script = &Script{
 			ID:       scriptID,
 			Filename: filename,
@@ -178,24 +177,24 @@ func (e *Engine) LoadScript(filename string) (*Script, error) {
 			Running:  false,
 			System:   false,
 		}
-		
+
 		// Create VM for this script
 		scriptVM := vm.NewVirtualMachine(e.gameInterface)
 		scriptVM.SetOutputHandler(e.outputHandler)
 		scriptVM.SetEchoHandler(e.echoHandler)
 		scriptVM.SetSendHandler(e.sendHandler)
 		script.VM = scriptVM
-		
+
 		// Copy current scripts and add new one
 		newScripts := make(map[string]*Script, len(currentScripts)+1)
 		for k, v := range currentScripts {
 			newScripts[k] = v
 		}
 		newScripts[scriptID] = script
-		
+
 		return newScripts
 	})
-	
+
 	return script, nil
 }
 
@@ -206,12 +205,12 @@ func (e *Engine) LoadScriptFromString(content, name string) (*Script, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse script %s: %v", name, err)
 	}
-	
+
 	var script *Script
 	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 		// Create script object
 		scriptID := e.generateScriptID()
-		
+
 		script = &Script{
 			ID:       scriptID,
 			Filename: "",
@@ -220,24 +219,24 @@ func (e *Engine) LoadScriptFromString(content, name string) (*Script, error) {
 			Running:  false,
 			System:   false,
 		}
-		
+
 		// Create VM for this script
 		scriptVM := vm.NewVirtualMachine(e.gameInterface)
 		scriptVM.SetOutputHandler(e.outputHandler)
 		scriptVM.SetEchoHandler(e.echoHandler)
 		scriptVM.SetSendHandler(e.sendHandler)
 		script.VM = scriptVM
-		
+
 		// Copy current scripts and add new one
 		newScripts := make(map[string]*Script, len(currentScripts)+1)
 		for k, v := range currentScripts {
 			newScripts[k] = v
 		}
 		newScripts[scriptID] = script
-		
+
 		return newScripts
 	})
-	
+
 	return script, nil
 }
 
@@ -245,20 +244,20 @@ func (e *Engine) LoadScriptFromString(content, name string) (*Script, error) {
 func (e *Engine) RunScript(scriptID string) error {
 	scripts := e.getScripts()
 	script, exists := scripts[scriptID]
-	
+
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	if script.Running {
 		return fmt.Errorf("script %s is already running", scriptID)
 	}
-	
+
 	// Load script into VM
 	if err := script.VM.LoadScript(script.AST, script); err != nil {
 		return fmt.Errorf("failed to load script into VM: %v", err)
 	}
-	
+
 	// Update script state in copy-on-write manner
 	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 		// Copy the map
@@ -270,7 +269,7 @@ func (e *Engine) RunScript(scriptID string) error {
 		newScripts[scriptID].Running = true
 		return newScripts
 	})
-	
+
 	// Execute script once - TWX style single execution
 	// Script will pause on waitfor commands and resume when text matches
 	err := script.VM.Execute()
@@ -291,7 +290,7 @@ func (e *Engine) RunScript(scriptID string) error {
 		}
 		return err
 	}
-	
+
 	// Check if script completed (halted)
 	state := script.VM.GetState()
 	if state.IsHalted() {
@@ -306,7 +305,7 @@ func (e *Engine) RunScript(scriptID string) error {
 			return newScripts
 		})
 	}
-	
+
 	return nil
 }
 
@@ -314,21 +313,21 @@ func (e *Engine) RunScript(scriptID string) error {
 func (e *Engine) ResumeScriptWithInput(scriptID string, input string) error {
 	scripts := e.getScripts()
 	script, exists := scripts[scriptID]
-	
+
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	if !script.VM.IsWaitingForInput() {
 		return fmt.Errorf("script %s is not waiting for input", scriptID)
 	}
-	
+
 	// Resume the VM with the input
 	if err := script.VM.ResumeWithInput(input); err != nil {
 		return err
 	}
-	
-	// Continue script execution - TWX style single execution  
+
+	// Continue script execution - TWX style single execution
 	// Script will execute until next waitfor, getinput, or completion
 	err := script.VM.Execute()
 	if err != nil {
@@ -348,7 +347,7 @@ func (e *Engine) ResumeScriptWithInput(scriptID string, input string) error {
 		}
 		return err
 	}
-	
+
 	// Check if script completed (halted)
 	state := script.VM.GetState()
 	if state.IsHalted() {
@@ -363,7 +362,7 @@ func (e *Engine) ResumeScriptWithInput(scriptID string, input string) error {
 			return newScripts
 		})
 	}
-	
+
 	return nil
 }
 
@@ -371,20 +370,20 @@ func (e *Engine) ResumeScriptWithInput(scriptID string, input string) error {
 func (e *Engine) RunScriptSync(scriptID string) error {
 	scripts := e.getScripts()
 	script, exists := scripts[scriptID]
-	
+
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	if script.Running {
 		return fmt.Errorf("script %s is already running", scriptID)
 	}
-	
+
 	// Load script into VM
 	if err := script.VM.LoadScript(script.AST, script); err != nil {
 		return fmt.Errorf("failed to load script into VM: %v", err)
 	}
-	
+
 	// Update script state in copy-on-write manner
 	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 		newScripts := make(map[string]*Script, len(currentScripts))
@@ -394,7 +393,7 @@ func (e *Engine) RunScriptSync(scriptID string) error {
 		newScripts[scriptID].Running = true
 		return newScripts
 	})
-	
+
 	defer func() {
 		e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 			newScripts := make(map[string]*Script, len(currentScripts))
@@ -407,7 +406,7 @@ func (e *Engine) RunScriptSync(scriptID string) error {
 			return newScripts
 		})
 	}()
-	
+
 	// Execute script synchronously
 	return script.VM.Execute()
 }
@@ -416,17 +415,17 @@ func (e *Engine) RunScriptSync(scriptID string) error {
 func (e *Engine) StopScript(scriptID string) error {
 	scripts := e.getScripts()
 	script, exists := scripts[scriptID]
-	
+
 	if !exists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	err := script.Stop()
 	if err == nil {
 		// Notify about script termination
 		e.onScriptTerminated(scriptID)
 	}
-	
+
 	return err
 }
 
@@ -439,7 +438,7 @@ func (e *Engine) StopAllScripts() error {
 			scripts = append(scripts, script)
 		}
 	}
-	
+
 	for _, script := range scripts {
 		if err := script.Stop(); err != nil {
 			return err
@@ -447,7 +446,7 @@ func (e *Engine) StopAllScripts() error {
 		// Notify about script termination
 		e.onScriptTerminated(script.ID)
 	}
-	
+
 	return nil
 }
 
@@ -455,16 +454,16 @@ func (e *Engine) StopAllScripts() error {
 func (e *Engine) UnloadScript(scriptID string) error {
 	var script *Script
 	var scriptExists bool
-	
+
 	e.updateScripts(func(currentScripts map[string]*Script) map[string]*Script {
 		var exists bool
 		script, exists = currentScripts[scriptID]
 		scriptExists = exists
-		
+
 		if !exists {
 			return currentScripts // No change
 		}
-		
+
 		// Copy current scripts excluding the one to remove
 		newScripts := make(map[string]*Script, len(currentScripts)-1)
 		for k, v := range currentScripts {
@@ -472,20 +471,20 @@ func (e *Engine) UnloadScript(scriptID string) error {
 				newScripts[k] = v
 			}
 		}
-		
+
 		return newScripts
 	})
-	
+
 	if !scriptExists {
 		return fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	if script.Running {
 		if err := script.Stop(); err != nil {
 			return err
 		}
 	}
-	
+
 	return nil
 }
 
@@ -496,7 +495,7 @@ func (e *Engine) GetScript(scriptID string) (*Script, error) {
 	if !exists {
 		return nil, fmt.Errorf("script not found: %s", scriptID)
 	}
-	
+
 	return script, nil
 }
 
@@ -546,16 +545,16 @@ func (e *Engine) GetRunningScriptsInternal() []*Script {
 
 // ProcessText processes incoming text through triggers
 func (e *Engine) ProcessText(text string) error {
-	
+
 	// Process global triggers first
 	if err := e.triggerManager.ProcessText(text); err != nil {
 		return err
 	}
-	
+
 	// Strip ANSI escape sequences using streaming stripper to handle chunks properly
 	// This ensures waitfor triggers match properly against clean text
 	strippedText := e.ansiStripper.StripChunk(text)
-	
+
 	// Forward stripped text to all running script VMs for waitfor processing (lockless!)
 	scripts := e.getScripts()
 	scriptCount := 0
@@ -567,7 +566,7 @@ func (e *Engine) ProcessText(text string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -619,19 +618,19 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 	if err != nil {
 		return nil, fmt.Errorf("preprocessing error: %v", err)
 	}
-	
+
 	// Rejoin the processed lines
 	processedSource := strings.Join(processedLines, "\n")
-	
+
 	// Step 2: Create lexer
 	lexer := parser.NewLexer(strings.NewReader(processedSource))
-	
+
 	// Step 3: Tokenize
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("lexer error: %v", err)
 	}
-	
+
 	// Debug: Show first few tokens
 	for i, token := range tokens {
 		if i >= 10 { // Show first 10 tokens
@@ -639,21 +638,21 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 		}
 		debug.Log("Token %d: %+v", i, token)
 	}
-	
+
 	// Step 4: Parse
 	parser := parser.NewParser(tokens)
 	ast, err := parser.Parse()
 	if err != nil {
 		return nil, fmt.Errorf("parser error: %v", err)
 	}
-	
+
 	// Step 5: Process includes
 	includeProcessor := include.NewIncludeProcessor(basePath)
 	processedAST, err := includeProcessor.ProcessIncludes(ast)
 	if err != nil {
 		return nil, fmt.Errorf("include processing error: %v", err)
 	}
-	
+
 	return processedAST, nil
 }
 
@@ -669,9 +668,9 @@ func (e *Engine) ExecuteScriptString(source, name string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	defer e.UnloadScript(script.ID)
-	
+
 	return e.RunScript(script.ID)
 }
 
@@ -681,9 +680,9 @@ func (e *Engine) ExecuteScriptFile(filename string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	defer e.UnloadScript(script.ID)
-	
+
 	return e.RunScript(script.ID)
 }
 
@@ -695,7 +694,7 @@ func (e *Engine) GetScriptByName(name string) (*Script, error) {
 			return script, nil
 		}
 	}
-	
+
 	return nil, fmt.Errorf("script not found: %s", name)
 }
 
@@ -731,7 +730,7 @@ func (e *Engine) GetStatus() map[string]interface{} {
 	scripts := e.getScripts()
 	status := make(map[string]interface{})
 	status["total_scripts"] = len(scripts)
-	
+
 	runningCount := 0
 	for _, script := range scripts {
 		if script.Running {
@@ -739,7 +738,7 @@ func (e *Engine) GetStatus() map[string]interface{} {
 		}
 	}
 	status["running_scripts"] = runningCount
-	
+
 	if e.triggerManager != nil {
 		status["trigger_count"] = e.triggerManager.GetTriggerCount()
 	} else {
@@ -752,25 +751,25 @@ func (e *Engine) GetStatus() map[string]interface{} {
 func (e *Engine) GetAllVariables() map[string]*types.Value {
 	scripts := e.getScripts()
 	allVariables := make(map[string]*types.Value)
-	
+
 	for _, script := range scripts {
 		if script.Running && script.VM != nil {
 			// Get variables from this script's VM
 			scriptVars := script.VM.GetAllVariables()
-			
+
 			// Prefix variable names with script name to avoid conflicts
 			for varName, varValue := range scriptVars {
 				prefixedName := fmt.Sprintf("%s.%s", script.Name, varName)
 				allVariables[prefixedName] = varValue
 			}
-			
+
 			// Also add without prefix for convenience (latest script wins in case of conflicts)
 			for varName, varValue := range scriptVars {
 				allVariables[varName] = varValue
 			}
 		}
 	}
-	
+
 	return allVariables
 }
 
@@ -810,7 +809,7 @@ func (e *Engine) ValidateScriptFile(filename string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read script file %s: %v", filename, err)
 	}
-	
+
 	return e.ValidateScript(string(content))
 }
 
@@ -825,7 +824,7 @@ func (e *Engine) CompileScriptFile(filename string) (*parser.ASTNode, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to read script file %s: %v", filename, err)
 	}
-	
+
 	return e.CompileScript(string(content))
 }
 
@@ -834,7 +833,7 @@ func (e *Engine) PrintAST(ast *parser.ASTNode, indent int) {
 	if ast == nil {
 		return
 	}
-	
+
 	// AST printing disabled - enable debug logging to see tree structure
 	for _, child := range ast.Children {
 		e.PrintAST(child, indent+1)

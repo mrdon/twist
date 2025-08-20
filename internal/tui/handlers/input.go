@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
 )
@@ -17,18 +16,18 @@ const (
 
 // InputHandler manages input handling for the application
 type InputHandler struct {
-	app           *tview.Application
-	inputMode     InputMode
-	modalVisible  bool
-	
+	app          *tview.Application
+	inputMode    InputMode
+	modalVisible bool
+
 	// Callbacks
-	onConnect     func(string)
-	onDisconnect  func()
-	onExit        func()
-	onShowModal   func(string, []string, func(string))
-	onShowDropdown func(string, []string, func(string))
-	onCloseModal  func()
-	onSendCommand func(string)
+	onConnect              func(string)
+	onDisconnect           func()
+	onExit                 func()
+	onShowModal            func(string, []string, func(string))
+	onShowDropdown         func(string, []string, func(string))
+	onCloseModal           func()
+	onSendCommand          func(string)
 	onShowConnectionDialog func()
 }
 
@@ -83,7 +82,7 @@ func (ih *InputHandler) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
 	if ih.modalVisible {
 		return ih.handleModalInput(event)
 	}
-	
+
 	// Mode-specific handling
 	switch ih.inputMode {
 	case InputModeMenu:
@@ -91,7 +90,7 @@ func (ih *InputHandler) HandleKeyEvent(event *tcell.EventKey) *tcell.EventKey {
 	case InputModeTerminal:
 		return ih.handleTerminalInput(event)
 	}
-	
+
 	return event
 }
 
@@ -125,13 +124,13 @@ func (ih *InputHandler) handleMenuInput(event *tcell.EventKey) *tcell.EventKey {
 			return nil
 		}
 	}
-	
+
 	switch event.Key() {
 	case tcell.KeyTab:
 		ih.SetInputMode(InputModeTerminal)
 		return nil
 	}
-	
+
 	return event
 }
 
@@ -165,12 +164,12 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 			return nil
 		}
 	}
-	
+
 	// Don't send Control key combinations (except let tview handle them)
 	if event.Modifiers()&tcell.ModCtrl != 0 {
 		return event
 	}
-	
+
 	switch event.Key() {
 	case tcell.KeyTab:
 		ih.SetInputMode(InputModeMenu)
@@ -200,7 +199,7 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 		// Don't send navigation keys to terminal - let tview handle them for UI navigation
 		return event
 	}
-	
+
 	// Pass other keys to terminal for input handling only if no modals are open
 	if event.Key() == tcell.KeyRune {
 		if !ih.modalVisible && ih.onSendCommand != nil {
@@ -208,7 +207,7 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 			ih.onSendCommand(char)
 		}
 	}
-	
+
 	return event
 }
 
@@ -221,7 +220,7 @@ func (ih *InputHandler) handleModalInput(event *tcell.EventKey) *tcell.EventKey 
 		}
 		return nil
 	}
-	
+
 	return event
 }
 

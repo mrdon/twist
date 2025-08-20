@@ -9,17 +9,17 @@ func TestTWXParser_EnhancedFighterDatabaseReset(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
 	parser := NewTWXParser(db, nil)
-	
+
 	// Test should not panic even with unopened database
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("Fighter database reset should not panic, but panicked with: %v", r)
 		}
 	}()
-	
+
 	// Execute fighter database reset with empty database
 	parser.resetFighterDatabase()
-	
+
 	// The method should handle the case gracefully and fall back to the simple reset
 }
 
@@ -27,17 +27,17 @@ func TestTWXParser_FighterResetStardockExclusion(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
 	parser := NewTWXParser(db, nil)
-	
+
 	// Test should not panic
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("Fighter reset should not panic, but panicked with: %v", r)
 		}
 	}()
-	
+
 	// Execute fighter database reset
 	parser.resetFighterDatabase()
-	
+
 	// The method should handle the case gracefully with empty database
 }
 
@@ -45,17 +45,17 @@ func TestTWXParser_FighterResetOwnerVerification(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
 	parser := NewTWXParser(db, nil)
-	
+
 	// Test should not panic
 	defer func() {
 		if r := recover(); r != nil {
 			t.Errorf("Fighter reset should not panic, but panicked with: %v", r)
 		}
 	}()
-	
+
 	// Execute fighter database reset
 	parser.resetFighterDatabase()
-	
+
 	// The method should handle the case gracefully with empty database
 }
 
@@ -63,10 +63,10 @@ func TestTWXParser_IsPersonalOrCorpFighter(t *testing.T) {
 	// Create parser for testing
 	db := database.NewDatabase()
 	parser := NewTWXParser(db, nil)
-	
+
 	testCases := []struct {
-		owner    string
-		expected bool
+		owner       string
+		expected    bool
 		description string
 	}{
 		{"yours", true, "Exact Pascal match 'yours'"},
@@ -81,7 +81,7 @@ func TestTWXParser_IsPersonalOrCorpFighter(t *testing.T) {
 		{"someone else", false, "Generic other owner should not match"},
 		{"Corporate Alliance", false, "Different corp should not match"},
 	}
-	
+
 	for _, tc := range testCases {
 		t.Run(tc.description, func(t *testing.T) {
 			result := parser.isPersonalOrCorpFighter(tc.owner)
@@ -96,7 +96,7 @@ func TestTWXParser_FindStardockSector(t *testing.T) {
 	// Create parser with test database
 	db := database.NewDatabase()
 	parser := NewTWXParser(db, nil)
-	
+
 	// Setup test sectors
 	err := setupTestSectorsWithFighters(db, []fighterTestData{
 		{sectorNum: 5, owner: "yours", quantity: 100, fighterType: 1},
@@ -106,12 +106,12 @@ func TestTWXParser_FindStardockSector(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to setup test sectors: %v", err)
 	}
-	
+
 	// Add Stardock to sector 10
 	if err := setupStardockSector(db, 10); err != nil {
 		t.Fatalf("Failed to setup Stardock sector: %v", err)
 	}
-	
+
 	// Test Stardock detection
 	stardockSector := parser.findStardockSector()
 	if stardockSector != 10 {
@@ -140,7 +140,7 @@ func setupTestSectorsWithFighters(db database.Database, fighters []fighterTestDa
 		sector.Figs.Quantity = f.quantity
 		sector.Figs.Owner = f.owner
 		sector.Figs.FigType = database.TFighterType(f.fighterType)
-		
+
 		if err := db.SaveSector(sector, f.sectorNum); err != nil {
 			return err
 		}
@@ -161,7 +161,7 @@ func setupStardockSector(db database.Database, sectorNum int) error {
 		// Create new sector if not exists
 		sector = database.NULLSector()
 	}
-	
+
 	// Add Stardock planet
 	_ = database.TPlanet{
 		Name:     "Stardock",
@@ -170,15 +170,15 @@ func setupStardockSector(db database.Database, sectorNum int) error {
 		Citadel:  false,
 		Stardock: true,
 	}
-	
+
 	stardockPlanet := database.TPlanet{
 		Owner:    "",
 		Name:     "Stardock",
 		Citadel:  false,
 		Stardock: true,
 	}
-	
+
 	sector.Planets = append(sector.Planets, stardockPlanet)
-	
+
 	return db.SaveSectorWithCollections(sector, sectorNum, sector.Ships, sector.Traders, sector.Planets)
 }

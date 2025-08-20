@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -9,7 +7,7 @@ import (
 // TestTWXLoginSequence_RealIntegration tests a realistic login script pattern with real components
 func TestTWXLoginSequence_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Realistic TWX login sequence based on 1_Login.ts
 echo "Starting login sequence..."
@@ -32,21 +30,21 @@ echo "Entering password..."
 send $password
 echo "Login sequence completed"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify commands sent to game
 	expectedCommands := []string{"TestUser", "A", "TestPass123"}
 	tester.AssertCommands(result, expectedCommands)
-	
+
 	// Verify proper output sequence
 	expectedOutputs := []string{
 		"Starting login sequence...",
 		"Waiting for login prompt...",
 		"Sent username: TestUser",
 		"Waiting for game selection...",
-		"Selected game: A", 
+		"Selected game: A",
 		"Entering password...",
 		"Login sequence completed",
 	}
@@ -56,7 +54,7 @@ echo "Login sequence completed"
 // TestSectorNavigation_RealIntegration tests navigation patterns from real scripts with real VM
 func TestSectorNavigation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Navigation script based on 1_Move.ts patterns
 echo "Starting sector navigation..."
@@ -81,14 +79,14 @@ end
 
 echo "Navigation completed"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify movement commands
 	expectedCommands := []string{"m", "1500"}
 	tester.AssertCommands(result, expectedCommands)
-	
+
 	// Verify navigation logic
 	tester.AssertOutputContains(result, "Current sector: 1000")
 	tester.AssertOutputContains(result, "Target sector: 1500")
@@ -99,7 +97,7 @@ echo "Navigation completed"
 // TestPortTrading_RealIntegration tests trading patterns from real scripts with real array persistence
 func TestPortTrading_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Port trading script based on 1_Trade.ts patterns
 echo "Checking port status..."
@@ -139,14 +137,14 @@ end
 
 echo "Trading analysis complete"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify trading commands sent
 	expectedCommands := []string{"b", "Fuel Ore", "b", "Organics"}
 	tester.AssertCommands(result, expectedCommands)
-	
+
 	// Verify trading logic output
 	tester.AssertOutputContains(result, "Product: Fuel Ore Price: 10")
 	tester.AssertOutputContains(result, "Buying Fuel Ore at good price: 10")
@@ -156,7 +154,7 @@ echo "Trading analysis complete"
 // TestStringProcessing_RealIntegration tests string handling from real scripts with real VM
 func TestStringProcessing_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # String processing like in 1_Move.ts
 echo "Processing game text..."
@@ -181,10 +179,10 @@ else
   echo "Sector parsing failed"
 end
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify string processing results
 	expectedOutputs := []string{
 		"Processing game text...",
@@ -199,7 +197,7 @@ end
 // TestWeightingSystem_RealIntegration tests decision logic from real scripts with real calculation
 func TestWeightingSystem_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 # Weighting system like in 1_Trade.ts
 echo "Calculating sector weights..."
@@ -248,16 +246,16 @@ end
 
 echo "Weight calculation completed"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	// Verify weighting logic
 	tester.AssertOutputContains(result, "Calculating sector weights...")
 	tester.AssertOutputContains(result, "Sector 1000 density 100")
 	tester.AssertOutputContains(result, "Sector 1002 density 0")
 	tester.AssertOutputContains(result, "Weight calculation completed")
-	
+
 	// Sector 1001 should have higher weight due to bad density (50)
 	tester.AssertOutputContains(result, "Sector 1001 density 50 weight 155")
 }

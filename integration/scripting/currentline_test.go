@@ -55,7 +55,7 @@ func TestCurrentLineSystemConstant_RealIntegration(t *testing.T) {
 	// Check that CURRENTLINE contains the expected command prompt format
 	foundCurrentLine := false
 	foundLocationCheck := false
-	
+
 	for _, output := range result.Output {
 		if strings.Contains(output, "CURRENTLINE value:") {
 			foundCurrentLine = true
@@ -75,7 +75,7 @@ func TestCurrentLineSystemConstant_RealIntegration(t *testing.T) {
 	if !foundCurrentLine {
 		t.Error("Should have found CURRENTLINE value in output")
 	}
-	
+
 	// For now, don't require location check to pass since we need to fix CURRENTLINE first
 	t.Logf("Location check passed: %t", foundLocationCheck)
 }
@@ -109,7 +109,7 @@ func TestPortScriptLocationCheck_RealIntegration(t *testing.T) {
 	// Check if the location check passed
 	locationCheckPassed := false
 	locationCheckFailed := false
-	
+
 	for _, output := range result.Output {
 		if strings.Contains(output, "Location check passed") {
 			locationCheckPassed = true

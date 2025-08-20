@@ -29,9 +29,9 @@ type ScriptLine struct {
 
 // ProxyResult contains the result of running a proxy test
 type ProxyResult struct {
-	Database     *sql.DB          // Database instance for assertions
-	Assert       *setup.DBAsserts // Database assertion helper
-	ClientOutput string           // All output the client received
+	Database     *sql.DB                     // Database instance for assertions
+	Assert       *setup.DBAsserts            // Database assertion helper
+	ClientOutput string                      // All output the client received
 	TuiAPI       *TrackingSectorChangeTuiAPI // TUI API for tracking sector changes
 }
 
@@ -111,7 +111,7 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 				expectPattern := generateExpectPattern(line.Data)
 				escapedPattern := escapeANSIForExpect(expectPattern)
 				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
-				
+
 				// Add sync token: server sends a unique marker, client expects it
 				syncToken := "\\x1b[0m<SYNC_COMPLETE>\\x1b[0m"
 				serverLines = append(serverLines, `send "`+syncToken+`"`)
@@ -119,7 +119,7 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 			}
 		} else if line.Direction == "<" {
 			// Client expects processed data (this is what the proxy outputs after processing raw server data)
-			// Generate client expect only if next line is client data  
+			// Generate client expect only if next line is client data
 			if i+1 < len(scriptLines) && scriptLines[i+1].Direction == ">>" {
 				// Generate expect pattern from last unique characters
 				expectPattern := generateExpectPattern(line.Data)
@@ -132,7 +132,7 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 				expectPattern := generateExpectPattern(line.Data)
 				escapedPattern := escapeANSIForExpect(expectPattern)
 				clientLines = append(clientLines, `expect "`+escapedPattern+`"`)
-				
+
 				// Add sync token: server sends a unique marker, client expects it
 				syncToken := "\\x1b[0m<SYNC_COMPLETE>\\x1b[0m"
 				serverLines = append(serverLines, `send "`+syncToken+`"`)
@@ -156,11 +156,10 @@ func ConvertToExpectScripts(scriptLines []ScriptLine) (serverScript, clientScrip
 	return strings.Join(serverLines, "\n"), strings.Join(clientLines, "\n")
 }
 
-
 // generateExpectPattern extracts a unique expect pattern from server data
 // Creates shorter patterns focused on key terminal characters for faster matching
 func generateExpectPattern(serverData string) string {
-	// Convert escaped sequences to actual characters 
+	// Convert escaped sequences to actual characters
 	actualData, _ := strconv.Unquote("\"" + serverData + "\"")
 
 	// If data is empty, return it as-is
@@ -183,7 +182,7 @@ func generateExpectPattern(serverData string) string {
 		}
 		return actualData[start:]
 	}
-	
+
 	// Pattern 2: ": " with space after - include more characters before
 	if idx := strings.LastIndex(actualData, ": "); idx != -1 {
 		// Include 2 characters before ": " if available
@@ -215,7 +214,7 @@ func generateExpectPattern(serverData string) string {
 	}
 
 	// Look for other key characters and include more context
-	for i := len(actualData) - 15; i >= 0 && i < len(actualData) - 3; i++ {
+	for i := len(actualData) - 15; i >= 0 && i < len(actualData)-3; i++ {
 		char := actualData[i]
 		if char == '?' || char == '>' || char == ':' || char == ']' {
 			// Include a bit more context before the key character
@@ -226,13 +225,10 @@ func generateExpectPattern(serverData string) string {
 			return actualData[start:]
 		}
 	}
-	
+
 	// Fallback to last 10 characters for long text
 	return actualData[len(actualData)-10:]
 }
-
-
-
 
 // escapeANSIForExpect converts actual ANSI escape characters back to string literals
 // This is needed when building expect scripts that contain ANSI sequences
@@ -250,7 +246,7 @@ func SetupTestDatabase(t *testing.T, dbPath string, setupFunc func(*sql.DB)) {
 	if dbPath == "" {
 		return // No database requested
 	}
-	
+
 	// Create database with schema
 	db := database.NewDatabase()
 	err := db.CreateDatabase(dbPath)
@@ -258,7 +254,7 @@ func SetupTestDatabase(t *testing.T, dbPath string, setupFunc func(*sql.DB)) {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
 	defer db.CloseDatabase()
-	
+
 	// Allow test to set up initial data
 	if setupFunc != nil {
 		sqlDB := db.GetDB()
@@ -307,11 +303,11 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	// 2. PROXY: Create client expect engine and connect proxy
 	clientExpectEngine := NewSimpleExpectEngine(t, nil, "\r")
 	baseTuiAPI := &TestTuiAPI{expectEngine: clientExpectEngine}
-	
+
 	// Create channels to wait for connection and disconnection completion
 	connectionReady := make(chan bool, 1)
 	disconnectionReady := make(chan bool, 1)
-	
+
 	trackingTuiAPI := &TrackingSectorChangeTuiAPI{
 		TestTuiAPI:         baseTuiAPI,
 		SectorChangeCalls:  make([]api.SectorInfo, 0),
@@ -321,7 +317,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	}
 	address := fmt.Sprintf("localhost:%d", port)
 	proxyInstance := factory.Connect(address, trackingTuiAPI, connectOpts)
-	
+
 	// Wait for connection to actually complete
 	select {
 	case <-connectionReady:
@@ -350,7 +346,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 
 	// Disconnect proxy before opening database to avoid lock contention
 	proxyInstance.Disconnect()
-	
+
 	// Wait for disconnection to actually complete (database closure, etc.)
 	// Increased timeout for parallel/race detector execution
 	select {
@@ -371,7 +367,7 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 			if err != nil {
 				t.Fatalf("Failed to open database: %v", err)
 			}
-			
+
 			// Test database connection with retry
 			if err := sqlDB.Ping(); err != nil {
 				if attempt == 5 {
@@ -384,12 +380,12 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 			}
 			break
 		}
-		
+
 		// Validate database was created and is accessible
 		if sqlDB == nil {
 			t.Fatal("Expected database instance to be created")
 		}
-		
+
 		// Create database assertion helper
 		dbAsserts = setup.NewDBAsserts(t, sqlDB)
 	}

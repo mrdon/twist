@@ -31,7 +31,7 @@ func NewManager(vm types.VMInterface) *Manager {
 func (m *Manager) AddTrigger(trigger types.TriggerInterface) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	m.triggers[trigger.GetID()] = trigger
 	return nil
 }
@@ -40,7 +40,7 @@ func (m *Manager) AddTrigger(trigger types.TriggerInterface) error {
 func (m *Manager) RemoveTrigger(id string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	delete(m.triggers, id)
 	return nil
 }
@@ -49,7 +49,7 @@ func (m *Manager) RemoveTrigger(id string) error {
 func (m *Manager) RemoveAllTriggers() error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	m.triggers = make(map[string]types.TriggerInterface)
 	return nil
 }
@@ -58,7 +58,7 @@ func (m *Manager) RemoveAllTriggers() error {
 func (m *Manager) GetTrigger(id string) types.TriggerInterface {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	return m.triggers[id]
 }
 
@@ -66,7 +66,7 @@ func (m *Manager) GetTrigger(id string) types.TriggerInterface {
 func (m *Manager) GetAllTriggers() map[string]types.TriggerInterface {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	result := make(map[string]types.TriggerInterface)
 	for k, v := range m.triggers {
 		result[k] = v
@@ -84,13 +84,13 @@ func (m *Manager) ProcessText(text string) error {
 		}
 	}
 	m.mutex.RUnlock()
-	
+
 	for _, trigger := range triggers {
 		if trigger.Matches(text) {
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
-			
+
 			// Handle lifecycle
 			if trigger.GetLifeCycle() > 0 {
 				// Decrement lifecycle and remove if expired
@@ -103,7 +103,7 @@ func (m *Manager) ProcessText(text string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -117,13 +117,13 @@ func (m *Manager) ProcessTextLine(line string) error {
 		}
 	}
 	m.mutex.RUnlock()
-	
+
 	for _, trigger := range triggers {
 		if trigger.Matches(line) {
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
-			
+
 			// Handle lifecycle
 			if trigger.GetLifeCycle() > 0 {
 				if lifecycleTrigger, ok := trigger.(*types.TextLineTrigger); ok {
@@ -135,7 +135,7 @@ func (m *Manager) ProcessTextLine(line string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -149,13 +149,13 @@ func (m *Manager) ProcessTextOut(text string) error {
 		}
 	}
 	m.mutex.RUnlock()
-	
+
 	for _, trigger := range triggers {
 		if trigger.Matches(text) {
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
-			
+
 			// Handle lifecycle
 			if trigger.GetLifeCycle() > 0 {
 				if lifecycleTrigger, ok := trigger.(*types.TextOutTrigger); ok {
@@ -167,7 +167,7 @@ func (m *Manager) ProcessTextOut(text string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -181,13 +181,13 @@ func (m *Manager) ProcessEvent(eventName string) error {
 		}
 	}
 	m.mutex.RUnlock()
-	
+
 	for _, trigger := range triggers {
 		if trigger.Matches(eventName) {
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
-			
+
 			// Handle lifecycle
 			if trigger.GetLifeCycle() > 0 {
 				if lifecycleTrigger, ok := trigger.(*types.EventTrigger); ok {
@@ -199,7 +199,7 @@ func (m *Manager) ProcessEvent(eventName string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -213,25 +213,25 @@ func (m *Manager) ProcessDelayTriggers() error {
 		}
 	}
 	m.mutex.RUnlock()
-	
+
 	for _, trigger := range triggers {
 		if trigger.Matches("") { // Delay triggers don't need input text
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
-			
+
 			// Delay triggers are one-shot by default
 			m.RemoveTrigger(trigger.GetID())
 		}
 	}
-	
+
 	return nil
 }
 
 // SetTextTrigger creates a text trigger
 func (m *Manager) SetTextTrigger(pattern, response, label string) (string, error) {
 	id := m.generateID()
-	
+
 	trigger := &types.TextTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -243,14 +243,14 @@ func (m *Manager) SetTextTrigger(pattern, response, label string) (string, error
 			LifeCycle: -1, // Permanent by default
 		},
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
 // SetTextLineTrigger creates a text line trigger
 func (m *Manager) SetTextLineTrigger(pattern, response, label string) (string, error) {
 	id := m.generateID()
-	
+
 	trigger := &types.TextLineTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -262,14 +262,14 @@ func (m *Manager) SetTextLineTrigger(pattern, response, label string) (string, e
 			LifeCycle: -1, // Permanent by default
 		},
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
 // SetTextOutTrigger creates a text out trigger
 func (m *Manager) SetTextOutTrigger(pattern, response, label string) (string, error) {
 	id := m.generateID()
-	
+
 	trigger := &types.TextOutTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -281,7 +281,7 @@ func (m *Manager) SetTextOutTrigger(pattern, response, label string) (string, er
 			LifeCycle: -1, // Permanent by default
 		},
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
@@ -289,7 +289,7 @@ func (m *Manager) SetTextOutTrigger(pattern, response, label string) (string, er
 func (m *Manager) SetDelayTrigger(delayMs float64, label string) (string, error) {
 	id := m.generateID()
 	delay := time.Duration(delayMs) * time.Millisecond
-	
+
 	trigger := &types.DelayTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -302,19 +302,19 @@ func (m *Manager) SetDelayTrigger(delayMs float64, label string) (string, error)
 		Delay:     delay,
 		StartTime: time.Now(),
 	}
-	
+
 	// Set up timer
 	trigger.Timer = time.AfterFunc(delay, func() {
 		// Timer expired, trigger can now match
 	})
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
 // SetEventTrigger creates an event trigger
 func (m *Manager) SetEventTrigger(eventName, response, label string) (string, error) {
 	id := m.generateID()
-	
+
 	trigger := &types.EventTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -327,19 +327,19 @@ func (m *Manager) SetEventTrigger(eventName, response, label string) (string, er
 		},
 		EventName: eventName,
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
 // SetAutoTrigger creates an auto trigger
 func (m *Manager) SetAutoTrigger(pattern, response string, persistent bool) (string, error) {
 	id := m.generateID()
-	
+
 	lifecycle := 1 // One-shot
 	if persistent {
 		lifecycle = -1 // Permanent
 	}
-	
+
 	trigger := &types.AutoTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -351,19 +351,19 @@ func (m *Manager) SetAutoTrigger(pattern, response string, persistent bool) (str
 		},
 		Persistent: persistent,
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
 // SetAutoTextTrigger creates an auto text trigger
 func (m *Manager) SetAutoTextTrigger(pattern, response string, persistent bool) (string, error) {
 	id := m.generateID()
-	
+
 	lifecycle := 1 // One-shot
 	if persistent {
 		lifecycle = -1 // Permanent
 	}
-	
+
 	trigger := &types.AutoTextTrigger{
 		BaseTrigger: types.BaseTrigger{
 			ID:        id,
@@ -375,7 +375,7 @@ func (m *Manager) SetAutoTextTrigger(pattern, response string, persistent bool) 
 		},
 		Persistent: persistent,
 	}
-	
+
 	return id, m.AddTrigger(trigger)
 }
 
@@ -390,7 +390,7 @@ func (m *Manager) generateID() string {
 func (m *Manager) HasTriggers() bool {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	for _, trigger := range m.triggers {
 		if trigger.IsActive() {
 			return true
@@ -403,7 +403,7 @@ func (m *Manager) HasTriggers() bool {
 func (m *Manager) GetTriggersByType(triggerType types.TriggerType) []types.TriggerInterface {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	result := make([]types.TriggerInterface, 0)
 	for _, trigger := range m.triggers {
 		if trigger.GetType() == triggerType && trigger.IsActive() {
@@ -417,12 +417,12 @@ func (m *Manager) GetTriggersByType(triggerType types.TriggerType) []types.Trigg
 func (m *Manager) ActivateTrigger(id string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	trigger, exists := m.triggers[id]
 	if !exists {
 		return fmt.Errorf("trigger not found: %s", id)
 	}
-	
+
 	trigger.SetActive(true)
 	return nil
 }
@@ -431,12 +431,12 @@ func (m *Manager) ActivateTrigger(id string) error {
 func (m *Manager) DeactivateTrigger(id string) error {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
-	
+
 	trigger, exists := m.triggers[id]
 	if !exists {
 		return fmt.Errorf("trigger not found: %s", id)
 	}
-	
+
 	trigger.SetActive(false)
 	return nil
 }
@@ -445,7 +445,7 @@ func (m *Manager) DeactivateTrigger(id string) error {
 func (m *Manager) GetTriggerCount() int {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	count := 0
 	for _, trigger := range m.triggers {
 		if trigger.IsActive() {
@@ -459,20 +459,20 @@ func (m *Manager) GetTriggerCount() int {
 func (m *Manager) ListTriggers() string {
 	m.mutex.RLock()
 	defer m.mutex.RUnlock()
-	
+
 	var result strings.Builder
 	result.WriteString("Active Triggers:\n")
-	
+
 	for id, trigger := range m.triggers {
 		if trigger.IsActive() {
 			result.WriteString(fmt.Sprintf("ID: %s, Type: %d, Pattern: %s, Label: %s\n",
 				id, trigger.GetType(), trigger.GetValue(), trigger.GetLabel()))
 		}
 	}
-	
+
 	if result.Len() == len("Active Triggers:\n") {
 		result.WriteString("No active triggers.\n")
 	}
-	
+
 	return result.String()
 }

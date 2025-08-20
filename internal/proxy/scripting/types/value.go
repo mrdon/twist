@@ -53,7 +53,7 @@ func (v *Value) ToString() string {
 	if v == nil {
 		return ""
 	}
-	
+
 	switch v.Type {
 	case StringType:
 		return v.String
@@ -75,7 +75,7 @@ func (v *Value) ToNumber() float64 {
 	if v == nil {
 		return 0
 	}
-	
+
 	switch v.Type {
 	case NumberType:
 		return v.Number
@@ -97,7 +97,7 @@ func (v *Value) ToBool() bool {
 	if v == nil {
 		return false
 	}
-	
+
 	switch v.Type {
 	case NumberType:
 		return v.Number != 0
@@ -115,7 +115,7 @@ func (v *Value) IsNumber() bool {
 	if v == nil {
 		return false
 	}
-	
+
 	switch v.Type {
 	case NumberType:
 		return true
@@ -132,7 +132,7 @@ func (v *Value) GetArrayElement(index string) *Value {
 	if v == nil {
 		return NewStringValue("")
 	}
-	
+
 	// Convert to array if not already (auto-vivification)
 	if v.Type != ArrayType {
 		v.Type = ArrayType
@@ -140,11 +140,11 @@ func (v *Value) GetArrayElement(index string) *Value {
 		v.String = ""
 		v.Number = 0
 	}
-	
+
 	if elem, exists := v.Array[index]; exists {
 		return elem
 	}
-	
+
 	// Return empty string for non-existent elements
 	return NewStringValue("")
 }
@@ -154,7 +154,7 @@ func (v *Value) SetArrayElement(index string, value *Value) {
 	if v == nil {
 		return
 	}
-	
+
 	// Convert to array if not already
 	if v.Type != ArrayType {
 		v.Type = ArrayType
@@ -162,7 +162,7 @@ func (v *Value) SetArrayElement(index string, value *Value) {
 		v.String = ""
 		v.Number = 0
 	}
-	
+
 	v.Array[index] = value
 }
 
@@ -171,7 +171,7 @@ func (v *Value) Clone() *Value {
 	if v == nil {
 		return NewStringValue("")
 	}
-	
+
 	switch v.Type {
 	case StringType:
 		return NewStringValue(v.String)
@@ -201,12 +201,12 @@ func (v *Value) GetArrayKeys() []string {
 	if v == nil || v.Type != ArrayType {
 		return nil
 	}
-	
+
 	keys := make([]string, 0, len(v.Array))
 	for k := range v.Array {
 		keys = append(keys, k)
 	}
-	
+
 	// Sort keys numerically if they're all numbers
 	return keys
 }
@@ -214,17 +214,17 @@ func (v *Value) GetArrayKeys() []string {
 // GetArrayElementMulti gets an element from a multi-dimensional array
 func (v *Value) GetArrayElementMulti(indices []string) *Value {
 	current := v
-	
+
 	for i, index := range indices {
 		if current == nil {
 			return NewStringValue("")
 		}
-		
+
 		// For the last index, get the element
 		if i == len(indices)-1 {
 			return current.GetArrayElement(index)
 		}
-		
+
 		// For intermediate indices, get the sub-array
 		current = current.GetArrayElement(index)
 		if current.Type != ArrayType {
@@ -235,7 +235,7 @@ func (v *Value) GetArrayElementMulti(indices []string) *Value {
 			current.Number = 0
 		}
 	}
-	
+
 	return NewStringValue("")
 }
 
@@ -244,13 +244,13 @@ func (v *Value) SetArrayElementMulti(indices []string, value *Value) {
 	if v == nil || len(indices) == 0 {
 		return
 	}
-	
+
 	// Single index case
 	if len(indices) == 1 {
 		v.SetArrayElement(indices[0], value)
 		return
 	}
-	
+
 	// Multi-dimensional case
 	current := v
 	for i := 0; i < len(indices)-1; i++ {
@@ -263,7 +263,7 @@ func (v *Value) SetArrayElementMulti(indices []string, value *Value) {
 		}
 		current = next
 	}
-	
+
 	// Set the final element
 	current.SetArrayElement(indices[len(indices)-1], value)
 }
@@ -285,14 +285,14 @@ func (v *Value) SetArrayDimensions(dimensions []int) {
 	if v == nil || len(dimensions) == 0 {
 		return
 	}
-	
+
 	// Convert to array type
 	v.Type = ArrayType
 	v.Array = make(map[string]*Value)
 	v.String = ""
 	v.Number = 0
 	v.ArraySize = dimensions[0]
-	
+
 	// Create elements for the first dimension
 	for i := 1; i <= dimensions[0]; i++ {
 		indexStr := fmt.Sprintf("%d", i) // TWX uses 1-based indexing
@@ -300,12 +300,12 @@ func (v *Value) SetArrayDimensions(dimensions []int) {
 			Type:   StringType,
 			String: "",
 		}
-		
+
 		// If there are more dimensions, recursively set them up
 		if len(dimensions) > 1 {
 			elem.SetArrayDimensions(dimensions[1:])
 		}
-		
+
 		v.Array[indexStr] = elem
 	}
 }
@@ -315,9 +315,9 @@ func (v *Value) GetArrayBounds() []int {
 	if v == nil || v.Type != ArrayType {
 		return []int{}
 	}
-	
+
 	bounds := []int{v.ArraySize}
-	
+
 	// Check if elements have sub-dimensions
 	if v.ArraySize > 0 {
 		firstKey := "1"
@@ -326,7 +326,7 @@ func (v *Value) GetArrayBounds() []int {
 			bounds = append(bounds, subBounds...)
 		}
 	}
-	
+
 	return bounds
 }
 
@@ -335,17 +335,17 @@ func (v *Value) GetStaticArrayElement(index int) (*Value, error) {
 	if v == nil || v.Type != ArrayType {
 		return nil, fmt.Errorf("variable is not an array")
 	}
-	
+
 	// TWX uses 1-based indexing
 	if v.ArraySize > 0 && (index < 1 || index > v.ArraySize) {
 		return nil, fmt.Errorf("array index out of bounds")
 	}
-	
+
 	indexStr := fmt.Sprintf("%d", index)
 	if elem, exists := v.Array[indexStr]; exists {
 		return elem, nil
 	}
-	
+
 	// Return empty string for non-existent elements in dynamic arrays
 	return NewStringValue(""), nil
 }
@@ -355,12 +355,12 @@ func (v *Value) SetStaticArrayElement(index int, value *Value) error {
 	if v == nil || v.Type != ArrayType {
 		return fmt.Errorf("variable is not an array")
 	}
-	
+
 	// TWX uses 1-based indexing
 	if v.ArraySize > 0 && (index < 1 || index > v.ArraySize) {
 		return fmt.Errorf("array index out of bounds")
 	}
-	
+
 	indexStr := fmt.Sprintf("%d", index)
 	v.Array[indexStr] = value
 	return nil

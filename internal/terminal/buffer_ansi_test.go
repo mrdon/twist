@@ -19,7 +19,7 @@ type testTerminal struct {
 func newTestTerminal() *testTerminal {
 	converter := ansi.NewColorConverter()
 	term := NewTerminalWithConverter(80, 24, converter)
-	
+
 	return &testTerminal{
 		Terminal:      term,
 		sequences:     make([]string, 0),
@@ -33,7 +33,7 @@ func (tt *testTerminal) processDataWithANSI(data []byte) {
 	// Combine any buffered data with the new data
 	combinedData := append(tt.partialBuffer, data...)
 	tt.partialBuffer = tt.partialBuffer[:0] // Clear buffer
-	
+
 	i := 0
 	for i < len(combinedData) {
 		if combinedData[i] == '\x1b' {
@@ -52,7 +52,7 @@ func (tt *testTerminal) processDataWithANSI(data []byte) {
 					}
 					end++
 				}
-				
+
 				if foundTerminator {
 					// Complete sequence found
 					sequence := string(combinedData[i:end])
@@ -97,7 +97,6 @@ func (tt *testTerminal) processDataWithANSI(data []byte) {
 	}
 }
 
-
 func TestANSIChunkSplitting(t *testing.T) {
 	// Test every possible split point for various ANSI sequences
 	sequences := []struct {
@@ -113,7 +112,7 @@ func TestANSIChunkSplitting(t *testing.T) {
 		{"reset", "\x1b[0m"},
 		{"default fg", "\x1b[39m"},
 		{"default bg", "\x1b[49m"},
-		
+
 		// Cursor movement
 		{"cursor home", "\x1b[H"},
 		{"cursor position", "\x1b[10;20H"},
@@ -122,7 +121,7 @@ func TestANSIChunkSplitting(t *testing.T) {
 		{"cursor right", "\x1b[2C"},
 		{"cursor left", "\x1b[4D"},
 		{"cursor position alt", "\x1b[15;25f"},
-		
+
 		// Erase sequences
 		{"erase display", "\x1b[2J"},
 		{"erase line", "\x1b[K"},
@@ -136,32 +135,32 @@ func TestANSIChunkSplitting(t *testing.T) {
 			for splitPoint := 1; splitPoint < len(seq.seq); splitPoint++ {
 				t.Run(fmt.Sprintf("split_at_%d", splitPoint), func(t *testing.T) {
 					term := newTestTerminal()
-					
+
 					// Split the sequence at the split point
-					part1 := []byte("A" + seq.seq[:splitPoint])  // Add 'A' so we can verify regular chars work
-					part2 := []byte(seq.seq[splitPoint:] + "B")  // Add 'B' so we can verify regular chars work
-					
+					part1 := []byte("A" + seq.seq[:splitPoint]) // Add 'A' so we can verify regular chars work
+					part2 := []byte(seq.seq[splitPoint:] + "B") // Add 'B' so we can verify regular chars work
+
 					// Process both chunks
 					term.processDataWithANSI(part1)
 					term.processDataWithANSI(part2)
-					
+
 					// Should have exactly one ANSI sequence
 					if len(term.sequences) != 1 {
 						t.Errorf("expected 1 sequence, got %d: %v", len(term.sequences), term.sequences)
 						return
 					}
-					
+
 					// Should be the complete sequence
 					if term.sequences[0] != seq.seq {
 						t.Errorf("expected sequence %q, got %q", seq.seq, term.sequences[0])
 					}
-					
+
 					// Should have exactly 2 regular characters (A and B)
 					if len(term.runes) != 2 {
 						t.Errorf("expected 2 runes, got %d: %v", len(term.runes), term.runes)
 						return
 					}
-					
+
 					if term.runes[0] != 'A' || term.runes[1] != 'B' {
 						t.Errorf("expected runes ['A', 'B'], got %v", term.runes)
 					}
@@ -257,12 +256,12 @@ func TestANSIRealWorldCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			term := newTestTerminal()
-			
+
 			// Process each chunk
 			for _, chunk := range tt.chunks {
 				term.processDataWithANSI(chunk)
 			}
-			
+
 			// Check sequences
 			if len(term.sequences) != len(tt.wantSeqs) {
 				t.Errorf("got %d sequences, want %d", len(term.sequences), len(tt.wantSeqs))
@@ -270,13 +269,13 @@ func TestANSIRealWorldCases(t *testing.T) {
 				t.Errorf("want sequences: %v", tt.wantSeqs)
 				return
 			}
-			
+
 			for i, seq := range term.sequences {
 				if seq != tt.wantSeqs[i] {
 					t.Errorf("sequence %d: got %q, want %q", i, seq, tt.wantSeqs[i])
 				}
 			}
-			
+
 			// Check runes
 			if len(term.runes) != len(tt.wantRunes) {
 				t.Errorf("got %d runes, want %d", len(term.runes), len(tt.wantRunes))
@@ -284,7 +283,7 @@ func TestANSIRealWorldCases(t *testing.T) {
 				t.Errorf("want runes: %v", tt.wantRunes)
 				return
 			}
-			
+
 			for i, r := range term.runes {
 				if r != tt.wantRunes[i] {
 					t.Errorf("rune %d: got %q, want %q", i, r, tt.wantRunes[i])

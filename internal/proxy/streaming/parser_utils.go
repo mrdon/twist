@@ -15,12 +15,12 @@ func (p *TWXParser) getParameter(line string, index int) string {
 	if index < 1 {
 		return ""
 	}
-	
+
 	parts := strings.Fields(line)
 	if index > len(parts) {
 		return ""
 	}
-	
+
 	return parts[index-1] // Pascal uses 1-based indexing
 }
 
@@ -29,12 +29,12 @@ func (p *TWXParser) getParameterPos(line string, index int) int {
 	if index < 1 {
 		return 0
 	}
-	
+
 	parts := strings.Fields(line)
 	if index > len(parts) {
 		return 0
 	}
-	
+
 	// Find position of the parameter in original string
 	param := parts[index-1]
 	return strings.Index(line, param)
@@ -103,7 +103,7 @@ func (p *TWXParser) extractNumberFromString(s string) int {
 // parsePortClass determines port class from description (mirrors Pascal logic)
 func (p *TWXParser) parsePortClass(portDesc string) int {
 	portDesc = strings.ToUpper(portDesc)
-	
+
 	// Extract class pattern like "Class 9 Port" or trade pattern like "(SSSx3)"
 	if strings.Contains(portDesc, "CLASS") {
 		parts := strings.Fields(portDesc)
@@ -113,7 +113,7 @@ func (p *TWXParser) parsePortClass(portDesc string) int {
 			}
 		}
 	}
-	
+
 	// Determine class from trade pattern
 	if strings.Contains(portDesc, "(") && strings.Contains(portDesc, ")") {
 		start := strings.Index(portDesc, "(")
@@ -123,7 +123,7 @@ func (p *TWXParser) parsePortClass(portDesc string) int {
 			return p.classFromTradePattern(pattern)
 		}
 	}
-	
+
 	return 0 // Unknown class
 }
 
@@ -131,12 +131,12 @@ func (p *TWXParser) parsePortClass(portDesc string) int {
 func (p *TWXParser) classFromTradePattern(pattern string) int {
 	// Map trade patterns to port classes (BWB = 2, SBB = 3, etc.)
 	pattern = strings.ToUpper(pattern)
-	
+
 	// Remove multipliers like "x3", "x2"
 	if idx := strings.Index(pattern, "X"); idx > 0 {
 		pattern = pattern[:idx]
 	}
-	
+
 	switch pattern {
 	case "BBS":
 		return 1
@@ -167,10 +167,10 @@ func (p *TWXParser) parseIntSafe(s string) int {
 	if s == "" {
 		return 0
 	}
-	
+
 	// Remove commas
 	s = strings.ReplaceAll(s, ",", "")
-	
+
 	if i, err := strconv.Atoi(s); err == nil {
 		return i
 	}
@@ -187,22 +187,22 @@ func (p *TWXParser) parseIntSafeWithCommas(s string) int {
 func (p *TWXParser) stringContainsWord(s, word string) bool {
 	s = strings.ToLower(s)
 	word = strings.ToLower(word)
-	
+
 	index := strings.Index(s, word)
 	if index == -1 {
 		return false
 	}
-	
+
 	// Check if it's a whole word (not part of another word)
 	if index > 0 && isAlphaNumeric(rune(s[index-1])) {
 		return false
 	}
-	
+
 	endIndex := index + len(word)
 	if endIndex < len(s) && isAlphaNumeric(rune(s[endIndex])) {
 		return false
 	}
-	
+
 	return true
 }
 
@@ -217,12 +217,12 @@ func (p *TWXParser) extractQuotedString(s string) string {
 	if first == -1 {
 		return ""
 	}
-	
+
 	second := strings.Index(s[first+1:], "\"")
 	if second == -1 {
 		return ""
 	}
-	
+
 	return s[first+1 : first+1+second]
 }
 
@@ -231,7 +231,7 @@ func (p *TWXParser) splitOnCommaOutsideParens(s string) []string {
 	var result []string
 	var current strings.Builder
 	parenLevel := 0
-	
+
 	for _, char := range s {
 		switch char {
 		case '(':
@@ -251,11 +251,11 @@ func (p *TWXParser) splitOnCommaOutsideParens(s string) []string {
 			current.WriteRune(char)
 		}
 	}
-	
+
 	if current.Len() > 0 {
 		result = append(result, strings.TrimSpace(current.String()))
 	}
-	
+
 	return result
 }
 

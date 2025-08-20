@@ -12,22 +12,22 @@ import (
 // TestTUIImportRestrictions ensures TUI only imports allowed packages
 func TestTUIImportRestrictions(t *testing.T) {
 	allowedPrefixes := []string{
-		"twist/internal/api",           // Core API only
-		"twist/internal/debug",         // Debug package (required in all files per CLAUDE.md)
-		"twist/internal/theme",         // UI theming (until shared)
-		"twist/internal/ansi",          // ANSI processing (until shared)
-		"twist/internal/terminal",      // Terminal utilities (until shared)
-		"twist/internal/components",    // UI components (until shared)
-		"twist/internal/tui",           // TUI can import its own subpackages
-		"github.com/",                  // Third-party packages
-		"golang.org/",                  // Standard library extensions
+		"twist/internal/api",        // Core API only
+		"twist/internal/debug",      // Debug package (required in all files per CLAUDE.md)
+		"twist/internal/theme",      // UI theming (until shared)
+		"twist/internal/ansi",       // ANSI processing (until shared)
+		"twist/internal/terminal",   // Terminal utilities (until shared)
+		"twist/internal/components", // UI components (until shared)
+		"twist/internal/tui",        // TUI can import its own subpackages
+		"github.com/",               // Third-party packages
+		"golang.org/",               // Standard library extensions
 	}
 
 	forbiddenPrefixes := []string{
-		"twist/internal/proxy",             // No proxy internals at all
-		"twist/internal/database",          // No direct database access (old path)
-		"twist/internal/streaming",         // No streaming internals (old path)
-		"twist/internal/scripting",         // No scripting internals (old path)
+		"twist/internal/proxy",     // No proxy internals at all
+		"twist/internal/database",  // No direct database access (old path)
+		"twist/internal/streaming", // No streaming internals (old path)
+		"twist/internal/scripting", // No scripting internals (old path)
 	}
 
 	checkImports(t, "./tui", allowedPrefixes, forbiddenPrefixes)
@@ -36,7 +36,7 @@ func TestTUIImportRestrictions(t *testing.T) {
 // TestProxyImportRestrictions ensures Proxy doesn't import TUI internals
 func TestProxyImportRestrictions(t *testing.T) {
 	forbiddenPrefixes := []string{
-		"twist/internal/tui/",          // No TUI internals (except via API)
+		"twist/internal/tui/", // No TUI internals (except via API)
 	}
 
 	// Proxy can import anything except TUI internals

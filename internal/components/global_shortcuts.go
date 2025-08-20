@@ -1,9 +1,9 @@
 package components
 
 import (
+	"github.com/gdamore/tcell/v2"
 	"strings"
 	"sync"
-	"github.com/gdamore/tcell/v2"
 )
 
 // GlobalShortcutManager manages application-wide keyboard shortcuts
@@ -25,10 +25,10 @@ func (gsm *GlobalShortcutManager) RegisterShortcut(shortcut string, callback fun
 	if shortcut == "" {
 		return
 	}
-	
+
 	gsm.mutex.Lock()
 	defer gsm.mutex.Unlock()
-	
+
 	gsm.shortcuts[normalizeShortcut(shortcut)] = callback
 }
 
@@ -37,10 +37,10 @@ func (gsm *GlobalShortcutManager) UnregisterShortcut(shortcut string) {
 	if shortcut == "" {
 		return
 	}
-	
+
 	gsm.mutex.Lock()
 	defer gsm.mutex.Unlock()
-	
+
 	delete(gsm.shortcuts, normalizeShortcut(shortcut))
 }
 
@@ -50,11 +50,11 @@ func (gsm *GlobalShortcutManager) HandleKeyEvent(event *tcell.EventKey) bool {
 	if shortcutString == "" {
 		return false
 	}
-	
+
 	gsm.mutex.RLock()
 	callback, exists := gsm.shortcuts[normalizeShortcut(shortcutString)]
 	gsm.mutex.RUnlock()
-	
+
 	if exists {
 		callback()
 		return true // Event was handled
@@ -66,7 +66,7 @@ func (gsm *GlobalShortcutManager) HandleKeyEvent(event *tcell.EventKey) bool {
 func (gsm *GlobalShortcutManager) ListRegisteredShortcuts() []string {
 	gsm.mutex.RLock()
 	defer gsm.mutex.RUnlock()
-	
+
 	shortcuts := make([]string, 0, len(gsm.shortcuts))
 	for shortcut := range gsm.shortcuts {
 		shortcuts = append(shortcuts, shortcut)

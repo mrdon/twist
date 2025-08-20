@@ -41,22 +41,22 @@ type IModExtractor interface {
 	// Core parsing methods
 	ProcessInBound(data string)
 	ProcessOutBound(data string) bool
-	
+
 	// State management
 	GetCurrentSector() int
 	GetCurrentDisplay() DisplayType
 	SetCurrentDisplay(display DisplayType)
-	
+
 	// Event integration
 	SetEventBus(bus IEventBus)
 	GetEventBus() IEventBus
-	
+
 	// Script integration points
 	FireTextEvent(line string, outbound bool)
 	FireTextLineEvent(line string, outbound bool)
 	ActivateTriggers()
 	FireAutoTextEvent(line string, outbound bool)
-	
+
 	// Database integration
 	GetDatabase() database.Database
 	SetDatabase(db database.Database)
@@ -67,10 +67,10 @@ type ITWXModule interface {
 	// Module lifecycle
 	Initialize() error
 	Shutdown() error
-	
+
 	// Event handling
 	OnEvent(event Event)
-	
+
 	// Module identification
 	GetModuleName() string
 	GetModuleVersion() string
@@ -83,7 +83,7 @@ type IScriptInterpreter interface {
 	TextLineEvent(line string, outbound bool)
 	ActivateTriggers()
 	AutoTextEvent(line string, outbound bool)
-	
+
 	// Script management
 	LoadScript(filename string) error
 	UnloadScript(name string) error
@@ -108,12 +108,12 @@ type IGameStateManager interface {
 	IsInGame() bool
 	GetCurrentGame() string
 	GetCurrentSector() int
-	
+
 	// State changes
 	OnGameStart(gameName string)
 	OnGameExit()
 	OnSectorChange(sectorNum int)
-	
+
 	// Event integration
 	SetEventBus(bus IEventBus)
 }

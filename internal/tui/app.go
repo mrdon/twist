@@ -3,14 +3,14 @@ package tui
 import (
 	"fmt"
 	"time"
+	coreapi "twist/internal/api"
+	twistComponents "twist/internal/components"
 	"twist/internal/debug"
 	"twist/internal/terminal"
+	"twist/internal/theme"
+	"twist/internal/tui/api"
 	"twist/internal/tui/components"
 	"twist/internal/tui/handlers"
-	"twist/internal/theme"
-	twistComponents "twist/internal/components"
-	"twist/internal/tui/api"
-	coreapi "twist/internal/api"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -18,26 +18,26 @@ import (
 
 // TwistApp represents the main tview application - refactored version
 type TwistApp struct {
-	app    *tview.Application
+	app *tview.Application
 
-	// API layer (now exclusive) 
+	// API layer (now exclusive)
 	proxyClient *api.ProxyClient
 	tuiAPI      coreapi.TuiAPI
 
 	// Core components
-	terminal     *terminal.Terminal
-	pages        *tview.Pages
-	mainGrid     *tview.Grid
+	terminal *terminal.Terminal
+	pages    *tview.Pages
+	mainGrid *tview.Grid
 
 	// UI Components
-	menuComponent      *components.MenuComponent
-	terminalComponent  *components.TerminalComponent
-	panelComponent     *components.PanelComponent
-	statusComponent    *components.StatusComponent
+	menuComponent     *components.MenuComponent
+	terminalComponent *components.TerminalComponent
+	panelComponent    *components.PanelComponent
+	statusComponent   *components.StatusComponent
 
 	// Input handling
-	inputHandler        *handlers.InputHandler
-	globalShortcuts     *twistComponents.GlobalShortcutManager
+	inputHandler    *handlers.InputHandler
+	globalShortcuts *twistComponents.GlobalShortcutManager
 
 	// Sixel rendering layer
 	sixelLayer *components.SixelLayer
@@ -54,7 +54,7 @@ type TwistApp struct {
 
 	// Initial script to load on connection
 	initialScript string
-	
+
 	// Version information
 	version string
 	commit  string
@@ -63,7 +63,6 @@ type TwistApp struct {
 
 // NewApplication creates and configures the tview application
 func NewApplication() *TwistApp {
-
 
 	// Create the main application
 	app := tview.NewApplication()
@@ -138,7 +137,7 @@ func (ta *TwistApp) setupUI() {
 	// Set main grid background to pure black
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	// Initialize the UI without panels (they start hidden)
 	ta.setupUILayout()
 
@@ -148,7 +147,7 @@ func (ta *TwistApp) setupUI() {
 	ta.pages.AddPage("main", ta.mainGrid, true, true)
 
 	ta.app.SetRoot(ta.pages, true)
-	
+
 	// Set up sixel layer rendering after tview draws
 	ta.app.SetAfterDrawFunc(func(screen tcell.Screen) {
 		// Render sixel layer after tview completes its drawing
@@ -156,7 +155,7 @@ func (ta *TwistApp) setupUI() {
 			ta.sixelLayer.Render()
 		}
 	})
-	
+
 	// Always keep terminal focused and in terminal input mode
 	ta.app.SetFocus(ta.terminalComponent.GetView())
 	ta.inputHandler.SetInputMode(handlers.InputModeTerminal)
@@ -166,7 +165,7 @@ func (ta *TwistApp) setupUI() {
 func (ta *TwistApp) setupUILayout() {
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	if ta.panelsVisible {
 		// Create main grid layout: 3 columns, 3 rows (menu, main content, status)
 		// Left panel: 20 chars, Terminal: fixed 80 chars, Right panel: remaining space
@@ -174,7 +173,7 @@ func (ta *TwistApp) setupUILayout() {
 			SetRows(1, 0, 1).
 			SetColumns(30, 80, 0).
 			SetBorders(false)
-		
+
 		ta.mainGrid.SetBackgroundColor(defaultColors.Background)
 
 		// Add menu bar to top row, spanning all columns
@@ -193,7 +192,7 @@ func (ta *TwistApp) setupUILayout() {
 			SetRows(1, 0, 1).
 			SetColumns(0).
 			SetBorders(false)
-		
+
 		ta.mainGrid.SetBackgroundColor(defaultColors.Background)
 
 		// Add menu bar to top row
@@ -226,20 +225,20 @@ func (ta *TwistApp) hidePanels() {
 // animatePanels performs smooth panel show/hide animation
 func (ta *TwistApp) animatePanels(show bool) {
 	ta.animating = true
-	
+
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 			}
 		}()
-		
+
 		const animationFrames = 8
 		const frameDuration = 30 * time.Millisecond
-		
+
 		// Get current theme for consistent colors
 		currentTheme := theme.Current()
 		defaultColors := currentTheme.DefaultColors()
-		
+
 		for frame := 0; frame <= animationFrames; frame++ {
 			// Calculate animation progress (0.0 to 1.0)
 			var progress float64
@@ -248,17 +247,17 @@ func (ta *TwistApp) animatePanels(show bool) {
 			} else {
 				progress = 1.0 - float64(frame)/float64(animationFrames)
 			}
-			
+
 			// Calculate panel widths based on progress
 			leftPanelWidth := int(30.0 * progress)
 			terminalWidth := 80
 			// Right panel uses remaining space (0 means use remaining space in tview grid)
-			
+
 			// Ensure minimum widths
 			if leftPanelWidth < 1 && progress > 0 {
 				leftPanelWidth = 1
 			}
-			
+
 			ta.app.QueueUpdateDraw(func() {
 				// Create new grid with animated panel sizes
 				if leftPanelWidth > 0 {
@@ -267,9 +266,9 @@ func (ta *TwistApp) animatePanels(show bool) {
 						SetRows(1, 0, 1).
 						SetColumns(leftPanelWidth, terminalWidth, 0).
 						SetBorders(false)
-					
+
 					ta.mainGrid.SetBackgroundColor(defaultColors.Background)
-					
+
 					// Add components
 					ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 3, 0, 0, false)
 					ta.mainGrid.AddItem(ta.panelComponent.GetLeftWrapper(), 1, 0, 1, 1, 0, 0, false)
@@ -283,32 +282,32 @@ func (ta *TwistApp) animatePanels(show bool) {
 						SetRows(1, 0, 1).
 						SetColumns(0).
 						SetBorders(false)
-					
+
 					ta.mainGrid.SetBackgroundColor(defaultColors.Background)
-					
+
 					// Add components
 					ta.mainGrid.AddItem(ta.menuComponent.GetView(), 0, 0, 1, 1, 0, 0, false)
 					ta.mainGrid.AddItem(ta.terminalComponent.GetWrapper(), 1, 0, 1, 1, 0, 0, true)
 					// Add status bar to bottom row
-		ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
+					ta.mainGrid.AddItem(ta.statusComponent.GetWrapper(), 2, 0, 1, 1, 0, 0, false)
 				}
-				
+
 				// Update the page
 				ta.pages.RemovePage("main")
 				ta.pages.AddPage("main", ta.mainGrid, true, true)
 				ta.app.SetFocus(ta.terminalComponent.GetView())
 			})
-			
+
 			// Wait for next frame (except on last frame)
 			if frame < animationFrames {
 				time.Sleep(frameDuration)
 			}
 		}
-		
+
 		// Animation complete - update final state
 		ta.panelsVisible = show
 		ta.animating = false
-		
+
 		// Load real data when panels become visible
 		if show && ta.panelComponent != nil && ta.proxyClient.IsConnected() {
 			// Since GetPlayerInfo() returns CurrentSector: 0, we'll rely on sector change events
@@ -320,7 +319,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 				ta.panelComponent.LoadRealData()
 			})
 		} else {
-			debug.Log("Panel visibility: show=%v, panelComponent=%v, connected=%v", 
+			debug.Log("Panel visibility: show=%v, panelComponent=%v, connected=%v",
 				show, ta.panelComponent != nil, ta.proxyClient.IsConnected())
 		}
 	}()
@@ -330,17 +329,17 @@ func (ta *TwistApp) animatePanels(show bool) {
 func (ta *TwistApp) setupInputHandling() {
 	// Set up input handler callbacks
 	ta.inputHandler.SetCallbacks(
-		ta.connect,           // onConnect
-		ta.disconnect,        // onDisconnect
-		ta.exit,             // onExit
-		ta.showMenuModal,    // onShowModal
-		ta.closeModal,       // onCloseModal
-		ta.sendCommand,      // onSendCommand
+		ta.connect,       // onConnect
+		ta.disconnect,    // onDisconnect
+		ta.exit,          // onExit
+		ta.showMenuModal, // onShowModal
+		ta.closeModal,    // onCloseModal
+		ta.sendCommand,   // onSendCommand
 	)
-	
+
 	// Set up dropdown callback
 	ta.inputHandler.SetDropdownCallback(ta.showDropdownMenu)
-	
+
 	// Set up connection dialog callback
 	ta.inputHandler.SetConnectionDialogCallback(ta.showConnectionDialog)
 
@@ -350,7 +349,7 @@ func (ta *TwistApp) setupInputHandling() {
 
 // registerMenuShortcuts registers all menu item shortcuts globally at startup
 func (ta *TwistApp) registerMenuShortcuts() {
-	
+
 	// Register Session menu shortcuts
 	sessionItems := []twistComponents.MenuItem{
 		{Label: "Connect", Shortcut: ""},
@@ -359,22 +358,22 @@ func (ta *TwistApp) registerMenuShortcuts() {
 		{Label: "Save Session", Shortcut: ""},
 		{Label: "Quit", Shortcut: "Alt+Q"},
 	}
-	
+
 	for _, item := range sessionItems {
 		if item.Shortcut != "" {
-			label := item.Label   // Capture for closure
+			label := item.Label // Capture for closure
 			shortcut := item.Shortcut
 			ta.globalShortcuts.RegisterShortcut(shortcut, func() {
 				// Handle the menu item action
 				switch label {
 				case "Quit":
 					ta.exit()
-				// Add other menu item actions as needed
+					// Add other menu item actions as needed
 				}
 			})
 		}
 	}
-	
+
 	// TODO: Register shortcuts for other menus (Edit, View, Terminal, Help) as they get shortcuts
 }
 
@@ -388,7 +387,7 @@ func (ta *TwistApp) SetVersionInfo(version, commit, date string) {
 	ta.version = version
 	ta.commit = commit
 	ta.date = date
-	
+
 	// Update status component with version info
 	if ta.statusComponent != nil {
 		ta.statusComponent.SetVersionInfo(version, commit, date)
@@ -406,7 +405,7 @@ func (ta *TwistApp) connect(address string) {
 	if ta.modalVisible {
 		ta.closeModal()
 	}
-	
+
 	// Use API layer exclusively - connection should be non-blocking
 	// Proxy will call HandleConnecting, then HandleConnectionEstablished/HandleConnectionError
 	if err := ta.proxyClient.ConnectWithScript(address, ta.tuiAPI, ta.initialScript); err != nil {
@@ -461,43 +460,43 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 			if r := recover(); r != nil {
 			}
 		}()
-		
+
 		ta.app.QueueUpdateDraw(func() {
 			switch status {
 			case coreapi.ConnectionStatusConnecting:
 				ta.statusComponent.SetConnectionStatus(false, "Connecting to "+address+"...")
-				
+
 			case coreapi.ConnectionStatusConnected:
 				ta.connected = true
 				ta.serverAddress = address
 				ta.menuComponent.SetConnectedMenu()
 				ta.statusComponent.SetConnectionStatus(true, address)
-				
+
 				// Set ProxyAPI on status component after connection established
 				if ta.proxyClient.IsConnected() {
 					currentAPI := ta.proxyClient.GetCurrentAPI()
 					ta.statusComponent.SetProxyAPI(currentAPI)
 					ta.panelComponent.SetProxyAPI(currentAPI) // Add panel component API setup
 				}
-				
+
 				if ta.modalVisible {
 					ta.closeModal()
 				}
-				
+
 			case coreapi.ConnectionStatusDisconnected:
 				ta.connected = false
 				ta.serverAddress = ""
 				ta.menuComponent.SetDisconnectedMenu()
 				ta.statusComponent.SetConnectionStatus(false, "")
-				
+
 				// Clear ProxyAPI from UI components to prevent stale references
 				ta.statusComponent.SetProxyAPI(nil)
 				ta.panelComponent.SetProxyAPI(nil)
-				
+
 				// Show disconnect message in terminal
 				disconnectMsg := "\r\x1b[K\x1b[31;1m*** DISCONNECTED ***\x1b[0m\n"
 				ta.terminalComponent.Write([]byte(disconnectMsg))
-				
+
 				// Ensure terminal keeps focus after disconnection
 				ta.app.SetFocus(ta.terminalComponent.GetView())
 			}
@@ -511,22 +510,22 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 			if r := recover(); r != nil {
 			}
 		}()
-		
+
 		ta.app.QueueUpdateDraw(func() {
 			ta.connected = false
 			ta.serverAddress = ""
 			ta.menuComponent.SetDisconnectedMenu()
 			ta.statusComponent.SetConnectionStatus(false, "")
-			
+
 			// Clear ProxyAPI from UI components to prevent stale references
 			ta.statusComponent.SetProxyAPI(nil)
 			ta.panelComponent.SetProxyAPI(nil)
-			
+
 			// Ensure modal is closed if it's still open
 			if ta.modalVisible {
 				ta.closeModal()
 			}
-			
+
 			// TODO: Show error modal: ta.showErrorModal(err)
 		})
 	}()
@@ -540,10 +539,10 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 			if r := recover(); r != nil {
 			}
 		}()
-		
+
 		// Write directly to the TerminalComponent
 		ta.terminalComponent.Write(data)
-		
+
 		// UI refresh is handled by the TerminalView's change callback
 	}()
 }
@@ -552,7 +551,7 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 func (ta *TwistApp) HandleScriptStatusChanged(status coreapi.ScriptStatusInfo) {
 	// Status component will be updated automatically via SetProxyAPI
 	// For now, just output to terminal for visibility
-	msg := fmt.Sprintf("Script status: %d active, %d total\n", 
+	msg := fmt.Sprintf("Script status: %d active, %d total\n",
 		status.ActiveCount, status.TotalCount)
 	ta.terminalComponent.Write([]byte(msg))
 }
@@ -565,18 +564,18 @@ func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
 
 // HandleDatabaseStateChanged processes database loading/unloading events
 func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
-	
+
 	// Handle database state change asynchronously to ensure non-blocking
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
 			}
 		}()
-		
+
 		ta.app.QueueUpdateDraw(func() {
 			// Update status bar to show active game information
 			ta.statusComponent.SetGameInfo(info.GameName, info.ServerHost, info.ServerPort, info.IsLoaded)
-			
+
 			// Show/hide panels based on database loading state
 			if info.IsLoaded {
 				// Don't restore map component here - wait for animation to complete
@@ -604,7 +603,7 @@ func (ta *TwistApp) HandleCurrentSectorChanged(sectorInfo coreapi.SectorInfo) {
 
 // HandlePortUpdated processes port information update events
 func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
-	
+
 	ta.app.QueueUpdateDraw(func() {
 		// Port updates don't affect map visualization (which only cares about warps)
 		// Skip calling UpdateSectorData to avoid triggering unnecessary map redraws
@@ -626,7 +625,7 @@ func (ta *TwistApp) HandleTraderDataUpdated(sectorNumber int, traders []coreapi.
 	})
 }
 
-// HandlePlayerStatsUpdated processes player statistics update events  
+// HandlePlayerStatsUpdated processes player statistics update events
 func (ta *TwistApp) HandlePlayerStatsUpdated(stats coreapi.PlayerStatsInfo) {
 	ta.app.QueueUpdateDraw(func() {
 		// Update trader panel with current player stats (for display context)
@@ -649,15 +648,15 @@ func (ta *TwistApp) HandleSectorUpdated(sectorInfo coreapi.SectorInfo) {
 
 // refreshPanelDataWithInfo refreshes panel data using provided sector info
 func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
-	
+
 	// Only refresh if panels are visible
 	if !ta.panelsVisible {
 		return
 	}
-	
+
 	// Update panels directly with the provided sector info
 	ta.panelComponent.UpdateSectorInfo(sectorInfo)
-	
+
 	// Always attempt to load/update player stats when sector changes
 	debug.Log("refreshPanelDataWithInfo: sector %d, hasDetailedStats: %v", sectorInfo.Number, ta.panelComponent.HasDetailedPlayerStats())
 	debug.Log("refreshPanelDataWithInfo: always calling UpdatePlayerStatsSector")
@@ -666,12 +665,12 @@ func (ta *TwistApp) refreshPanelDataWithInfo(sectorInfo coreapi.SectorInfo) {
 
 // refreshPanelData refreshes panel data using API calls
 func (ta *TwistApp) refreshPanelData(sectorNumber int) {
-	
+
 	// Only refresh if panels are visible
 	if !ta.panelsVisible {
 		return
 	}
-	
+
 	proxyAPI := ta.proxyClient.GetCurrentAPI()
 	if proxyAPI != nil {
 		// Get sector info and update panel
@@ -680,14 +679,14 @@ func (ta *TwistApp) refreshPanelData(sectorNumber int) {
 			ta.panelComponent.UpdateSectorInfo(sectorInfo)
 		} else {
 		}
-		
+
 		// Create fake player info with the current sector since GetPlayerInfo() is broken
 		playerInfo := coreapi.PlayerInfo{
 			Name:          "Player", // We don't have the real name from GetPlayerInfo
 			CurrentSector: sectorNumber,
 		}
 		ta.panelComponent.UpdateTraderInfo(playerInfo)
-		
+
 		// Also update sector map
 		if ta.panelComponent != nil {
 			ta.panelComponent.UpdateSectorInfo(sectorInfo)
@@ -724,12 +723,12 @@ func (ta *TwistApp) showMenuModal(title string, options []string, callback func(
 func (ta *TwistApp) closeModal() {
 	ta.modalVisible = false
 	ta.inputHandler.SetModalVisible(false)
-	
+
 	// Hide dropdown if visible
 	if ta.menuComponent.IsDropdownVisible() {
 		ta.menuComponent.HideDropdown()
 	}
-	
+
 	// Remove any possible modal pages
 	ta.pages.RemovePage("modal")
 	ta.pages.RemovePage("script-modal")
@@ -753,47 +752,45 @@ func (ta *TwistApp) startUpdateWorker() {
 
 // handleGlobalKeys handles global key events
 func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
-	
+
 	// Ctrl+C - exit the application (check multiple ways)
 	if event.Key() == tcell.KeyCtrlC {
 		ta.exit()
 		return nil
 	}
-	
+
 	// Also check for Ctrl+C via rune and modifiers
 	if event.Rune() == 'c' && event.Modifiers()&tcell.ModCtrl != 0 {
 		ta.exit()
 		return nil
 	}
-	
+
 	// Also check for key code 3 (ETX) which is the ASCII value for Ctrl+C
 	if event.Key() == tcell.KeyETX {
 		ta.exit()
 		return nil
 	}
-	
+
 	// Check global shortcuts first (including menu shortcuts like Alt+Q)
 	if ta.globalShortcuts.HandleKeyEvent(event) {
 		return nil
 	}
-	
+
 	// ESC key to close modal if visible
 	if event.Key() == tcell.KeyEscape && ta.modalVisible {
 		ta.closeModal()
 		return nil
 	}
-	
+
 	// F1 key for help
 	if event.Key() == tcell.KeyF1 {
 		ta.showHelpModal()
 		return nil
 	}
-	
-	
+
 	// Pass to input handler for menu Alt+keys and other keys
 	return ta.inputHandler.HandleKeyEvent(event)
 }
-
 
 // showHelpModal displays help information
 func (ta *TwistApp) showHelpModal() {
@@ -830,7 +827,7 @@ func (ta *TwistApp) showHelpModal() {
 
 // showDropdownMenu displays a dropdown menu below the menu bar
 func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback func(string)) {
-	
+
 	// Convert string options to MenuItems with shortcuts for specific menus
 	items := make([]twistComponents.MenuItem, len(options))
 	for i, option := range options {
@@ -840,12 +837,12 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 			switch option {
 			case "Quit":
 				shortcut = "Alt+Q"
-			// All other Session menu items have no shortcuts
+				// All other Session menu items have no shortcuts
 			}
 		}
 		items[i] = twistComponents.MenuItem{Label: option, Shortcut: shortcut}
 	}
-	
+
 	// Special handling for Session menu
 	var dropdownCallback func(string)
 	if menuName == "Session" {
@@ -872,7 +869,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 			ta.closeModal()
 		}
 	}
-	
+
 	dropdown := ta.menuComponent.ShowDropdown(menuName, items, dropdownCallback, func(direction string) {
 		// Handle left/right arrow navigation between menus
 		ta.navigateMenu(menuName, direction)
@@ -885,7 +882,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	menus := []string{"Session", "Edit", "View", "Terminal", "Help"}
 	currentIndex := -1
-	
+
 	// Find current menu index
 	for i, menu := range menus {
 		if menu == currentMenu {
@@ -893,11 +890,11 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 			break
 		}
 	}
-	
+
 	if currentIndex == -1 {
 		return
 	}
-	
+
 	// Calculate next menu
 	var nextIndex int
 	if direction == "left" {
@@ -905,12 +902,12 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	} else {
 		nextIndex = (currentIndex + 1) % len(menus)
 	}
-	
+
 	nextMenu := menus[nextIndex]
-	
+
 	// Close current dropdown and open next one
 	ta.closeModal()
-	
+
 	// Show the appropriate menu based on next menu
 	switch nextMenu {
 	case "Session":
@@ -986,11 +983,11 @@ func (ta *TwistApp) showConnectionDialog() {
 	// Create connection dialog
 	connectionDialog := components.NewConnectionDialog(
 		func(address string) {
-				ta.connect(address)
+			ta.connect(address)
 			// Don't close modal immediately - let connection callbacks handle it
 		},
 		func() {
-				ta.closeModal()
+			ta.closeModal()
 		},
 	)
 
@@ -1003,15 +1000,12 @@ func (ta *TwistApp) showConnectionDialog() {
 	ta.app.SetFocus(connectionDialog.GetForm())
 }
 
-
-
 // updatePanels updates the information panels
 func (ta *TwistApp) updatePanels() {
 	// Update with sample data - in real implementation, this would
 	// get data from the game state
 	ta.panelComponent.SetTraderInfoText("No trader data available")
-	
+
 	// Update status bar
 	ta.statusComponent.UpdateStatus()
 }
-

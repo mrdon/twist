@@ -25,19 +25,19 @@ func NewEventBus() *EventBus {
 func (eb *EventBus) Subscribe(eventType EventType, handler EventHandler) string {
 	eb.mutex.Lock()
 	defer eb.mutex.Unlock()
-	
+
 	// Create subscription ID
 	subscriptionID := fmt.Sprintf("sub_%d", eb.nextID)
 	eb.nextID++
-	
+
 	// Initialize event type map if needed
 	if eb.subscribers[eventType] == nil {
 		eb.subscribers[eventType] = make(map[string]EventHandler)
 	}
-	
+
 	// Add handler
 	eb.subscribers[eventType][subscriptionID] = handler
-	
+
 	return subscriptionID
 }
 
@@ -45,10 +45,10 @@ func (eb *EventBus) Subscribe(eventType EventType, handler EventHandler) string 
 func (eb *EventBus) Unsubscribe(eventType EventType, subscriptionID string) {
 	eb.mutex.Lock()
 	defer eb.mutex.Unlock()
-	
+
 	if handlers, exists := eb.subscribers[eventType]; exists {
 		delete(handlers, subscriptionID)
-		
+
 		// Clean up empty event type map
 		if len(handlers) == 0 {
 			delete(eb.subscribers, eventType)
@@ -61,17 +61,16 @@ func (eb *EventBus) Fire(event Event) {
 	eb.mutex.RLock()
 	handlers, exists := eb.subscribers[event.Type]
 	eb.mutex.RUnlock()
-	
+
 	if !exists {
 		return
 	}
-	
+
 	// Set timestamp if not already set
 	if event.Timestamp == 0 {
 		event.Timestamp = time.Now().UnixNano()
 	}
-	
-	
+
 	// Call all handlers synchronously
 	for _, handler := range handlers {
 		func() {
@@ -89,17 +88,16 @@ func (eb *EventBus) FireAsync(event Event) {
 	eb.mutex.RLock()
 	handlers, exists := eb.subscribers[event.Type]
 	eb.mutex.RUnlock()
-	
+
 	if !exists {
 		return
 	}
-	
+
 	// Set timestamp if not already set
 	if event.Timestamp == 0 {
 		event.Timestamp = time.Now().UnixNano()
 	}
-	
-	
+
 	// Call all handlers asynchronously
 	for subscriptionID, handler := range handlers {
 		go func(id string, h EventHandler) {
@@ -116,7 +114,7 @@ func (eb *EventBus) FireAsync(event Event) {
 func (eb *EventBus) GetSubscriberCount(eventType EventType) int {
 	eb.mutex.RLock()
 	defer eb.mutex.RUnlock()
-	
+
 	if handlers, exists := eb.subscribers[eventType]; exists {
 		return len(handlers)
 	}
@@ -127,7 +125,7 @@ func (eb *EventBus) GetSubscriberCount(eventType EventType) int {
 func (eb *EventBus) GetAllEventTypes() []EventType {
 	eb.mutex.RLock()
 	defer eb.mutex.RUnlock()
-	
+
 	var eventTypes []EventType
 	for eventType := range eb.subscribers {
 		eventTypes = append(eventTypes, eventType)
@@ -139,6 +137,6 @@ func (eb *EventBus) GetAllEventTypes() []EventType {
 func (eb *EventBus) Clear() {
 	eb.mutex.Lock()
 	defer eb.mutex.Unlock()
-	
+
 	eb.subscribers = make(map[EventType]map[string]EventHandler)
 }

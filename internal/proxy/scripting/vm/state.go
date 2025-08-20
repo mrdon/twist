@@ -1,6 +1,5 @@
 package vm
 
-
 // ExecutionState represents the current state of the virtual machine
 type ExecutionState int
 

@@ -1,8 +1,8 @@
 package components
 
 import (
-	"strings"
 	"github.com/gdamore/tcell/v2"
+	"strings"
 )
 
 // ShortcutManager handles automatic registration and parsing of keyboard shortcuts
@@ -44,18 +44,18 @@ func (sm *ShortcutManager) HandleKeyEvent(event *tcell.EventKey) bool {
 // keyEventToString converts a tcell.EventKey to a shortcut string
 func keyEventToString(event *tcell.EventKey) string {
 	var parts []string
-	
+
 	// Handle modifiers
 	if event.Modifiers()&tcell.ModCtrl != 0 {
 		parts = append(parts, "ctrl")
 	}
 	if event.Modifiers()&tcell.ModAlt != 0 {
-		parts = append(parts, "alt")  
+		parts = append(parts, "alt")
 	}
 	if event.Modifiers()&tcell.ModShift != 0 {
 		parts = append(parts, "shift")
 	}
-	
+
 	// Handle the key itself
 	if event.Rune() != 0 {
 		// Printable character
@@ -119,14 +119,14 @@ func keyEventToString(event *tcell.EventKey) string {
 			return "" // Unknown key
 		}
 	}
-	
+
 	return strings.Join(parts, "+")
 }
 
 // ParseShortcut parses a shortcut string (like "Ctrl+O") and returns the constituent parts
 func ParseShortcut(shortcut string) (hasCtrl, hasAlt, hasShift bool, key string) {
 	parts := strings.Split(strings.ToLower(shortcut), "+")
-	
+
 	for _, part := range parts {
 		part = strings.TrimSpace(part)
 		switch part {
@@ -140,6 +140,6 @@ func ParseShortcut(shortcut string) (hasCtrl, hasAlt, hasShift bool, key string)
 			key = part
 		}
 	}
-	
+
 	return
 }

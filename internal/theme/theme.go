@@ -2,98 +2,97 @@ package theme
 
 import (
 	"fmt"
-	
+
 	"github.com/gdamore/tcell/v2"
 	"twist/internal/components"
 )
 
 // DialogColors defines color scheme for dialogs and modals
 type DialogColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	Border          tcell.Color
-	Title           tcell.Color
-	SelectedBg      tcell.Color
-	SelectedFg      tcell.Color
-	ButtonBg        tcell.Color
-	ButtonFg        tcell.Color
-	FieldBg         tcell.Color  // Input field background
-	FieldFg         tcell.Color  // Input field text
+	Background tcell.Color
+	Foreground tcell.Color
+	Border     tcell.Color
+	Title      tcell.Color
+	SelectedBg tcell.Color
+	SelectedFg tcell.Color
+	ButtonBg   tcell.Color
+	ButtonFg   tcell.Color
+	FieldBg    tcell.Color // Input field background
+	FieldFg    tcell.Color // Input field text
 }
 
 // MenuColors defines color scheme for menus
 type MenuColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	SelectedBg      tcell.Color
-	SelectedFg      tcell.Color
-	DisabledFg      tcell.Color
-	Separator       tcell.Color
+	Background tcell.Color
+	Foreground tcell.Color
+	SelectedBg tcell.Color
+	SelectedFg tcell.Color
+	DisabledFg tcell.Color
+	Separator  tcell.Color
 }
 
 // TerminalColors defines color scheme for terminal display
 type TerminalColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	Border          tcell.Color
-	ScrollBar       tcell.Color
+	Background tcell.Color
+	Foreground tcell.Color
+	Border     tcell.Color
+	ScrollBar  tcell.Color
 }
 
 // DefaultColors defines default text colors for general use
 type DefaultColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	Waiting         tcell.Color // Color for "Waiting..." messages
+	Background tcell.Color
+	Foreground tcell.Color
+	Waiting    tcell.Color // Color for "Waiting..." messages
 }
 
 // StatusColors defines color scheme for status bars
 type StatusColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	HighlightBg     tcell.Color
-	HighlightFg     tcell.Color
-	ErrorBg         tcell.Color
-	ErrorFg         tcell.Color
-	ConnectedFg     tcell.Color
-	ConnectingFg    tcell.Color
-	DisconnectedFg  tcell.Color
+	Background     tcell.Color
+	Foreground     tcell.Color
+	HighlightBg    tcell.Color
+	HighlightFg    tcell.Color
+	ErrorBg        tcell.Color
+	ErrorFg        tcell.Color
+	ConnectedFg    tcell.Color
+	ConnectingFg   tcell.Color
+	DisconnectedFg tcell.Color
 }
 
 // PanelColors defines color scheme for side panels
 type PanelColors struct {
-	Background      tcell.Color
-	Foreground      tcell.Color
-	Border          tcell.Color
-	Title           tcell.Color
-	HeaderBg        tcell.Color
-	HeaderFg        tcell.Color
+	Background tcell.Color
+	Foreground tcell.Color
+	Border     tcell.Color
+	Title      tcell.Color
+	HeaderBg   tcell.Color
+	HeaderFg   tcell.Color
 }
 
 // SectorMapColors defines color scheme for sector map display
 type SectorMapColors struct {
-	CurrentSectorBg    tcell.Color // Background for current sector
-	CurrentSectorFg    tcell.Color // Text color for current sector
-	PortSectorBg       tcell.Color // Background for sectors with ports/traders
-	PortSectorFg       tcell.Color // Text color for sectors with ports
-	EmptySectorBg      tcell.Color // Background for empty sectors
-	EmptySectorFg      tcell.Color // Text color for empty sectors
-	ConnectionLine     tcell.Color // Color for connection lines between sectors
-	MapBackground      tcell.Color // Background for the entire map area
+	CurrentSectorBg tcell.Color // Background for current sector
+	CurrentSectorFg tcell.Color // Text color for current sector
+	PortSectorBg    tcell.Color // Background for sectors with ports/traders
+	PortSectorFg    tcell.Color // Text color for sectors with ports
+	EmptySectorBg   tcell.Color // Background for empty sectors
+	EmptySectorFg   tcell.Color // Text color for empty sectors
+	ConnectionLine  tcell.Color // Color for connection lines between sectors
+	MapBackground   tcell.Color // Background for the entire map area
 }
 
 // BorderStyle defines border styling options
 type BorderStyle struct {
-	Color       tcell.Color
-	TitleColor  tcell.Color
-	Padding     int
+	Color      tcell.Color
+	TitleColor tcell.Color
+	Padding    int
 }
-
 
 // Theme interface defines all theming properties
 type Theme interface {
 	// Name returns the theme name
 	Name() string
-	
+
 	// Color schemes for different components
 	DefaultColors() DefaultColors
 	DialogColors() DialogColors
@@ -102,11 +101,11 @@ type Theme interface {
 	StatusColors() StatusColors
 	PanelColors() PanelColors
 	SectorMapColors() SectorMapColors
-	
+
 	// Border styling
 	BorderStyle() BorderStyle
 	MenuBorderStyle() components.MenuBorderStyle
-	
+
 	// ANSI color mapping - returns a 16-color palette (indices 0-15)
 	ANSIColorPalette() [16]tcell.Color
 }
@@ -122,13 +121,13 @@ func NewThemeManager() *ThemeManager {
 	tm := &ThemeManager{
 		themes: make(map[string]Theme),
 	}
-	
+
 	// Register built-in themes
 	tm.RegisterTheme(NewTelixTheme())
-	
+
 	// Set default theme
 	tm.SetTheme("telix")
-	
+
 	return tm
 }
 

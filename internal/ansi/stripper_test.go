@@ -6,7 +6,7 @@ import (
 
 func TestStreamingStripper_BasicStripping(t *testing.T) {
 	stripper := NewStreamingStripper()
-	
+
 	tests := []struct {
 		name     string
 		input    string
@@ -33,7 +33,7 @@ func TestStreamingStripper_BasicStripping(t *testing.T) {
 			expected: "Red Green Normal",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := stripper.StripChunk(tt.input)
@@ -71,16 +71,16 @@ func TestStreamingStripper_ChunkSplitting(t *testing.T) {
 			expected: "<A> Alien Retribution",
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stripper := NewStreamingStripper()
 			var result string
-			
+
 			for _, chunk := range tt.chunks {
 				result += stripper.StripChunk(chunk)
 			}
-			
+
 			if result != tt.expected {
 				t.Errorf("Final result = %q, want %q", result, tt.expected)
 			}
@@ -90,16 +90,16 @@ func TestStreamingStripper_ChunkSplitting(t *testing.T) {
 
 func TestStreamingStripper_Reset(t *testing.T) {
 	stripper := NewStreamingStripper()
-	
+
 	// Start processing a sequence
 	result1 := stripper.StripChunk("\x1b[31")
 	if result1 != "" {
 		t.Errorf("Partial sequence should not produce output, got %q", result1)
 	}
-	
+
 	// Reset should clear state
 	stripper.Reset()
-	
+
 	// Should work normally after reset
 	result2 := stripper.StripChunk("Hello")
 	if result2 != "Hello" {
@@ -110,7 +110,7 @@ func TestStreamingStripper_Reset(t *testing.T) {
 func TestStripString(t *testing.T) {
 	input := "\x1b[31m<A> Alien Retribution\x1b[0m"
 	expected := "<A> Alien Retribution"
-	
+
 	result := StripString(input)
 	if result != expected {
 		t.Errorf("StripString() = %q, want %q", result, expected)

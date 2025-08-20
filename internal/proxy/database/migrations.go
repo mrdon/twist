@@ -83,30 +83,29 @@ INSERT OR IGNORE INTO player_stats (id) VALUES (1);`,
 
 // runMigrations executes all pending migrations
 func (d *SQLiteDatabase) runMigrations() error {
-	
+
 	// Ensure schema_version table exists
 	if err := d.ensureSchemaVersionTable(); err != nil {
 		return fmt.Errorf("failed to create schema_version table: %w", err)
 	}
-	
+
 	// Get current schema version
 	currentVersion, err := d.getCurrentSchemaVersion()
 	if err != nil {
 		return fmt.Errorf("failed to get current schema version: %w", err)
 	}
-	
-	
+
 	// Apply pending migrations
 	for _, migration := range migrations {
 		if migration.ID > currentVersion {
-			
+
 			if err := d.applyMigration(migration); err != nil {
 				return fmt.Errorf("failed to apply migration %d: %w", migration.ID, err)
 			}
-			
+
 		}
 	}
-	
+
 	return nil
 }
 
@@ -117,7 +116,7 @@ func (d *SQLiteDatabase) ensureSchemaVersionTable() error {
 		version INTEGER PRIMARY KEY,
 		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
-	
+
 	_, err := d.db.Exec(query)
 	return err
 }
@@ -125,13 +124,13 @@ func (d *SQLiteDatabase) ensureSchemaVersionTable() error {
 // getCurrentSchemaVersion returns the current schema version
 func (d *SQLiteDatabase) getCurrentSchemaVersion() (int, error) {
 	query := `SELECT COALESCE(MAX(version), 0) FROM schema_version;`
-	
+
 	var version int
 	err := d.db.QueryRow(query).Scan(&version)
 	if err != nil {
 		return 0, err
 	}
-	
+
 	return version, nil
 }
 
@@ -147,14 +146,14 @@ func (d *SQLiteDatabase) applyMigration(migration Migration) error {
 	if migration.ID == 6 {
 		return d.applyPlayerStatsEnhancementMigration(migration)
 	}
-	
+
 	// Start transaction
 	tx, err := d.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Execute migration SQL (handle multiple statements)
 	statements := strings.Split(migration.SQL, ";")
 	for _, stmt := range statements {
@@ -162,23 +161,23 @@ func (d *SQLiteDatabase) applyMigration(migration Migration) error {
 		if stmt == "" || strings.HasPrefix(stmt, "--") {
 			continue
 		}
-		
+
 		if _, err := tx.Exec(stmt); err != nil {
 			return fmt.Errorf("failed to execute migration statement: %w", err)
 		}
 	}
-	
+
 	// Record migration as applied
 	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
 	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
-	
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit migration: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -191,14 +190,14 @@ func (d *SQLiteDatabase) applyFighterTypeMigration(migration Migration) error {
 	if err != nil {
 		return fmt.Errorf("failed to check for figs_type column: %w", err)
 	}
-	
+
 	// Start transaction
 	tx, err := d.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Add column only if it doesn't exist
 	if count == 0 {
 		alterQuery := `ALTER TABLE sectors ADD COLUMN figs_type INTEGER DEFAULT 0;`
@@ -207,18 +206,18 @@ func (d *SQLiteDatabase) applyFighterTypeMigration(migration Migration) error {
 		}
 	} else {
 	}
-	
+
 	// Record migration as applied
 	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
 	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
-	
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit migration: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -226,22 +225,22 @@ func (d *SQLiteDatabase) applyFighterTypeMigration(migration Migration) error {
 func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) error {
 	// List of columns to add to planets table
 	newColumns := []struct {
-		name        string
-		definition  string
+		name       string
+		definition string
 	}{
 		{"owner", "TEXT"},
 		{"fighters", "INTEGER DEFAULT 0"},
-		{"citadel", "INTEGER DEFAULT 0"}, // 0=false, 1=true
+		{"citadel", "INTEGER DEFAULT 0"},  // 0=false, 1=true
 		{"stardock", "INTEGER DEFAULT 0"}, // 0=false, 1=true
 	}
-	
+
 	// Start transaction
 	tx, err := d.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Add each column if it doesn't exist
 	for _, col := range newColumns {
 		// Check if column exists
@@ -251,7 +250,7 @@ func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) e
 		if err != nil {
 			return fmt.Errorf("failed to check for %s column: %w", col.name, err)
 		}
-		
+
 		// Add column if it doesn't exist
 		if count == 0 {
 			alterQuery := fmt.Sprintf(`ALTER TABLE planets ADD COLUMN %s %s;`, col.name, col.definition)
@@ -260,18 +259,18 @@ func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) e
 			}
 		}
 	}
-	
+
 	// Record migration as applied
 	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
 	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
-	
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit migration: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -279,20 +278,20 @@ func (d *SQLiteDatabase) applyPlanetsEnhancementMigration(migration Migration) e
 func (d *SQLiteDatabase) applyPlayerStatsEnhancementMigration(migration Migration) error {
 	// List of columns to add to player_stats table
 	newColumns := []struct {
-		name        string
-		definition  string
+		name       string
+		definition string
 	}{
 		{"current_sector", "INTEGER DEFAULT 0"},
 		{"player_name", "TEXT DEFAULT ''"},
 	}
-	
+
 	// Start transaction
 	tx, err := d.db.Begin()
 	if err != nil {
 		return fmt.Errorf("failed to start transaction: %w", err)
 	}
 	defer tx.Rollback()
-	
+
 	// Add each column if it doesn't exist
 	for _, col := range newColumns {
 		// Check if column exists
@@ -302,7 +301,7 @@ func (d *SQLiteDatabase) applyPlayerStatsEnhancementMigration(migration Migratio
 		if err != nil {
 			return fmt.Errorf("failed to check for %s column: %w", col.name, err)
 		}
-		
+
 		// Add column if it doesn't exist
 		if count == 0 {
 			alterQuery := fmt.Sprintf(`ALTER TABLE player_stats ADD COLUMN %s %s;`, col.name, col.definition)
@@ -311,18 +310,18 @@ func (d *SQLiteDatabase) applyPlayerStatsEnhancementMigration(migration Migratio
 			}
 		}
 	}
-	
+
 	// Record migration as applied
 	recordQuery := `INSERT INTO schema_version (version) VALUES (?);`
 	if _, err := tx.Exec(recordQuery, migration.ID); err != nil {
 		return fmt.Errorf("failed to record migration: %w", err)
 	}
-	
+
 	// Commit transaction
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit migration: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -335,7 +334,7 @@ func (d *SQLiteDatabase) getMigrationStatus() ([]MigrationStatus, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	
+
 	appliedVersions := make(map[int]bool)
 	for rows.Next() {
 		var version int
@@ -344,7 +343,7 @@ func (d *SQLiteDatabase) getMigrationStatus() ([]MigrationStatus, error) {
 		}
 		appliedVersions[version] = true
 	}
-	
+
 	// Build status list
 	var status []MigrationStatus
 	for _, migration := range migrations {
@@ -355,7 +354,7 @@ func (d *SQLiteDatabase) getMigrationStatus() ([]MigrationStatus, error) {
 			Applied:     applied,
 		})
 	}
-	
+
 	return status, nil
 }
 
@@ -381,13 +380,13 @@ func (d *SQLiteDatabase) validateSchemaEnhanced() error {
 	query := `
 	SELECT name FROM pragma_table_info('sectors') 
 	WHERE name IN ('sector_index', 'warp1', 'constellation', 'beacon', 'figs_type');`
-	
+
 	rows, err := d.db.Query(query)
 	if err != nil {
 		return fmt.Errorf("failed to validate schema: %w", err)
 	}
 	defer rows.Close()
-	
+
 	columnCount := 0
 	var columnNames []string
 	for rows.Next() {
@@ -398,10 +397,10 @@ func (d *SQLiteDatabase) validateSchemaEnhanced() error {
 		columnNames = append(columnNames, name)
 		columnCount++
 	}
-	
+
 	if columnCount < 4 {
 		return fmt.Errorf("database schema is invalid or incomplete (found columns: %v)", columnNames)
 	}
-	
+
 	return nil
 }

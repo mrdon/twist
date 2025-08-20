@@ -10,22 +10,22 @@ import (
 
 // parseProductLine handles detailed product line parsing from port data
 func (p *TWXParser) parseProductLine(line string) {
-	
+
 	// Parse formats:
 	// "Fuel Ore     Selling       10,000 units at 100%"
 	// "Organics     Buying         5,000 units at 95%"
 	// "Equipment    : 1000 buying at 15"
-	
+
 	// Determine product type
 	productType := p.getProductTypeFromLine(line)
 	if productType == -1 {
 		return // Not a product line
 	}
-	
+
 	product := ProductInfo{
 		Type: ProductType(productType),
 	}
-	
+
 	// Parse different formats
 	if strings.Contains(line, " units at ") {
 		p.parseStandardProductFormat(line, &product)
@@ -34,14 +34,14 @@ func (p *TWXParser) parseProductLine(line string) {
 	} else {
 		return
 	}
-	
+
 	// Phase 3: Product data is now tracked directly in PortTracker during parsing
 }
 
 // getProductTypeFromLine determines the product type from the line
 func (p *TWXParser) getProductTypeFromLine(line string) int {
 	lineLower := strings.ToLower(line)
-	
+
 	if strings.Contains(lineLower, "fuel ore") || strings.Contains(lineLower, "fuelore") {
 		return int(ProductFuelOre)
 	} else if strings.Contains(lineLower, "organics") {
@@ -49,7 +49,7 @@ func (p *TWXParser) getProductTypeFromLine(line string) int {
 	} else if strings.Contains(lineLower, "equipment") {
 		return int(ProductEquipment)
 	}
-	
+
 	return -1 // Not a product line
 }
 
@@ -61,7 +61,7 @@ func (p *TWXParser) parseStandardProductFormat(line string, product *ProductInfo
 	if len(parts) < 6 {
 		return
 	}
-	
+
 	// Find "Buying" or "Selling"
 	var statusIndex int = -1
 	for i, part := range parts {
@@ -77,17 +77,17 @@ func (p *TWXParser) parseStandardProductFormat(line string, product *ProductInfo
 			break
 		}
 	}
-	
+
 	if statusIndex == -1 {
 		return
 	}
-	
+
 	// Get quantity (should be after status)
 	if statusIndex+1 < len(parts) {
 		quantityStr := parts[statusIndex+1]
 		product.Quantity = p.parseIntSafeWithCommas(quantityStr)
 	}
-	
+
 	// Get percentage (last part should be like "100%")
 	if len(parts) > 0 {
 		lastPart := parts[len(parts)-1]
@@ -106,18 +106,18 @@ func (p *TWXParser) parseAlternateProductFormat(line string, product *ProductInf
 	if colonPos == -1 {
 		return
 	}
-	
+
 	// Parse after colon
 	afterColon := strings.TrimSpace(line[colonPos+1:])
 	parts := strings.Fields(afterColon)
-	
+
 	if len(parts) < 4 {
 		return
 	}
-	
+
 	// Format: "1000 buying at 15"
 	product.Quantity = p.parseIntSafeWithCommas(parts[0])
-	
+
 	if strings.EqualFold(parts[1], "buying") {
 		product.Buying = true
 		product.Status = "Buying"
@@ -125,7 +125,7 @@ func (p *TWXParser) parseAlternateProductFormat(line string, product *ProductInf
 		product.Selling = true
 		product.Status = "Selling"
 	}
-	
+
 	// Get percentage (after "at")
 	if len(parts) >= 4 && strings.EqualFold(parts[2], "at") {
 		product.Percent = p.parseIntSafe(parts[3])
@@ -141,22 +141,22 @@ func (p *TWXParser) processPortLine(line string) {
 // isProductLine determines if a line contains product information
 func (p *TWXParser) isProductLine(line string) bool {
 	lineLower := strings.ToLower(line)
-	
+
 	// Check for product names
 	hasProduct := strings.Contains(lineLower, "fuel ore") ||
 		strings.Contains(lineLower, "organics") ||
 		strings.Contains(lineLower, "equipment")
-	
+
 	if !hasProduct {
 		return false
 	}
-	
+
 	// Check for buying/selling indicators
 	hasTrade := strings.Contains(lineLower, "buying") ||
 		strings.Contains(lineLower, "selling") ||
 		strings.Contains(lineLower, " at ") ||
 		strings.Contains(lineLower, "units")
-	
+
 	return hasTrade
 }
 
@@ -165,7 +165,7 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 	product := ProductInfo{
 		Type: productType,
 	}
-	
+
 	// Simple extraction for quantities and percentages
 	parts := strings.Fields(line)
 	for _, part := range parts {
@@ -175,7 +175,7 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 				product.Quantity = num
 			}
 		}
-		
+
 		// Look for percentages
 		if strings.HasSuffix(part, "%") {
 			percentStr := part[:len(part)-1]
@@ -183,7 +183,7 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 				product.Percent = percent
 			}
 		}
-		
+
 		// Look for buying/selling
 		if strings.EqualFold(part, "buying") {
 			product.Buying = true
@@ -193,7 +193,7 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 			product.Status = "Selling"
 		}
 	}
-	
+
 	// Store if we got useful information
 	if product.Quantity > 0 || product.Percent > 0 {
 		// Phase 3: Product data is now tracked directly in PortTracker during parsing
@@ -205,7 +205,7 @@ func (p *TWXParser) isNumeric(s string) bool {
 	if s == "" {
 		return false
 	}
-	
+
 	for _, char := range s {
 		if char < '0' || char > '9' {
 			return false
@@ -218,9 +218,9 @@ func (p *TWXParser) isNumeric(s string) bool {
 func (p *TWXParser) parsePortTradeStatus(line string) (buyOre, buyOrg, buyEquip bool) {
 	// This mirrors the TWX Pascal logic for determining port buy/sell status
 	// from various indicators in the port data
-	
+
 	lineLower := strings.ToLower(line)
-	
+
 	// Method 1: Direct "Buying" indicator
 	if strings.Contains(lineLower, "buying") {
 		if strings.Contains(lineLower, "fuel ore") {
@@ -233,7 +233,7 @@ func (p *TWXParser) parsePortTradeStatus(line string) (buyOre, buyOrg, buyEquip 
 			buyEquip = true
 		}
 	}
-	
+
 	// Method 2: Low percentage indicator (typically buying ports)
 	parts := strings.Fields(line)
 	for i, part := range parts {
@@ -256,7 +256,6 @@ func (p *TWXParser) parsePortTradeStatus(line string) (buyOre, buyOrg, buyEquip 
 			}
 		}
 	}
-	
+
 	return buyOre, buyOrg, buyEquip
 }
-

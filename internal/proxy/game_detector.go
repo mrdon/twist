@@ -18,14 +18,14 @@ type TokenType int
 const (
 	TokenError TokenType = iota
 	TokenEOF
-	TokenText              // Regular text to ignore
-	TokenGameMenu          // "Select a game :" pattern
-	TokenGameOption        // "<A> Game Name" pattern
-	TokenIsolatedLetter    // Single letter game selection
-	TokenGameStart         // "Show today's log? (Y/N)" pattern
-	TokenGameExit          // Exit patterns
-	TokenMainMenu          // Return to main menu patterns
-	TokenUserPrompt        // User input prompt patterns like "Your choice: " or "Enter selection: "
+	TokenText           // Regular text to ignore
+	TokenGameMenu       // "Select a game :" pattern
+	TokenGameOption     // "<A> Game Name" pattern
+	TokenIsolatedLetter // Single letter game selection
+	TokenGameStart      // "Show today's log? (Y/N)" pattern
+	TokenGameExit       // Exit patterns
+	TokenMainMenu       // Return to main menu patterns
+	TokenUserPrompt     // User input prompt patterns like "Your choice: " or "Enter selection: "
 )
 
 type GameDetectionState int
@@ -34,7 +34,7 @@ const (
 	StateIdle GameDetectionState = iota
 	StateGameMenuVisible
 	StateGameSelected
-	StateGameActive  // Combines starting and active - game is running
+	StateGameActive // Combines starting and active - game is running
 )
 
 // String returns a string representation of the GameDetectionState
@@ -70,11 +70,11 @@ type Token struct {
 
 // PatternMatcher tracks progress matching a specific pattern
 type PatternMatcher struct {
-	pattern     string      // Pattern to match
-	position    int         // Current position in pattern
-	tokenType   TokenType   // Token to emit on match
-	buffer      string      // Buffer for this pattern
-	isActive    bool        // Whether this matcher is currently active
+	pattern   string    // Pattern to match
+	position  int       // Current position in pattern
+	tokenType TokenType // Token to emit on match
+	buffer    string    // Buffer for this pattern
+	isActive  bool      // Whether this matcher is currently active
 }
 
 // stateFn represents the state of the scanner as a function that returns the next state
@@ -90,37 +90,37 @@ type gameDetectorState struct {
 
 // GameDetector is a streaming lexer for game detection
 type GameDetector struct {
-	mu                    sync.RWMutex
-	
+	mu sync.RWMutex
+
 	// Connection info
-	serverHost            string
-	serverPort            string
-	
+	serverHost string
+	serverPort string
+
 	// Streaming input handling
-	currentBuffer         string  // Small buffer for current potential match
-	patternMatchers       map[string]*PatternMatcher // Active pattern matchers
-	recentContent         string  // Larger buffer for context analysis (last ~500 chars)
-	
+	currentBuffer   string                     // Small buffer for current potential match
+	patternMatchers map[string]*PatternMatcher // Active pattern matchers
+	recentContent   string                     // Larger buffer for context analysis (last ~500 chars)
+
 	// ANSI stripping for streaming content
-	ansiStripper          *ansi.StreamingStripper
-	
+	ansiStripper *ansi.StreamingStripper
+
 	// Detection state - atomic pointer to immutable state
-	state                 atomic.Pointer[gameDetectorState]
-	
+	state atomic.Pointer[gameDetectorState]
+
 	// Token channel
-	tokens                chan Token
-	
+	tokens chan Token
+
 	// Database management
-	currentDatabase       database.Database
-	currentScriptManager  *scripting.ScriptManager
-	
+	currentDatabase      database.Database
+	currentScriptManager *scripting.ScriptManager
+
 	// Callbacks
-	onDatabaseLoaded      func(db database.Database, scriptManager *scripting.ScriptManager) error
+	onDatabaseLoaded       func(db database.Database, scriptManager *scripting.ScriptManager) error
 	onDatabaseStateChanged func(gameName, serverHost, serverPort, dbName string, isLoaded bool)
-	
+
 	// Timing
-	lastActivity          time.Time
-	detectionTimeout      time.Duration
+	lastActivity     time.Time
+	detectionTimeout time.Duration
 }
 
 // NewGameDetector creates a new lexer-based game detector
@@ -133,7 +133,7 @@ func NewGameDetector(connInfo ConnectionInfo) *GameDetector {
 		patternMatchers:  make(map[string]*PatternMatcher),
 		ansiStripper:     ansi.NewStreamingStripper(),
 	}
-	
+
 	// Initialize atomic state
 	initialState := &gameDetectorState{
 		currentState:       StateIdle,
@@ -142,10 +142,10 @@ func NewGameDetector(connInfo ConnectionInfo) *GameDetector {
 		expectingUserInput: false,
 	}
 	l.state.Store(initialState)
-	
+
 	// Initialize pattern matchers
 	l.initializePatterns()
-	
+
 	return l
 }
 
@@ -171,13 +171,13 @@ func copyState(s *gameDetectorState) *gameDetectorState {
 			expectingUserInput: false,
 		}
 	}
-	
+
 	// Deep copy the map
 	gameOptionsCopy := make(map[string]string, len(s.gameOptions))
 	for k, v := range s.gameOptions {
 		gameOptionsCopy[k] = v
 	}
-	
+
 	return &gameDetectorState{
 		currentState:       s.currentState,
 		selectedGame:       s.selectedGame,
@@ -189,25 +189,25 @@ func copyState(s *gameDetectorState) *gameDetectorState {
 // initializePatterns sets up all the pattern matchers
 func (l *GameDetector) initializePatterns() {
 	patterns := map[string]TokenType{
-		"Select a game :":           TokenGameMenu,
-		"Show today's log?":         TokenGameStart,  // Match the question, ignore the options after
-		"Goodbye":                   TokenGameExit,
-		"Thank you for playing":     TokenGameExit,
-		"Connection terminated":     TokenGameExit,
-		"Disconnected":             TokenGameExit,
-		"session has been terminated": TokenGameExit,  // More specific termination signal
-		"CRITICAL INACTIVITY:":        TokenGameExit,  // Inactivity disconnect termination
-		"...Now leaving Trade Wars": TokenGameExit,  // Game exit via menu
-		"TWGS v":                   TokenMainMenu,
-		"TradeWars Game Server":    TokenMainMenu,
-		"Your choice: ":            TokenUserPrompt,
-		"Enter selection: ":        TokenUserPrompt,
-		"Choice: ":                 TokenUserPrompt,
-		"Enter your choice: ":      TokenUserPrompt,
-		"Please enter your choice: ": TokenUserPrompt,
-		"Selection: ":              TokenUserPrompt,
+		"Select a game :":             TokenGameMenu,
+		"Show today's log?":           TokenGameStart, // Match the question, ignore the options after
+		"Goodbye":                     TokenGameExit,
+		"Thank you for playing":       TokenGameExit,
+		"Connection terminated":       TokenGameExit,
+		"Disconnected":                TokenGameExit,
+		"session has been terminated": TokenGameExit, // More specific termination signal
+		"CRITICAL INACTIVITY:":        TokenGameExit, // Inactivity disconnect termination
+		"...Now leaving Trade Wars":   TokenGameExit, // Game exit via menu
+		"TWGS v":                      TokenMainMenu,
+		"TradeWars Game Server":       TokenMainMenu,
+		"Your choice: ":               TokenUserPrompt,
+		"Enter selection: ":           TokenUserPrompt,
+		"Choice: ":                    TokenUserPrompt,
+		"Enter your choice: ":         TokenUserPrompt,
+		"Please enter your choice: ":  TokenUserPrompt,
+		"Selection: ":                 TokenUserPrompt,
 	}
-	
+
 	for pattern, tokenType := range patterns {
 		l.patternMatchers[pattern] = &PatternMatcher{
 			pattern:   pattern,
@@ -224,7 +224,7 @@ func (l *GameDetector) ProcessChunk(data []byte) {
 	if len(data) == 0 {
 		return
 	}
-	
+
 	text := string(data)
 	l.ProcessLine(text)
 }
@@ -234,10 +234,10 @@ func (l *GameDetector) ProcessChunk(data []byte) {
 func (l *GameDetector) ProcessUserInput(input string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	
+
 	// Update activity timestamp
 	l.lastActivity = time.Now()
-	
+
 	// Process isolated letters from user input in game menu state
 	currentState := l.state.Load()
 	if currentState.currentState == StateGameMenuVisible && len(input) == 1 {
@@ -253,39 +253,38 @@ func (l *GameDetector) ProcessUserInput(input string) {
 	}
 }
 
-// ProcessLine processes server output character by character with minimal buffering  
+// ProcessLine processes server output character by character with minimal buffering
 func (l *GameDetector) ProcessLine(text string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	
+
 	// Update activity timestamp
 	l.lastActivity = time.Now()
-	
+
 	// Strip ANSI codes before processing using streaming stripper
 	cleanText := l.ansiStripper.StripChunk(text)
-	
-	
+
 	// Maintain recent content buffer for context analysis (keep last ~500 chars)
 	l.recentContent += cleanText
 	if len(l.recentContent) > 500 {
 		l.recentContent = l.recentContent[len(l.recentContent)-500:]
 	}
-	
+
 	// Process each character
 	for _, char := range cleanText {
 		l.processCharacter(char)
 	}
-	
+
 	// Process any emitted tokens
 	l.processTokens()
-	
+
 	// Check for timeout
 	l.checkTimeout()
 }
 
 // processCharacter handles a single character through state-appropriate pattern matchers
 func (l *GameDetector) processCharacter(char rune) {
-	
+
 	// Always check for exit and main menu patterns (can happen in any state)
 	l.checkPattern("Goodbye", char)
 	l.checkPattern("Thank you for playing", char)
@@ -296,7 +295,7 @@ func (l *GameDetector) processCharacter(char rune) {
 	l.checkPattern("...Now leaving Trade Wars", char)
 	l.checkPattern("TWGS v", char)
 	l.checkPattern("TradeWars Game Server", char)
-	
+
 	// Always check for user prompt patterns in game menu states
 	currentState := l.state.Load()
 	if currentState.currentState == StateGameMenuVisible {
@@ -307,28 +306,28 @@ func (l *GameDetector) processCharacter(char rune) {
 		l.checkPattern("Please enter your choice: ", char)
 		l.checkPattern("Selection: ", char)
 	}
-	
+
 	// State-specific pattern matching
 	switch currentState.currentState {
 	case StateIdle:
 		// Look for game menu pattern AND game options (some servers send options first)
 		l.checkPattern("Select a game :", char)
-		l.processGameOptionPattern(char)          // <X> Game Name format - auto-transition to menu state
-		
+		l.processGameOptionPattern(char) // <X> Game Name format - auto-transition to menu state
+
 	case StateGameMenuVisible:
-		// Look for game options from server output 
-		l.processGameOptionPattern(char)          // <X> Game Name format
+		// Look for game options from server output
+		l.processGameOptionPattern(char) // <X> Game Name format
 		// Also check for isolated letters from server output (echoed user input)
 		l.processIsolatedLetter(char)
-		
+
 	case StateGameSelected:
 		// Look for game start pattern (log prompt)
 		l.checkPattern("Show today's log?", char)
-		
+
 	case StateGameActive:
 		// Game is active - only exit/menu patterns (handled above)
 		// Don't process any game selection patterns
-		
+
 	default:
 		// Unknown state, be conservative and check basic patterns
 		l.checkPattern("Select a game :", char)
@@ -345,13 +344,13 @@ func (l *GameDetector) checkPattern(pattern string, char rune) {
 // updatePatternMatcher updates a single pattern matcher with the new character
 func (l *GameDetector) updatePatternMatcher(matcher *PatternMatcher, char rune) {
 	expectedChar := rune(matcher.pattern[matcher.position])
-	
+
 	if char == expectedChar {
 		// Character matches, advance in pattern
 		matcher.position++
 		matcher.buffer += string(char)
 		matcher.isActive = true
-		
+
 		// Check if we've matched the complete pattern
 		if matcher.position >= len(matcher.pattern) {
 			// Emit token
@@ -361,7 +360,7 @@ func (l *GameDetector) updatePatternMatcher(matcher *PatternMatcher, char rune) 
 				Pos:   0, // Position tracking simplified for streaming
 			}
 			l.tokens <- token
-			
+
 			// Reset matcher
 			matcher.position = 0
 			matcher.buffer = ""
@@ -372,7 +371,7 @@ func (l *GameDetector) updatePatternMatcher(matcher *PatternMatcher, char rune) 
 		matcher.position = 0
 		matcher.buffer = ""
 		matcher.isActive = false
-		
+
 		// Check if current character starts this pattern
 		if char == rune(matcher.pattern[0]) {
 			matcher.position = 1
@@ -389,14 +388,14 @@ func (l *GameDetector) updatePatternMatcher(matcher *PatternMatcher, char rune) 
 
 // gameOptionState tracks parsing of <X> Game Name patterns
 type gameOptionState struct {
-	state    int    // 0=none, 1=saw<, 2=sawletter, 3=saw>, 4=ingamename
+	state    int // 0=none, 1=saw<, 2=sawletter, 3=saw>, 4=ingamename
 	letter   string
 	gameName strings.Builder
 }
 
 // alternativeGameOptionState tracks parsing of X - Game Name patterns (Trade Wars style)
 type alternativeGameOptionState struct {
-	state    int    // 0=none, 1=sawletter, 2=sawspace, 3=sawdash, 4=sawspace2, 5=ingamename
+	state    int // 0=none, 1=sawletter, 2=sawspace, 3=sawdash, 4=sawspace2, 5=ingamename
 	letter   string
 	gameName strings.Builder
 }
@@ -406,7 +405,7 @@ var altOptionState = &alternativeGameOptionState{}
 
 // processGameOptionPattern handles <X> Game Name pattern parsing
 func (l *GameDetector) processGameOptionPattern(char rune) {
-	
+
 	switch gOptionState.state {
 	case 0: // Looking for '<'
 		if char == '<' {
@@ -501,7 +500,7 @@ func (g *alternativeGameOptionState) reset() {
 
 // isolatedLetterState tracks context for isolated letter detection
 type isolatedLetterState struct {
-	prevChar rune
+	prevChar     rune
 	prevPrevChar rune
 }
 
@@ -511,27 +510,27 @@ var iLetterState = &isolatedLetterState{}
 func (l *GameDetector) processIsolatedLetter(char rune) {
 	// Store the current previous character before updating
 	currentPrevChar := iLetterState.prevChar
-	
+
 	// Update state tracking
 	iLetterState.prevPrevChar = iLetterState.prevChar
 	iLetterState.prevChar = char
-	
+
 	// Only process if we're in game menu state and have game options
 	currentState := l.state.Load()
 	if currentState.currentState != StateGameMenuVisible || len(currentState.gameOptions) == 0 {
 		return
 	}
-	
+
 	// Skip isolated letter detection if we're currently parsing a game option pattern
 	// This prevents letters inside <A> patterns from being treated as user input
 	if gOptionState.state != 0 {
 		return
 	}
-	
+
 	// Check if this is an isolated letter (A-Z)
 	if char >= 'A' && char <= 'Z' {
 		letterStr := string(char)
-		
+
 		// Check if this letter corresponds to a game option
 		if _, exists := currentState.gameOptions[letterStr]; exists {
 			// Only accept isolated letters with appropriate context
@@ -543,31 +542,30 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 	}
 }
 
-
 // isValidIsolatedLetterContext checks if the context is appropriate for isolated letter detection
 func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
 	// Strategy: Only accept isolated letters if we've recently detected a user prompt
 	// This covers both direct responses (after colon) and echoed input (after various chars)
-	
+
 	// First, reject letters that are clearly part of game option patterns
 	// Check if the previous character is '<' which indicates this is part of <X> pattern
 	if prevChar == '<' {
 		return false
 	}
-	
+
 	// Check if we recently saw a user prompt - this is the key gate
 	recentContext := l.recentContent
 	if len(recentContext) > 50 {
 		recentContext = recentContext[len(recentContext)-50:] // Check last 50 chars for prompts
 	}
-	
+
 	// Look for user prompt patterns that indicate we're expecting user input
 	promptIndicators := []string{
-		"choice:", "selection:", "enter", "your choice", "please enter", 
+		"choice:", "selection:", "enter", "your choice", "please enter",
 		"choice :", "selection :", // Handle spacing variations
 		"select a game", // Game menu prompt
 	}
-	
+
 	hasRecentPrompt := false
 	for _, indicator := range promptIndicators {
 		if strings.Contains(strings.ToLower(recentContext), indicator) {
@@ -575,21 +573,21 @@ func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
 			break
 		}
 	}
-	
+
 	// If no recent prompt, reject the letter
 	if !hasRecentPrompt {
 		return false
 	}
-	
+
 	// If we have a recent prompt, accept letters in reasonable contexts:
 	// - After colons (direct response: "choice: A")
-	// - After newlines (echoed input on new line: "\nA")  
+	// - After newlines (echoed input on new line: "\nA")
 	// - At start of input
 	// - After spaces only if very recent prompt (within last 10 chars)
 	if prevChar == ':' || prevChar == '\n' || prevChar == '\r' || prevChar == 0 {
 		return true
 	}
-	
+
 	// For spaces, be more restrictive - only if prompt is very recent
 	if prevChar == ' ' || prevChar == '\t' {
 		// Check if we have a prompt in the last 10 characters (very recent)
@@ -597,14 +595,14 @@ func (l *GameDetector) isValidIsolatedLetterContext(prevChar rune) bool {
 		if len(recentContext) > 10 {
 			recentContext = recentContext[len(recentContext)-10:]
 		}
-		
+
 		for _, indicator := range promptIndicators {
 			if strings.Contains(strings.ToLower(recentContext), indicator) {
 				return true
 			}
 		}
 	}
-	
+
 	return false
 }
 
@@ -619,11 +617,10 @@ func (l *GameDetector) isValidPrecedingChar(prevChar rune) bool {
 	return prevChar == 0 // Start of input
 }
 
-
 // emitGameOptionToken emits a game option token
 func (l *GameDetector) emitGameOptionToken(letter, gameName string) {
 	cleanGameName := strings.TrimSpace(gameName)
-	
+
 	// Auto-transition to game menu state if we detect game options while idle
 	l.updateState(func(s *gameDetectorState) *gameDetectorState {
 		if s.currentState == StateIdle {
@@ -637,7 +634,7 @@ func (l *GameDetector) emitGameOptionToken(letter, gameName string) {
 		}
 		return s
 	})
-	
+
 	token := Token{
 		Type:     TokenGameOption,
 		Value:    "<" + letter + "> " + cleanGameName,
@@ -684,7 +681,7 @@ func (l *GameDetector) handleToken(token Token) {
 			}
 			return newState
 		})
-		
+
 	case TokenGameOption:
 		l.updateState(func(s *gameDetectorState) *gameDetectorState {
 			if s.currentState == StateGameMenuVisible {
@@ -694,7 +691,7 @@ func (l *GameDetector) handleToken(token Token) {
 			}
 			return s
 		})
-		
+
 	case TokenIsolatedLetter:
 		l.updateState(func(s *gameDetectorState) *gameDetectorState {
 			if s.currentState == StateGameMenuVisible {
@@ -707,7 +704,7 @@ func (l *GameDetector) handleToken(token Token) {
 			}
 			return s
 		})
-		
+
 	case TokenGameStart:
 		l.updateState(func(s *gameDetectorState) *gameDetectorState {
 			if s.currentState == StateGameSelected {
@@ -723,13 +720,13 @@ func (l *GameDetector) handleToken(token Token) {
 			if err := l.loadGameDatabase(); err != nil {
 			}
 		}
-		
+
 	case TokenGameExit:
 		currentState := l.state.Load()
 		if currentState.currentState == StateGameActive || currentState.currentState == StateGameSelected {
 			l.resetGameState()
 		}
-		
+
 	case TokenMainMenu:
 		currentState := l.state.Load()
 		if currentState.currentState == StateGameActive {
@@ -742,7 +739,7 @@ func (l *GameDetector) handleToken(token Token) {
 			} else {
 			}
 		}
-		
+
 	case TokenUserPrompt:
 		// A user prompt was detected - we're now expecting user input
 		l.updateState(func(s *gameDetectorState) *gameDetectorState {
@@ -758,7 +755,7 @@ func (l *GameDetector) handleToken(token Token) {
 func (l *GameDetector) resetGameState() {
 	// Get current state for database cleanup
 	oldState := l.state.Load()
-	
+
 	// Notify about database being unloaded if one is currently loaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
 		currentGame := oldState.selectedGame
@@ -770,7 +767,7 @@ func (l *GameDetector) resetGameState() {
 			l.onDatabaseStateChanged(currentGame, l.serverHost, l.serverPort, currentDbName, false)
 		}()
 	}
-	
+
 	// Atomically reset the state
 	newState := &gameDetectorState{
 		currentState:       StateIdle,
@@ -779,27 +776,26 @@ func (l *GameDetector) resetGameState() {
 		expectingUserInput: false,
 	}
 	l.state.Store(newState)
-	
+
 	// Reset non-atomic state (assumes caller holds mutex)
 	l.recentContent = "" // Clear recent content buffer
-	
+
 	// Reset pattern matchers
 	for _, matcher := range l.patternMatchers {
 		matcher.position = 0
 		matcher.buffer = ""
 		matcher.isActive = false
 	}
-	
+
 	// Reset state machines
 	gOptionState.reset()
 	altOptionState.reset()
 	iLetterState.prevChar = 0
 	iLetterState.prevPrevChar = 0
-	
+
 	// Reset ANSI stripper state
 	l.ansiStripper.Reset()
 }
-
 
 // Helper functions
 
@@ -808,13 +804,13 @@ func (l *GameDetector) resetGameState() {
 func (l *GameDetector) isLikelyGameContent(pattern string) bool {
 	// Use the recent content buffer for context analysis
 	recentContext := l.recentContent
-	
+
 	// Look for indicators that we're in game content:
-	// - Version info patterns ("Ver#", "running under")  
+	// - Version info patterns ("Ver#", "running under")
 	// - Game stats patterns ("Stats for", "ports are open", "Traders")
 	// - Command prompts ("Command [", "?=Help")
 	// - Configuration screens ("Configuration", "Status")
-	
+
 	gameContentIndicators := []string{
 		"Ver#", "running under", "registered to",
 		"Stats for", "ports are open", "Traders", "business",
@@ -823,34 +819,33 @@ func (l *GameDetector) isLikelyGameContent(pattern string) bool {
 		"Universe", "Corporations", "Fighters",
 		"sectors", "planets", "Citadels", "net worth",
 	}
-	
+
 	// Check if any recent content suggests we're viewing game information
 	for _, indicator := range gameContentIndicators {
 		if strings.Contains(recentContext, indicator) {
 			return true
 		}
 	}
-	
+
 	// Additional heuristic: if the pattern is "TWGS v" in certain contexts,
 	// it's likely version info rather than a menu header
 	if strings.HasPrefix(pattern, "TWGS v") {
 		// If it's "TWGS v" followed by a number > 2, or contains "running under", it's version info
-		if strings.Contains(recentContext, "running under") || 
-		   strings.Contains(recentContext, "Ver#") {
+		if strings.Contains(recentContext, "running under") ||
+			strings.Contains(recentContext, "Ver#") {
 			return true
 		}
 	}
-	
+
 	return false
 }
 
 // isAlphaNum checks if character is alphanumeric
 func (l *GameDetector) isAlphaNum(char byte) bool {
-	return (char >= 'A' && char <= 'Z') || 
-		   (char >= 'a' && char <= 'z') || 
-		   (char >= '0' && char <= '9')
+	return (char >= 'A' && char <= 'Z') ||
+		(char >= 'a' && char <= 'z') ||
+		(char >= '0' && char <= '9')
 }
-
 
 // checkTimeout resets state if no activity for too long
 func (l *GameDetector) checkTimeout() {
@@ -884,35 +879,35 @@ func (l *GameDetector) loadGameDatabase() error {
 			l.onDatabaseStateChanged(currentGame, l.serverHost, l.serverPort, currentDbName, false)
 		}()
 	}
-	
+
 	if l.currentDatabase != nil {
 		l.currentDatabase.CloseDatabase()
 	}
-	
+
 	if l.currentScriptManager != nil {
 		l.currentScriptManager.Stop()
 	}
-	
+
 	currentState := l.state.Load()
 	dbName := l.createDatabaseName(currentState.selectedGame)
-	
+
 	debug.Log("GAME DETECTOR: Loading database at %s for game %s", dbName, currentState.selectedGame)
-	
+
 	db := database.NewDatabase()
-	
+
 	if err := db.CreateDatabase(dbName); err != nil {
 		if err := db.OpenDatabase(dbName); err != nil {
 			return fmt.Errorf("failed to load database %s: %w", dbName, err)
 		}
 	}
-	
+
 	debug.Log("GAME DETECTOR: Successfully loaded database at %s", dbName)
-	
+
 	scriptManager := scripting.NewScriptManager(db)
-	
+
 	l.currentDatabase = db
 	l.currentScriptManager = scriptManager
-	
+
 	// Notify about database state change (loaded)
 	if l.onDatabaseStateChanged != nil {
 		go func() {
@@ -920,14 +915,14 @@ func (l *GameDetector) loadGameDatabase() error {
 		}()
 	} else {
 	}
-	
+
 	if l.onDatabaseLoaded != nil {
 		go func() {
 			if err := l.onDatabaseLoaded(db, scriptManager); err != nil {
 			}
 		}()
 	}
-	
+
 	return nil
 }
 
@@ -935,7 +930,7 @@ func (l *GameDetector) createDatabaseName(gameName string) string {
 	host := sanitizeForFilename(l.serverHost)
 	port := sanitizeForFilename(l.serverPort)
 	game := sanitizeForFilename(gameName)
-	
+
 	return fmt.Sprintf("%s_%s_%s.db", host, port, game)
 }
 
@@ -982,7 +977,6 @@ func (l *GameDetector) SetDatabaseStateChangedCallback(callback func(gameName, s
 	defer l.mu.Unlock()
 	l.onDatabaseStateChanged = callback
 }
-
 
 func (l *GameDetector) GetCurrentGame() string {
 	state := l.state.Load()
@@ -1032,7 +1026,7 @@ func (l *GameDetector) GetServerInfo() ConnectionInfo {
 func (l *GameDetector) Close() error {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	
+
 	// Notify about database being unloaded
 	if l.currentDatabase != nil && l.onDatabaseStateChanged != nil {
 		currentState := l.state.Load()
@@ -1045,15 +1039,14 @@ func (l *GameDetector) Close() error {
 			l.onDatabaseStateChanged(currentGame, l.serverHost, l.serverPort, currentDbName, false)
 		}()
 	}
-	
+
 	if l.currentScriptManager != nil {
 		l.currentScriptManager.Stop()
 	}
-	
+
 	if l.currentDatabase != nil {
 		return l.currentDatabase.CloseDatabase()
 	}
-	
+
 	return nil
 }
-

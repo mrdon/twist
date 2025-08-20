@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -12,7 +10,7 @@ import (
 func TestInclude_BasicFunctionality_RealIntegration(t *testing.T) {
 	// Create temporary directory for test files
 	tempDir := t.TempDir()
-	
+
 	// Create an include file with helper functions
 	includeFile := filepath.Join(tempDir, "helpers.twx")
 	includeContent := `# Helper functions and constants
@@ -33,7 +31,7 @@ return`
 	}
 
 	tester := NewIntegrationScriptTester(t)
-	
+
 	// Note: The actual INCLUDE processing would need to be integrated with the script execution
 	// This is a placeholder for when INCLUDE functionality is fully integrated with the VM
 	script := `
@@ -58,10 +56,10 @@ return
 
 :end
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Hello from main!",
 		"Hello from helper!",
@@ -74,8 +72,8 @@ return
 func TestInclude_MultipleFiles_RealIntegration(t *testing.T) {
 	// Create temporary directory for test files
 	tempDir := t.TempDir()
-	
-	// Create math helper file  
+
+	// Create math helper file
 	mathFile := filepath.Join(tempDir, "math.twx")
 	mathContent := `# Math utilities - direct commands (no subroutines for this test)
 # This test doesn't actually include these files - it tests direct command usage`
@@ -85,7 +83,7 @@ func TestInclude_MultipleFiles_RealIntegration(t *testing.T) {
 		t.Fatalf("Failed to create math file: %v", err)
 	}
 
-	// Create text helper file  
+	// Create text helper file
 	textFile := filepath.Join(tempDir, "text.twx")
 	textContent := `# Text utilities - direct commands (no subroutines for this test)
 # This test doesn't actually include these files - it tests direct command usage`
@@ -96,7 +94,7 @@ func TestInclude_MultipleFiles_RealIntegration(t *testing.T) {
 	}
 
 	tester := NewIntegrationScriptTester(t)
-	
+
 	// Test combining multiple utility functions
 	script := `
 # Test multiple utility functions
@@ -121,10 +119,10 @@ echo "Uppercase: " $result
 lower $input $result
 echo "Lowercase: " $result
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Testing math and text utilities",
 		"Square of 5 is 25",
@@ -139,7 +137,7 @@ echo "Lowercase: " $result
 func TestInclude_NestedIncludes_RealIntegration(t *testing.T) {
 	// Create temporary directory for test files
 	tempDir := t.TempDir()
-	
+
 	// Create base utility file
 	baseFile := filepath.Join(tempDir, "base.twx")
 	baseContent := `# Base utilities
@@ -155,7 +153,7 @@ return`
 	}
 
 	tester := NewIntegrationScriptTester(t)
-	
+
 	// Test using constants and functions from included files
 	script := `
 # Test constants and utility functions
@@ -184,10 +182,10 @@ return
 :END
 echo "Include test completed"
 `
-	
+
 	result := tester.ExecuteScript(script)
 	tester.AssertNoError(result)
-	
+
 	expectedOutputs := []string{
 		"Testing constants and utilities",
 		"PI = 3.14159",
@@ -198,4 +196,3 @@ echo "Include test completed"
 	}
 	tester.AssertOutput(result, expectedOutputs)
 }
-

@@ -102,22 +102,22 @@ type GraphvizSectorMap struct {
 	currentSector int
 	sectorData    map[int]api.SectorInfo
 	sectorLevels  map[int]int // Track which level each sector is at (0=current, 1-5=hop levels)
-	
+
 	// Content-hash based LRU caching
-	graphCache    *LRUCache // LRU cache keyed by MD5 hash of DOT content
-	currentHashKey string   // Current hash key being displayed
-	
-	needsRedraw   bool
-	hasBorder     bool
-	sixelLayer    *SixelLayer
-	regionID      string
-	isGenerating  bool        // Track when image generation is in progress
-	
+	graphCache     *LRUCache // LRU cache keyed by MD5 hash of DOT content
+	currentHashKey string    // Current hash key being displayed
+
+	needsRedraw  bool
+	hasBorder    bool
+	sixelLayer   *SixelLayer
+	regionID     string
+	isGenerating bool // Track when image generation is in progress
+
 	// Debouncing for rapid sector updates (e.g., during probe processing)
-	lastUpdateTime    time.Time
-	debounceTimer     *time.Timer
-	pendingRedraw     bool
-	debounceDelay     time.Duration
+	lastUpdateTime time.Time
+	debounceTimer  *time.Timer
+	pendingRedraw  bool
+	debounceDelay  time.Duration
 }
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
@@ -126,27 +126,27 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
 	panelColors := currentTheme.PanelColors()
-	
+
 	r, g, b := defaultColors.Background.RGB()
 	debug.Log("GraphvizSectorMap: Constructor - theme default background RGB(%d,%d,%d)", r, g, b)
-	
+
 	r2, g2, b2 := panelColors.Background.RGB()
 	debug.Log("GraphvizSectorMap: Constructor - theme panel background RGB(%d,%d,%d)", r2, g2, b2)
-	
+
 	box := tview.NewBox()
-	box.SetBackgroundColor(defaultColors.Background)  // Use theme's default background
+	box.SetBackgroundColor(defaultColors.Background) // Use theme's default background
 	box.SetBorderColor(panelColors.Border)
 	box.SetTitleColor(panelColors.Title)
-	
+
 	gsm := &GraphvizSectorMap{
-		Box:          box,
-		sectorData:   make(map[int]api.SectorInfo),
-		sectorLevels: make(map[int]int),
-		graphCache:   NewLRUCache(100), // Initialize LRU cache with max size 100
-		needsRedraw:  true,
-		hasBorder:    false,  // No border, just background
-		sixelLayer:   sixelLayer,
-		regionID:     "sector_map", // Unique ID for this component
+		Box:           box,
+		sectorData:    make(map[int]api.SectorInfo),
+		sectorLevels:  make(map[int]int),
+		graphCache:    NewLRUCache(100), // Initialize LRU cache with max size 100
+		needsRedraw:   true,
+		hasBorder:     false, // No border, just background
+		sixelLayer:    sixelLayer,
+		regionID:      "sector_map",           // Unique ID for this component
 		debounceDelay: 200 * time.Millisecond, // 200ms debounce delay for rapid updates
 	}
 	gsm.SetBorder(false).SetTitle("")
@@ -160,14 +160,13 @@ func (gsm *GraphvizSectorMap) SetProxyAPI(proxyAPI api.ProxyAPI) {
 	// LRU cache will handle eviction automatically
 }
 
-
 // Draw renders the graphviz sector map using the proven sixel technique
 func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	// Don't draw if ProxyAPI is nil (disconnected state)
 	if gsm.proxyAPI == nil {
 		return
 	}
-	
+
 	// Get the component area
 	x, y, width, height := gsm.GetRect()
 	debug.Log("GraphvizSectorMap.Draw: Component rect x=%d y=%d w=%d h=%d", x, y, width, height)
@@ -179,21 +178,20 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 
 	// Generate map image and sixel if needed
 	needsGeneration := gsm.needsRedraw || gsm.pendingRedraw
-	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, pendingRedraw=%t), isGenerating=%t", 
+	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, pendingRedraw=%t), isGenerating=%t",
 		needsGeneration, gsm.needsRedraw, gsm.pendingRedraw, gsm.isGenerating)
-	
-	
+
 	if needsGeneration {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil {
 			debug.Log("GraphvizSectorMap.Draw: Generating new sector map for sector %d", gsm.currentSector)
-			gsm.isGenerating = true  // Mark that we're generating
-			
+			gsm.isGenerating = true // Mark that we're generating
+
 			// Clear the region before generating new content to prevent artifacts
 			if gsm.sixelLayer != nil {
 				gsm.sixelLayer.ClearRegion(gsm.regionID)
 				gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 			}
-			
+
 			// Generate new graphviz image
 			g, err := gsm.buildSectorGraph()
 			if err == nil {
@@ -204,7 +202,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 					// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
 					gsm.needsRedraw = false
 					gsm.pendingRedraw = false
-					gsm.isGenerating = false  // Mark generation complete
+					gsm.isGenerating = false // Mark generation complete
 				} else {
 					debug.Log("GraphvizSectorMap.Draw: Error generating image: %v", err)
 					gsm.isGenerating = false
@@ -214,7 +212,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 				gsm.isGenerating = false
 			}
 		} else {
-			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t", 
+			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t",
 				gsm.currentSector, gsm.proxyAPI != nil)
 		}
 	}
@@ -224,15 +222,15 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		debug.Log("GraphvizSectorMap.Draw: Registering sixel region")
 		gsm.registerSixelRegion(x, y, width, height)
 	} else {
-		debug.Log("GraphvizSectorMap.Draw: No image ready - currentHashKey=%s, sixelLayer!=nil=%t", 
+		debug.Log("GraphvizSectorMap.Draw: No image ready - currentHashKey=%s, sixelLayer!=nil=%t",
 			gsm.currentHashKey, gsm.sixelLayer != nil)
-		
+
 		// Hide sixel region when not ready (no status text shown)
 		if gsm.sixelLayer != nil {
 			gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 		}
 	}
-	
+
 	debug.Log("GraphvizSectorMap.Draw: Draw complete")
 }
 
@@ -334,7 +332,7 @@ func (gsm *GraphvizSectorMap) drawStatusText(screen tcell.Screen, x, y, width, h
 	// Get theme colors
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	// Let tview handle the background - just draw the text
 	// Draw text using theme's waiting color on theme's background
 	style := tcell.StyleDefault.Foreground(defaultColors.Waiting).Background(defaultColors.Background)
@@ -368,18 +366,18 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSector(sectorNumber int) {
 // UpdateCurrentSectorWithInfo updates the map with full sector information
 func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorInfo) {
 	oldSector := gsm.currentSector
-	
+
 	// Always update the sector data first
 	gsm.sectorData[sectorInfo.Number] = sectorInfo
-	
+
 	if gsm.currentSector != sectorInfo.Number {
 		// Current sector changed - force redraw
 		gsm.currentSector = sectorInfo.Number
 		gsm.needsRedraw = true
-		gsm.currentHashKey = "" // Clear current hash key
+		gsm.currentHashKey = ""              // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
-		debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed from %d to %d, triggering redraw", 
+		debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed from %d to %d, triggering redraw",
 			oldSector, sectorInfo.Number)
 
 		// Hide the region while regenerating to prevent overlap
@@ -396,7 +394,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 func (gsm *GraphvizSectorMap) UpdateSectorData(sectorInfo api.SectorInfo) {
 	// Update the sector data in our cache
 	gsm.sectorData[sectorInfo.Number] = sectorInfo
-	
+
 	// If this sector is part of the currently displayed map, check if we need a redraw
 	// but don't change the current sector focus
 	if gsm.currentSector > 0 {
@@ -412,49 +410,49 @@ func (gsm *GraphvizSectorMap) UpdateSectorData(sectorInfo api.SectorInfo) {
 func (gsm *GraphvizSectorMap) scheduleRedrawWithDebounce(sectorNumber int, source string) {
 	now := time.Now()
 	gsm.lastUpdateTime = now
-	
+
 	// If we don't have a current hash, we need to redraw regardless
 	needsImmediate := gsm.currentHashKey == ""
-	
+
 	if !needsImmediate {
 		// Check if the graph would actually change by comparing DOT content hash
 		if newHash, err := gsm.generateDOTContentHash(); err == nil {
-			debug.Log("GraphvizSectorMap: %s - Hash comparison for sector %d: current='%s', new='%s'", 
+			debug.Log("GraphvizSectorMap: %s - Hash comparison for sector %d: current='%s', new='%s'",
 				source, sectorNumber, gsm.currentHashKey, newHash)
 			if newHash != gsm.currentHashKey {
-				debug.Log("GraphvizSectorMap: %s - DOT content changed for sector %d, scheduling debounced redraw (old hash: %s, new hash: %s)", 
+				debug.Log("GraphvizSectorMap: %s - DOT content changed for sector %d, scheduling debounced redraw (old hash: %s, new hash: %s)",
 					source, sectorNumber, gsm.currentHashKey, newHash)
 				needsImmediate = true
 				gsm.currentHashKey = "" // Clear current hash key to force regeneration
 			} else {
-				debug.Log("GraphvizSectorMap: %s - DOT content unchanged for sector %d, skipping redraw (hash: %s)", 
+				debug.Log("GraphvizSectorMap: %s - DOT content unchanged for sector %d, skipping redraw (hash: %s)",
 					source, sectorNumber, gsm.currentHashKey)
 				return // No change needed
 			}
 		} else {
 			// If we can't generate hash, fall back to always redrawing
-			debug.Log("GraphvizSectorMap: %s - Failed to generate DOT hash for sector %d, scheduling debounced redraw: %v", 
+			debug.Log("GraphvizSectorMap: %s - Failed to generate DOT hash for sector %d, scheduling debounced redraw: %v",
 				source, sectorNumber, err)
 			needsImmediate = true
 			gsm.currentHashKey = "" // Clear current hash key to force regeneration
 		}
 	} else {
-		debug.Log("GraphvizSectorMap: %s - No current hash for sector %d, scheduling debounced redraw", 
+		debug.Log("GraphvizSectorMap: %s - No current hash for sector %d, scheduling debounced redraw",
 			source, sectorNumber)
 	}
-	
+
 	if !needsImmediate {
 		return
 	}
-	
+
 	// Cancel any existing timer
 	if gsm.debounceTimer != nil {
 		gsm.debounceTimer.Stop()
 	}
-	
+
 	// Mark that we have a pending redraw
 	gsm.pendingRedraw = true
-	
+
 	// Set up new timer
 	gsm.debounceTimer = time.AfterFunc(gsm.debounceDelay, func() {
 		if gsm.pendingRedraw {
@@ -490,7 +488,7 @@ func (gsm *GraphvizSectorMap) LoadRealMapData() {
 	if gsm.currentSector != playerInfo.CurrentSector {
 		gsm.currentSector = playerInfo.CurrentSector
 		gsm.needsRedraw = true
-		gsm.currentHashKey = "" // Clear current hash key
+		gsm.currentHashKey = ""              // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 	}
 }
@@ -518,19 +516,19 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 	// Build complete graph with all warp connections
 	// Track which sectors we've fully processed to avoid infinite recursion
 	processed := make(map[int]bool)
-	
+
 	// Clear and initialize sector levels tracking
 	gsm.sectorLevels = make(map[int]int)
 	gsm.sectorLevels[gsm.currentSector] = 0 // Current sector is level 0
-	
+
 	// Step 1: Add all first-level vertices and edges from current sector
 	for _, warpSector := range currentInfo.Warps {
 		if warpSector <= 0 {
 			continue
 		}
-		g.AddVertex(warpSector) // Ignore errors - vertex might already exist
+		g.AddVertex(warpSector)                  // Ignore errors - vertex might already exist
 		g.AddEdge(gsm.currentSector, warpSector) // Ignore errors - edge might already exist
-		gsm.sectorLevels[warpSector] = 1 // First level sectors
+		gsm.sectorLevels[warpSector] = 1         // First level sectors
 	}
 	processed[gsm.currentSector] = true
 
@@ -554,7 +552,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			if targetSector <= 0 {
 				continue
 			}
-			g.AddVertex(targetSector) // Ignore errors - vertex might already exist
+			g.AddVertex(targetSector)           // Ignore errors - vertex might already exist
 			g.AddEdge(warpSector, targetSector) // Ignore errors - edge might already exist
 
 			// Track sectors for next level processing if not already processed
@@ -588,7 +586,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			if thirdLevelSector <= 0 {
 				continue
 			}
-			g.AddVertex(thirdLevelSector) // Ignore errors - vertex might already exist
+			g.AddVertex(thirdLevelSector)                  // Ignore errors - vertex might already exist
 			g.AddEdge(secondLevelSector, thirdLevelSector) // Ignore errors - edge might already exist
 
 			// Track sectors for next level processing if not already processed
@@ -622,7 +620,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			if fourthLevelSector <= 0 {
 				continue
 			}
-			g.AddVertex(fourthLevelSector) // Ignore errors - vertex might already exist
+			g.AddVertex(fourthLevelSector)                 // Ignore errors - vertex might already exist
 			g.AddEdge(thirdLevelSector, fourthLevelSector) // Ignore errors - edge might already exist
 
 			// Track sectors for next level processing if not already processed
@@ -655,7 +653,7 @@ func (gsm *GraphvizSectorMap) buildSectorGraph() (graph.Graph[int, int], error) 
 			if fifthLevelSector <= 0 {
 				continue
 			}
-			g.AddVertex(fifthLevelSector) // Ignore errors - vertex might already exist
+			g.AddVertex(fifthLevelSector)                  // Ignore errors - vertex might already exist
 			g.AddEdge(fourthLevelSector, fifthLevelSector) // Ignore errors - edge might already exist
 
 			// Store basic info for fifth-level sectors only if not already processed
@@ -694,17 +692,17 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	// Get theme colors for consistent styling
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	// Use neato engine with increased spacing for better layout
-	gvGraph.SetLayout("neato")          // Force-directed layout engine
+	gvGraph.SetLayout("neato")                                              // Force-directed layout engine
 	gvGraph.SetBackgroundColor(gsm.colorToString(defaultColors.Background)) // Use theme's default background
-	gvGraph.SetDPI(150.0)              // Higher DPI for better border rendering
-	
+	gvGraph.SetDPI(150.0)                                                   // Higher DPI for better border rendering
+
 	// Set default edge color to white for visibility on black background
 	_, err = gvGraph.Attr(int(cgraph.EDGE), "color", "white")
 	if err != nil {
 	}
-	
+
 	// Set default node attributes with visible borders and rounded corners
 	_, err = gvGraph.Attr(int(cgraph.NODE), "style", "filled,rounded")
 	if err != nil {
@@ -720,14 +718,14 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	_ = float64(componentWidth) / float64(componentHeight)
 
 	// Configure layout spacing for neato engine using proper neato attributes
-	gvGraph.SetOverlap(false)      // Prevent node overlap
-	gvGraph.SetSplines("true")     // Enable curved edges for better readability
-	gvGraph.Set("center", "true")  // Center the graph
-	
+	gvGraph.SetOverlap(false)     // Prevent node overlap
+	gvGraph.SetSplines("true")    // Enable curved edges for better readability
+	gvGraph.Set("center", "true") // Center the graph
+
 	// Use neato-specific attributes for better spacing
-	gvGraph.Set("len", "3.0")           // Preferred edge length in inches - larger for more spacing
-	gvGraph.Set("sep", "1.0")           // Margin around nodes when removing overlap 
-	gvGraph.Set("defaultdist", "4.0")   // Distance between separate components
+	gvGraph.Set("len", "3.0")             // Preferred edge length in inches - larger for more spacing
+	gvGraph.Set("sep", "1.0")             // Margin around nodes when removing overlap
+	gvGraph.Set("defaultdist", "4.0")     // Distance between separate components
 	gvGraph.Set("overlap_scaling", "2.0") // Scale layout to reduce overlap
 
 	// Create a map of graphviz nodes
@@ -745,7 +743,7 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		sectors = append(sectors, sector)
 	}
 	sort.Ints(sectors)
-	
+
 	for _, sector := range sectors {
 		// Create node with sector information
 		sectorInfo, exists := gsm.sectorData[sector]
@@ -889,7 +887,6 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		}
 	}
 
-
 	// Save warp direction analysis for debugging
 	var warpDebug strings.Builder
 	warpDebug.WriteString("=== SECTOR WARP ANALYSIS ===\n\n")
@@ -942,10 +939,9 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	hash := md5.Sum(dotContent)
 	hashKey := fmt.Sprintf("%x", hash)
 
-
 	// Check if we have cached data for this hash
 	if cached, found := gsm.graphCache.Get(hashKey); found {
-			gsm.currentHashKey = hashKey
+		gsm.currentHashKey = hashKey
 		return cached.ImageData, nil
 	}
 
@@ -962,7 +958,7 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
-	
+
 	err = cmd.Run()
 	if err != nil {
 		// Fallback to library rendering as last resort
@@ -993,33 +989,33 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	// Fixed font size approach - maintain consistent text size regardless of graph size
 	targetFontSizePixels := 12.0   // Target font size in final rendered image (pixels)
 	graphvizFontSizePoints := 18.0 // The font size we set in graphviz (from node.SetFontSize)
-	graphvizDPI := 150.0          // The DPI we set in graphviz (from gvGraph.SetDPI)
-	
+	graphvizDPI := 150.0           // The DPI we set in graphviz (from gvGraph.SetDPI)
+
 	// Calculate what the graphviz font renders as in pixels
 	graphvizFontPixels := (graphvizFontSizePoints / 72.0) * graphvizDPI
-	
+
 	// Calculate the scale needed to achieve our target font size
 	fontScale := targetFontSizePixels / graphvizFontPixels
 
 	// Calculate panel size in pixels using typical terminal character dimensions
-	terminalFontSize := 11.0       // Typical terminal font size  
-	terminalDPI := 96.0           // Standard screen DPI
-	charWidthRatio := 0.6         // Monospace width ratio
-	lineHeightRatio := 0.85       // Line height ratio
-	
+	terminalFontSize := 11.0 // Typical terminal font size
+	terminalDPI := 96.0      // Standard screen DPI
+	charWidthRatio := 0.6    // Monospace width ratio
+	lineHeightRatio := 0.85  // Line height ratio
+
 	pixelsPerPoint := terminalDPI / 72.0
 	charHeightPixels := terminalFontSize * pixelsPerPoint * lineHeightRatio
 	charWidthPixels := terminalFontSize * pixelsPerPoint * charWidthRatio
-	
+
 	adjustedHeight := componentHeight - 1 // Reserve space for title
 	panelPixelWidth := int(float64(componentWidth) * charWidthPixels)
 	panelPixelHeight := int(float64(adjustedHeight) * charHeightPixels)
-	
+
 	// Ensure panel dimensions are strictly bounded by component dimensions
 	// This prevents any possibility of the image exceeding terminal bounds
-	maxAllowedWidth := componentWidth * 8  // Conservative character width estimate
+	maxAllowedWidth := componentWidth * 8   // Conservative character width estimate
 	maxAllowedHeight := adjustedHeight * 16 // Conservative character height estimate
-	
+
 	if panelPixelWidth > maxAllowedWidth {
 		panelPixelWidth = maxAllowedWidth
 	}
@@ -1029,20 +1025,20 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 
 	// Use the font-based scale as our primary scale
 	scale := fontScale
-	
+
 	// But ensure we don't exceed panel bounds - if the scaled image would be too big, we'll crop
 	scaledWidth := int(float64(naturalWidth) * scale)
 	scaledHeight := int(float64(naturalHeight) * scale)
 	shouldCrop := false
-	
+
 	if scaledWidth > panelPixelWidth || scaledHeight > panelPixelHeight {
 		shouldCrop = true
 	}
-	
+
 	// Set reasonable bounds on scaling to prevent extreme cases
 	maxScale := 2.0 // Don't scale up too much
 	minScale := 0.2 // Don't scale down too much - text becomes unreadable
-	
+
 	if scale > maxScale {
 		scale = maxScale
 	} else if scale < minScale {
@@ -1055,13 +1051,13 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 	// Scale the image using golang.org/x/image/draw
 	scaledImg := image.NewRGBA(image.Rect(0, 0, newWidth, newHeight))
 	xdraw.BiLinear.Scale(scaledImg, scaledImg.Bounds(), img, bounds, xdraw.Over, nil)
-	
+
 	// Find the actual content bounds of the scaled image (non-black pixels)
 	contentBounds := findContentBounds(scaledImg)
 
 	// Create a panel-sized canvas to center the scaled image
 	panelImg := image.NewRGBA(image.Rect(0, 0, panelPixelWidth, panelPixelHeight))
-	
+
 	// Get theme colors and fill with theme's default background
 	currentTheme = theme.Current()
 	defaultColors = currentTheme.DefaultColors()
@@ -1072,21 +1068,21 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 			panelImg.Set(x, y, bgColor)
 		}
 	}
-	
+
 	// Handle centering and cropping based on whether we're cropping or fitting
 	var centerX, centerY, srcX, srcY, targetWidth, targetHeight int
-	
+
 	if shouldCrop || newWidth > panelPixelWidth || newHeight > panelPixelHeight {
 		// Cropping mode: center the source image and crop edges that don't fit
 		centerX = 0
 		centerY = 0
 		targetWidth = panelPixelWidth
 		targetHeight = panelPixelHeight
-		
+
 		// Calculate which part of the source image to show (center crop)
 		srcX = (newWidth - panelPixelWidth) / 2
 		srcY = (newHeight - panelPixelHeight) / 2
-		
+
 		// Ensure source coordinates are not negative
 		if srcX < 0 {
 			srcX = 0
@@ -1096,7 +1092,7 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 			srcY = 0
 			targetHeight = newHeight
 		}
-		
+
 		// Ensure target dimensions don't exceed panel or scaled image size
 		if targetWidth > panelPixelWidth {
 			targetWidth = panelPixelWidth
@@ -1104,10 +1100,10 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		if targetHeight > panelPixelHeight {
 			targetHeight = panelPixelHeight
 		}
-		if targetWidth > newWidth - srcX {
+		if targetWidth > newWidth-srcX {
 			targetWidth = newWidth - srcX
 		}
-		if targetHeight > newHeight - srcY {
+		if targetHeight > newHeight-srcY {
 			targetHeight = newHeight - srcY
 		}
 	} else {
@@ -1119,7 +1115,7 @@ func (gsm *GraphvizSectorMap) generateGraphvizImage(g graph.Graph[int, int], com
 		targetWidth = newWidth
 		targetHeight = newHeight
 	}
-	
+
 	// Draw the scaled image centered (and clipped if necessary) in the panel
 	if targetWidth > 0 && targetHeight > 0 {
 		targetRect := image.Rect(centerX, centerY, centerX+targetWidth, centerY+targetHeight)
@@ -1214,8 +1210,8 @@ func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, off
 	}
 
 	// Simple white border
-	white := color.RGBA{255, 255, 255, 255}         // White lines
-	
+	white := color.RGBA{255, 255, 255, 255} // White lines
+
 	// Adjust content bounds by the centering offset with small padding for simple border
 	borderWidth := 3
 	left := contentBounds.Min.X + offsetX - borderWidth
@@ -1224,7 +1220,7 @@ func drawContentBorders(panelImg *image.RGBA, contentBounds image.Rectangle, off
 	bottom := contentBounds.Max.Y + offsetY + borderWidth - 1
 
 	panelBounds := panelImg.Bounds()
-	
+
 	// Ensure borders are within the panel bounds
 	left = max(0, left)
 	top = max(0, top)
@@ -1287,16 +1283,16 @@ func (gsm *GraphvizSectorMap) generateDOTContentHash() (string, error) {
 	// Apply same graph settings for consistent hashing
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
-	
+
 	gvGraph.SetLayout("neato")
 	gvGraph.SetBackgroundColor(gsm.colorToString(defaultColors.Background))
 	gvGraph.SetDPI(150.0)
-	
+
 	gvGraph.Attr(int(cgraph.EDGE), "color", "white")
 	gvGraph.Attr(int(cgraph.NODE), "style", "filled,rounded")
 	gvGraph.Attr(int(cgraph.NODE), "penwidth", "3")
 	gvGraph.Attr(int(cgraph.NODE), "color", "white")
-	
+
 	gvGraph.SetOverlap(false)
 	gvGraph.SetSplines("true")
 	gvGraph.Set("center", "true")
@@ -1318,7 +1314,7 @@ func (gsm *GraphvizSectorMap) generateDOTContentHash() (string, error) {
 		sectors = append(sectors, sector)
 	}
 	sort.Ints(sectors)
-	
+
 	for _, sector := range sectors {
 		sectorInfo, exists := gsm.sectorData[sector]
 
@@ -1457,8 +1453,7 @@ func (gsm *GraphvizSectorMap) generateDOTContentHash() (string, error) {
 	dotContent := dotBuf.Bytes()
 	hash := md5.Sum(dotContent)
 	hashStr := fmt.Sprintf("%x", hash)
-	
-	
+
 	return hashStr, nil
 }
 

@@ -1,5 +1,3 @@
-
-
 package setup
 
 import (
@@ -40,7 +38,7 @@ func (c *CleanupResources) Cleanup() {
 			os.Remove(file)
 		}
 	}
-	
+
 	// Remove directories last (should be empty after file removal)
 	for _, dir := range c.dirsToRemove {
 		if _, err := os.Stat(dir); err == nil {
@@ -68,12 +66,12 @@ func CleanupTempFiles(pattern string) error {
 		// Handle glob patterns if needed in the future
 		return nil
 	}
-	
+
 	// Simple file removal
 	if _, err := os.Stat(pattern); err == nil {
 		return os.Remove(pattern)
 	}
-	
+
 	return nil
 }
 

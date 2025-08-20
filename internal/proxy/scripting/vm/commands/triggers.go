@@ -14,7 +14,7 @@ func RegisterTriggerCommands(vm CommandRegistry) {
 	vm.RegisterCommand("SETTEXTTRIGGER", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamValue}, cmdSetTextTrigger)
 	vm.RegisterCommand("KILLTRIGGER", 1, 1, []types.ParameterType{types.ParamValue}, cmdKillTrigger)
 	vm.RegisterCommand("KILLALLTRIGGERS", 0, 0, []types.ParameterType{}, cmdKillAllTriggers)
-	
+
 	// Legacy trigger commands (for backwards compatibility)
 	vm.RegisterCommand("SETTRIGGER", 2, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamValue}, cmdSetTrigger)
 	vm.RegisterCommand("SETTEXTOUTTRIGGER", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamValue}, cmdSetTextOutTrigger)
@@ -60,7 +60,7 @@ func cmdSetTextLineTrigger(vm types.VMInterface, params []*types.CommandParam) e
 	return vm.SetTrigger(trigger)
 }
 
-// cmdSetTextTrigger implements the setTextTrigger command  
+// cmdSetTextTrigger implements the setTextTrigger command
 // Syntax: setTextTrigger <id> <label> <pattern>
 // Example: setTextTrigger 2 :gotWarps "Command [TL="
 func cmdSetTextTrigger(vm types.VMInterface, params []*types.CommandParam) error {

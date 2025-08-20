@@ -5,7 +5,7 @@ import (
 	"testing"
 	"twist/integration/scripting"
 	"twist/internal/api"
-	
+
 	_ "modernc.org/sqlite"
 )
 
@@ -18,8 +18,8 @@ func TestPortBuy(t *testing.T) {
 	// Set up test initial values BEFORE running the script
 	testCredits := 374999
 	testExperience := 0
-	testTurns := 19994  // Will be decremented to 19993 after docking
-	
+	testTurns := 19994 // Will be decremented to 19993 after docking
+
 	// Set up database schema and initial data before running the script
 	scripting.SetupTestDatabase(t, dbPath, func(db *sql.DB) {
 		_, err := db.Exec("INSERT OR REPLACE INTO player_stats (id, credits, experience, turns) VALUES (1, ?, ?, ?)", testCredits, testExperience, testTurns)
@@ -33,7 +33,7 @@ func TestPortBuy(t *testing.T) {
 
 	// Verify sector 286 was parsed and saved
 	result.Assert.AssertSectorExists(286)
-	
+
 	// Verify sector constellation
 	result.Assert.AssertSectorConstellation(286, "uncharted space")
 
@@ -57,7 +57,7 @@ func TestPortBuy(t *testing.T) {
 			break
 		}
 	}
-	
+
 	if !found286 {
 		t.Errorf("Expected OnCurrentSectorChanged call for sector 286")
 	}
@@ -70,30 +70,30 @@ func TestPortBuy(t *testing.T) {
 
 	// Verify port commodity information from the script
 	// Fuel Ore: Selling 2500 at 100%, Organics: Selling 1180 at 100%, Equipment: Selling 1180 at 100%
-	result.Assert.AssertPortCommodity(286, "fuel_ore", 2500, 100, false)   // Port is selling (not buying)
-	result.Assert.AssertPortCommodity(286, "organics", 1180, 100, false)   // Port is selling (not buying)  
-	result.Assert.AssertPortCommodity(286, "equipment", 1180, 100, false)  // Port is selling (not buying)
+	result.Assert.AssertPortCommodity(286, "fuel_ore", 2500, 100, false)  // Port is selling (not buying)
+	result.Assert.AssertPortCommodity(286, "organics", 1180, 100, false)  // Port is selling (not buying)
+	result.Assert.AssertPortCommodity(286, "equipment", 1180, 100, false) // Port is selling (not buying)
 
 	// Verify player cargo hold contents after trading
 	// Bought 2 Fuel Ore and 3 Organics, 0 Equipment
 	result.Assert.AssertPlayerCargo(2, 3, 0)
-	
+
 	// Verify player has 20 total cargo holds (as shown in port screen)
 	result.Assert.AssertPlayerTotalHolds(20)
-	
+
 	// Verify player has 15 empty cargo holds after trading (started with 20, bought 5 total)
 	result.Assert.AssertPlayerEmptyHolds(15)
-	
+
 	// Verify player turns were decremented by 1 for docking (19994 -> 19993)
 	result.Assert.AssertPlayerTurns(testTurns - 1)
-	
+
 	// Verify port status: not dead, build time 0 (active port)
 	result.Assert.AssertPortStatus(286, false, 0)
-	
+
 	// Verify player experience increased by 4 points total:
 	// 1 (finding unused port) + 2 (fuel ore trade) + 1 (organics trade) = 4 experience points
 	result.Assert.AssertPlayerExperience(testExperience + 4)
-	
+
 	// Verify that OnPlayerStatsUpdated was called during port trading
 	// Port trading should trigger player stats updates for credits, experience, cargo, and turns
 	playerStatsCalls := result.TuiAPI.PlayerStatsCalls
@@ -101,7 +101,7 @@ func TestPortBuy(t *testing.T) {
 		t.Errorf("Expected OnPlayerStatsUpdated to be called during port trading, but got no calls")
 	} else {
 		t.Logf("OnPlayerStatsUpdated called %d times during port trading", len(playerStatsCalls))
-		
+
 		// Check that the final player stats call has the expected values
 		finalStats := playerStatsCalls[len(playerStatsCalls)-1]
 		if finalStats.Credits != testCredits-83 {

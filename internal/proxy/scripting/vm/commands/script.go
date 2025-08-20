@@ -65,7 +65,7 @@ func cmdStopAll(vm types.VMInterface, params []*types.CommandParam) error {
 
 	// Kill all triggers which should stop script execution
 	vm.KillAllTriggers()
-	
+
 	// In a real implementation, this would stop all running scripts
 	// For now, we rely on KillAllTriggers to stop script execution
 	return nil
@@ -78,7 +78,7 @@ func cmdSystemScript(vm types.VMInterface, params []*types.CommandParam) error {
 	}
 
 	systemScriptName := GetParamString(vm, params[0])
-	
+
 	// Get the script manager from the VM
 	scriptManager := vm.GetScriptManager()
 	if scriptManager == nil {
@@ -95,7 +95,7 @@ func cmdSystemScript(vm types.VMInterface, params []*types.CommandParam) error {
 	if err != nil {
 		return vm.Error(fmt.Sprintf("Failed to execute system script %s: %v", systemScriptName, err))
 	}
-	
+
 	return nil
 }
 
@@ -157,11 +157,11 @@ func cmdGetScriptVersion(vm types.VMInterface, params []*types.CommandParam) err
 	}
 
 	scriptName := GetParamString(vm, params[0])
-	
+
 	// Get the script manager from the VM
 	scriptManager := vm.GetScriptManager()
 	version := "6" // Default COMPILED_SCRIPT_VERSION from Pascal
-	
+
 	if scriptManager != nil {
 		if sm, ok := scriptManager.(*manager.ScriptManager); ok {
 			// Try to get version from script manager
@@ -170,7 +170,7 @@ func cmdGetScriptVersion(vm types.VMInterface, params []*types.CommandParam) err
 			}
 		}
 	}
-	
+
 	vm.SetVariable(params[1].VarName, &types.Value{
 		Type:   types.StringType,
 		String: version,
@@ -186,7 +186,7 @@ func cmdReqVersion(vm types.VMInterface, params []*types.CommandParam) error {
 	}
 
 	requiredVersion := GetParamString(vm, params[0])
-	
+
 	// TODO: Implement real version checking against current TWX version
 	// Should compare requiredVersion against COMPILED_SCRIPT_VERSION (6)
 	// and return error if current version is too old

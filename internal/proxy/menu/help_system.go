@@ -11,12 +11,12 @@ import (
 type HelpSystem struct {
 	// Output function to send help text to stream
 	sendOutput func(string)
-	
+
 	// Help text for different menu contexts
-	menuHelp        map[string]string
-	generalHelp     string
-	inputHelp       string
-	navigationHelp  string
+	menuHelp       map[string]string
+	generalHelp    string
+	inputHelp      string
+	navigationHelp string
 }
 
 // NewHelpSystem creates a new help system
@@ -31,10 +31,10 @@ func NewHelpSystem(sendOutput func(string)) *HelpSystem {
 		sendOutput: sendOutput,
 		menuHelp:   make(map[string]string),
 	}
-	
+
 	// Initialize default help texts
 	hs.initializeDefaultHelp()
-	
+
 	return hs
 }
 
@@ -44,19 +44,19 @@ func (hs *HelpSystem) initializeDefaultHelp() {
 		"'Q' - Go back or exit menu\n" +
 		"'?' - Show this help\n" +
 		"Enter - Refresh current menu"
-	
+
 	hs.inputHelp = "Input Collection Help:\n" +
 		"- Type your value and press Enter to submit\n" +
 		"- Press Enter alone to submit empty value\n" +
 		"- Press '\\' to cancel input collection\n" +
 		"- Press '?' for this help"
-	
+
 	hs.navigationHelp = "Menu Navigation:\n" +
 		"- Use hotkeys (letters) to select menu items\n" +
 		"- Press 'Q' to go back to parent menu or exit\n" +
 		"- Press '?' to show help for current context\n" +
 		"- Press Enter to refresh current menu display"
-	
+
 	// Set up specific menu help
 	hs.menuHelp[TWX_MAIN] = "TWX Main Menu:\n" +
 		"B - Burst Commands (send quick game commands)\n" +
@@ -65,7 +65,7 @@ func (hs *HelpSystem) initializeDefaultHelp() {
 		"S - Script Menu (advanced script management)\n" +
 		"V - View Data Menu (display game database info)\n" +
 		"P - Port Menu (port and trading information)"
-	
+
 	hs.menuHelp[TWX_SCRIPT] = "TWX Script Menu:\n" +
 		"L - Load Script (load and run a new script)\n" +
 		"T - Terminate Script (stop all running scripts)\n" +
@@ -73,14 +73,14 @@ func (hs *HelpSystem) initializeDefaultHelp() {
 		"R - Resume Script (resume paused scripts - not implemented)\n" +
 		"D - Debug Script (show script debugging info)\n" +
 		"V - Variable Dump (display script variables)"
-	
+
 	hs.menuHelp[TWX_DATA] = "TWX Data Menu:\n" +
 		"S - Sector Display (show sector information from database)\n" +
 		"T - Trader List (show trader information - not implemented)\n" +
 		"P - Port List (show port information from database)\n" +
 		"R - Route Plot (show trading routes - not implemented)\n" +
 		"B - Bubble Info (show space bubble info - not implemented)"
-	
+
 	hs.menuHelp["TWX_BURST"] = "TWX Burst Menu:\n" +
 		"B - Send burst (send a new burst command to game)\n" +
 		"R - Repeat last burst (repeat the previous burst command)\n" +
@@ -151,16 +151,16 @@ func (hs *HelpSystem) ShowContextualHelp(currentMenu *TerminalMenuItem) {
 // showDynamicMenuHelp generates help text based on the current menu structure
 func (hs *HelpSystem) showDynamicMenuHelp(menu *TerminalMenuItem) {
 	var helpBuilder strings.Builder
-	
+
 	helpBuilder.WriteString("Menu: " + menu.Description + "\n\n")
 	helpBuilder.WriteString("Available options:\n")
-	
+
 	for _, child := range menu.Children {
 		if child.Hotkey != 0 {
 			helpBuilder.WriteString(string(child.Hotkey) + " - " + child.Description + "\n")
 		}
 	}
-	
+
 	helpBuilder.WriteString("\nNavigation:\n")
 	if menu.Parent != nil {
 		helpBuilder.WriteString("Q - Back to " + menu.Parent.Name + "\n")
@@ -169,7 +169,7 @@ func (hs *HelpSystem) showDynamicMenuHelp(menu *TerminalMenuItem) {
 	}
 	helpBuilder.WriteString("? - Show this help\n")
 	helpBuilder.WriteString("Enter - Refresh menu")
-	
+
 	help := "\r\n" + display.FormatHelpText(helpBuilder.String()) + "\r\n"
 	hs.sendOutput(help)
 }
@@ -196,22 +196,22 @@ func (hs *HelpSystem) ShowScriptMenuHelp(menuName, customHelp string, options st
 	}()
 
 	var helpBuilder strings.Builder
-	
+
 	if customHelp != "" {
 		helpBuilder.WriteString(customHelp + "\n\n")
 	} else {
 		helpBuilder.WriteString("Script Menu: " + menuName + "\n\n")
 	}
-	
+
 	if options != "" {
 		helpBuilder.WriteString("Available options: " + options + "\n\n")
 	}
-	
+
 	helpBuilder.WriteString("Navigation:\n")
 	helpBuilder.WriteString("Q - Go back or exit menu\n")
 	helpBuilder.WriteString("? - Show this help\n")
 	helpBuilder.WriteString("Enter - Refresh menu")
-	
+
 	help := "\r\n" + display.FormatHelpText(helpBuilder.String()) + "\r\n"
 	hs.sendOutput(help)
 }
@@ -251,20 +251,20 @@ func (hs *HelpSystem) ShowAllMenus(rootMenu *TerminalMenuItem, activeMenus map[s
 	}()
 
 	var helpBuilder strings.Builder
-	
+
 	helpBuilder.WriteString("Available Menus:\n\n")
-	
+
 	if rootMenu != nil {
 		hs.buildMenuTree(&helpBuilder, rootMenu, 0)
 	}
-	
+
 	if len(activeMenus) > 0 {
 		helpBuilder.WriteString("\nActive Menus:\n")
 		for name := range activeMenus {
 			helpBuilder.WriteString("- " + name + "\n")
 		}
 	}
-	
+
 	help := "\r\n" + display.FormatHelpText(helpBuilder.String()) + "\r\n"
 	hs.sendOutput(help)
 }
@@ -272,13 +272,13 @@ func (hs *HelpSystem) ShowAllMenus(rootMenu *TerminalMenuItem, activeMenus map[s
 // buildMenuTree recursively builds a tree representation of the menu structure
 func (hs *HelpSystem) buildMenuTree(builder *strings.Builder, menu *TerminalMenuItem, depth int) {
 	indent := strings.Repeat("  ", depth)
-	
+
 	if menu.Hotkey != 0 {
 		builder.WriteString(indent + "(" + string(menu.Hotkey) + ") " + menu.Description + "\n")
 	} else {
 		builder.WriteString(indent + menu.Description + "\n")
 	}
-	
+
 	for _, child := range menu.Children {
 		hs.buildMenuTree(builder, child, depth+1)
 	}

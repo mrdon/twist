@@ -49,19 +49,19 @@ func (sm *ScriptManager) SetSystemScriptDirectory(dir string) {
 func (sm *ScriptManager) LoadScript(filename string, isSystem bool) (*ScriptInfo, error) {
 	// Generate unique script ID based on filename and timestamp
 	scriptID := sm.generateScriptID(filename)
-	
+
 	// Extract script name from filename
 	name := filepath.Base(filename)
 	if ext := filepath.Ext(name); ext != "" {
 		name = strings.TrimSuffix(name, ext)
 	}
-	
+
 	// TODO: Read actual script file and parse header for version and description
 	// For now, use defaults based on Pascal ScriptCmp.pas
 	version := 6 // COMPILED_SCRIPT_VERSION from Pascal
 	description := ""
 	includeScripts := []string{}
-	
+
 	scriptInfo := &ScriptInfo{
 		ID:             scriptID,
 		Name:           name,
@@ -73,17 +73,17 @@ func (sm *ScriptManager) LoadScript(filename string, isSystem bool) (*ScriptInfo
 		IncludeScripts: includeScripts,
 		Description:    description,
 	}
-	
+
 	// Store in memory
 	sm.scripts[scriptID] = scriptInfo
-	
+
 	// Persist to database
 	if err := sm.saveScriptToDB(scriptInfo); err != nil {
 		// Remove from memory if database save fails
 		delete(sm.scripts, scriptID)
 		return nil, fmt.Errorf("failed to save script to database: %w", err)
 	}
-	
+
 	return scriptInfo, nil
 }
 
@@ -93,28 +93,28 @@ func (sm *ScriptManager) StopScript(scriptID string) error {
 	if !exists {
 		return fmt.Errorf("script %s not found", scriptID)
 	}
-	
+
 	if !scriptInfo.Running {
 		return fmt.Errorf("script %s is already stopped", scriptID)
 	}
-	
+
 	// Mark as stopped
 	now := time.Now()
 	scriptInfo.Running = false
 	scriptInfo.StoppedAt = &now
-	
+
 	// Update in database
 	if err := sm.updateScriptInDB(scriptInfo); err != nil {
 		return fmt.Errorf("failed to update script in database: %w", err)
 	}
-	
+
 	return nil
 }
 
 // StopScriptByName stops a script by name (supports partial matching)
 func (sm *ScriptManager) StopScriptByName(name string) error {
 	var found *ScriptInfo
-	
+
 	// First try exact name match
 	for _, script := range sm.scripts {
 		if script.Name == name && script.Running {
@@ -122,7 +122,7 @@ func (sm *ScriptManager) StopScriptByName(name string) error {
 			break
 		}
 	}
-	
+
 	// If not found, try partial match
 	if found == nil {
 		for _, script := range sm.scripts {
@@ -132,11 +132,11 @@ func (sm *ScriptManager) StopScriptByName(name string) error {
 			}
 		}
 	}
-	
+
 	if found == nil {
 		return fmt.Errorf("no running script found with name matching %s", name)
 	}
-	
+
 	return sm.StopScript(found.ID)
 }
 
@@ -175,7 +175,7 @@ func (sm *ScriptManager) GetScriptVersion(name string) (string, error) {
 		// TODO: Implement file reading for unloaded scripts
 		return "6", nil // Default version
 	}
-	
+
 	return fmt.Sprintf("%d", script.Version), nil
 }
 
@@ -186,10 +186,10 @@ func (sm *ScriptManager) LoadSystemScript(name string) error {
 	if !strings.HasSuffix(systemPath, ".twx") {
 		systemPath += ".twx"
 	}
-	
+
 	// TODO: Check if file exists and is readable
 	// TODO: Load and execute the system script
-	
+
 	// For now, just register it as a system script
 	_, err := sm.LoadScript(systemPath, true)
 	return err
@@ -202,19 +202,19 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 	       loaded_at, stopped_at, include_scripts, description
 	FROM scripts
 	ORDER BY loaded_at;`
-	
+
 	rows, err := sm.db.GetDB().Query(query)
 	if err != nil {
 		return fmt.Errorf("failed to query scripts: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var script ScriptInfo
 		var loadedAtStr string
 		var stoppedAtStr *string
 		var includeScriptsJSON string
-		
+
 		_ = rows.Scan(
 			&script.ID, &script.Name, &script.Filename, &script.Version,
 			&script.Running, &script.System, &loadedAtStr, &stoppedAtStr,
@@ -223,7 +223,7 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 		if err != nil {
 			return fmt.Errorf("failed to scan script row: %w", err)
 		}
-		
+
 		// Parse timestamps - try multiple formats
 		if script.LoadedAt, err = time.Parse("2006-01-02 15:04:05", loadedAtStr); err != nil {
 			// Try RFC3339 format
@@ -231,7 +231,7 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 				return fmt.Errorf("failed to parse loaded_at: %w", err)
 			}
 		}
-		
+
 		if stoppedAtStr != nil {
 			if stoppedAt, err := time.Parse("2006-01-02 15:04:05", *stoppedAtStr); err != nil {
 				// Try RFC3339 format
@@ -242,7 +242,7 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 				script.StoppedAt = &stoppedAt
 			}
 		}
-		
+
 		// Parse include scripts JSON
 		if includeScriptsJSON != "" {
 			if err := json.Unmarshal([]byte(includeScriptsJSON), &script.IncludeScripts); err != nil {
@@ -250,11 +250,11 @@ func (sm *ScriptManager) RestoreFromDatabase() error {
 				script.IncludeScripts = []string{}
 			}
 		}
-		
+
 		// Store in memory
 		sm.scripts[script.ID] = &script
 	}
-	
+
 	return rows.Err()
 }
 
@@ -268,42 +268,42 @@ func (sm *ScriptManager) generateScriptID(filename string) string {
 // saveScriptToDB saves script info to database
 func (sm *ScriptManager) saveScriptToDB(script *ScriptInfo) error {
 	includeScriptsJSON, _ := json.Marshal(script.IncludeScripts)
-	
+
 	query := `
 	INSERT INTO scripts (script_id, name, filename, version, is_running, is_system, 
 	                    loaded_at, include_scripts, description)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);`
-	
+
 	_, err := sm.db.GetDB().Exec(query,
 		script.ID, script.Name, script.Filename, script.Version,
 		script.Running, script.System, script.LoadedAt.Format("2006-01-02 15:04:05"),
 		string(includeScriptsJSON), script.Description,
 	)
-	
+
 	return err
 }
 
 // updateScriptInDB updates script info in database
 func (sm *ScriptManager) updateScriptInDB(script *ScriptInfo) error {
 	includeScriptsJSON, _ := json.Marshal(script.IncludeScripts)
-	
+
 	var stoppedAtStr *string
 	if script.StoppedAt != nil {
 		str := script.StoppedAt.Format("2006-01-02 15:04:05")
 		stoppedAtStr = &str
 	}
-	
+
 	query := `
 	UPDATE scripts 
 	SET name = ?, filename = ?, version = ?, is_running = ?, is_system = ?,
 	    stopped_at = ?, include_scripts = ?, description = ?
 	WHERE script_id = ?;`
-	
+
 	_, err := sm.db.GetDB().Exec(query,
 		script.Name, script.Filename, script.Version, script.Running, script.System,
 		stoppedAtStr, string(includeScriptsJSON), script.Description, script.ID,
 	)
-	
+
 	return err
 }
 

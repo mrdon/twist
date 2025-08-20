@@ -50,7 +50,7 @@ func (c *SixelCanvas) DrawFilledCircle(centerX, centerY, radius, fillColor, bord
 			if distance <= float64(radius) {
 				pixelX := centerX + x
 				pixelY := centerY + y
-				
+
 				if distance >= float64(radius-1) {
 					// Border
 					c.SetPixel(pixelX, pixelY, borderColor)
@@ -67,27 +67,27 @@ func (c *SixelCanvas) DrawFilledCircle(centerX, centerY, radius, fillColor, bord
 func (c *SixelCanvas) DrawLine(x1, y1, x2, y2, color int) {
 	dx := int(math.Abs(float64(x2 - x1)))
 	dy := int(math.Abs(float64(y2 - y1)))
-	
+
 	sx := -1
 	if x1 < x2 {
 		sx = 1
 	}
-	
+
 	sy := -1
 	if y1 < y2 {
 		sy = 1
 	}
-	
+
 	err := dx - dy
 	x, y := x1, y1
-	
+
 	for {
 		c.SetPixel(x, y, color)
-		
+
 		if x == x2 && y == y2 {
 			break
 		}
-		
+
 		e2 := 2 * err
 		if e2 > -dy {
 			err -= dy
@@ -104,18 +104,18 @@ func (c *SixelCanvas) DrawLine(x1, y1, x2, y2, color int) {
 func (c *SixelCanvas) DrawArrow(x1, y1, x2, y2, color int) {
 	// Draw the main line
 	c.DrawLine(x1, y1, x2, y2, color)
-	
+
 	// Calculate arrow head
 	angle := math.Atan2(float64(y2-y1), float64(x2-x1))
 	arrowLength := 8.0
 	arrowAngle := math.Pi / 6 // 30 degrees
-	
+
 	// Calculate arrow head points
 	x3 := x2 - int(arrowLength*math.Cos(angle-arrowAngle))
 	y3 := y2 - int(arrowLength*math.Sin(angle-arrowAngle))
 	x4 := x2 - int(arrowLength*math.Cos(angle+arrowAngle))
 	y4 := y2 - int(arrowLength*math.Sin(angle+arrowAngle))
-	
+
 	// Draw arrow head
 	c.DrawLine(x2, y2, x3, y3, color)
 	c.DrawLine(x2, y2, x4, y4, color)
@@ -138,20 +138,20 @@ func (c *SixelCanvas) DrawRectangle(x, y, width, height, fillColor, borderColor 
 // RenderToSixel converts the canvas to sixel format
 func (c *SixelCanvas) RenderToSixel() string {
 	var sixel strings.Builder
-	
+
 	// Start sixel sequence with proper initialization
 	sixel.WriteString("\x1bPq")
-	
+
 	// Define color palette with proper RGB values
 	sixel.WriteString("#0;2;0;0;0")       // Black background
 	sixel.WriteString("#1;2;100;100;0")   // Yellow - current sector
-	sixel.WriteString("#2;2;0;80;0")      // Green - empty connected sectors  
+	sixel.WriteString("#2;2;0;80;0")      // Green - empty connected sectors
 	sixel.WriteString("#3;2;0;40;100")    // Blue - port sectors
 	sixel.WriteString("#4;2;100;100;100") // White - connection lines
 	sixel.WriteString("#5;2;80;0;0")      // Red - dangerous sectors
 	sixel.WriteString("#6;2;40;40;40")    // Dark gray - sector borders
 	sixel.WriteString("#7;2;60;60;60")    // Light gray - arrow heads
-	
+
 	// Convert pixels to sixel format properly
 	// Sixels are encoded in 6-pixel high bands
 	for band := 0; band < (c.height+5)/6; band++ {
@@ -160,15 +160,15 @@ func (c *SixelCanvas) RenderToSixel() string {
 		if bandEnd > c.height {
 			bandEnd = c.height
 		}
-		
+
 		// Process each color that has pixels in this band
 		for color := 0; color <= 7; color++ {
 			var colorData strings.Builder
 			hasPixelsInBand := false
-			
+
 			for x := 0; x < c.width; x++ {
 				sixelChar := 0
-				
+
 				// Check 6 pixels in this column for this color
 				for y := bandStart; y < bandEnd && y < c.height; y++ {
 					if c.GetPixel(x, y) == color {
@@ -176,11 +176,11 @@ func (c *SixelCanvas) RenderToSixel() string {
 						hasPixelsInBand = true
 					}
 				}
-				
+
 				// Convert to sixel character (add 63 to make it printable)
 				colorData.WriteString(string(rune(sixelChar + 63)))
 			}
-			
+
 			// Only output data for colors that have pixels in this band
 			if hasPixelsInBand {
 				sixel.WriteString(fmt.Sprintf("#%d", color))
@@ -188,15 +188,15 @@ func (c *SixelCanvas) RenderToSixel() string {
 				sixel.WriteString("$") // Carriage return to start of line
 			}
 		}
-		
+
 		if band < (c.height+5)/6-1 {
 			sixel.WriteString("-") // Line feed (next band)
 		}
 	}
-	
+
 	// End sixel sequence
 	sixel.WriteString("\x1b\\")
-	
+
 	return sixel.String()
 }
 
@@ -213,13 +213,13 @@ func (c *SixelCanvas) Clear() {
 func (c *SixelCanvas) DrawText(x, y int, text string, color int) {
 	// Very simplified text rendering - just draw small rectangles for digits
 	// In a full implementation, you'd have proper font rendering
-	
+
 	charWidth := 6
 	charHeight := 8
-	
+
 	for i, char := range text {
 		charX := x + i*charWidth
-		
+
 		// Draw a simple representation of each character
 		switch char {
 		case '0':
@@ -284,7 +284,7 @@ func (c *SixelCanvas) DrawText(x, y int, text string, color int) {
 			c.DrawLine(charX, y, charX+charWidth-1, y, color)
 			c.DrawLine(charX+charWidth/2, y, charX+charWidth/2, y+charHeight-1, color)
 		case 'D':
-			// Draw 'D' 
+			// Draw 'D'
 			c.DrawLine(charX, y, charX, y+charHeight-1, color)
 			c.DrawLine(charX, y, charX+charWidth-2, y, color)
 			c.DrawLine(charX, y+charHeight-1, charX+charWidth-2, y+charHeight-1, color)

@@ -2,8 +2,8 @@ package streaming
 
 import (
 	"database/sql"
-	"twist/internal/debug"
 	"github.com/Masterminds/squirrel"
+	"twist/internal/debug"
 )
 
 // PlayerStatsTracker tracks discovered player stat fields during parsing
@@ -261,36 +261,36 @@ func (p *PlayerStatsTracker) Execute(db *sql.DB) error {
 	if len(p.updates) == 0 {
 		return nil // No updates to perform
 	}
-	
+
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	
+
 	// Ensure player_stats record exists (single row table with id=1)
 	_, err := db.Exec("INSERT OR IGNORE INTO player_stats (id) VALUES (1)")
 	if err != nil {
 		debug.Log("Failed to ensure player_stats record exists: %v", err)
 		return err
 	}
-	
+
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("player_stats").
 		SetMap(p.updates).
 		Set("updated_at", "CURRENT_TIMESTAMP").
 		Where(squirrel.Eq{"id": 1})
-	
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		debug.Log("Failed to build player stats update query: %v", err)
 		return err
 	}
-	
+
 	debug.Log("Executing player stats update with %d discovered fields: %s", len(p.updates), sql)
-	
+
 	_, err = db.Exec(sql, args...)
 	if err != nil {
 		debug.Log("Failed to execute player stats update: %v", err)
 		return err
 	}
-	
+
 	debug.Log("Successfully updated player stats with discovered fields: %v", getFieldNames(p.updates))
 	return nil
 }
@@ -352,7 +352,7 @@ func (s *SectorTracker) SetWarps(warps [6]int) *SectorTracker {
 	s.updates[ColSectorWarp4] = warps[3]
 	s.updates[ColSectorWarp5] = warps[4]
 	s.updates[ColSectorWarp6] = warps[5]
-	
+
 	// Count non-zero warps for the warps field
 	warpCount := 0
 	for _, warp := range warps {
@@ -361,7 +361,7 @@ func (s *SectorTracker) SetWarps(warps [6]int) *SectorTracker {
 		}
 	}
 	s.updates[ColSectorWarps] = warpCount
-	
+
 	return s
 }
 
@@ -401,36 +401,36 @@ func (s *SectorTracker) Execute(db *sql.DB) error {
 	if len(s.updates) == 0 {
 		return nil // No updates to perform
 	}
-	
+
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	
+
 	// Ensure sector record exists (UPSERT pattern)
 	_, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", s.sectorIndex)
 	if err != nil {
 		debug.Log("Failed to ensure sector record exists for sector %d: %v", s.sectorIndex, err)
 		return err
 	}
-	
+
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("sectors").
 		SetMap(s.updates).
 		Set("update_time", "CURRENT_TIMESTAMP").
 		Where(squirrel.Eq{"sector_index": s.sectorIndex})
-	
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		debug.Log("Failed to build sector update query for sector %d: %v", s.sectorIndex, err)
 		return err
 	}
-	
+
 	debug.Log("Executing sector update for sector %d with %d discovered fields: %s", s.sectorIndex, len(s.updates), sql)
-	
+
 	_, err = db.Exec(sql, args...)
 	if err != nil {
 		debug.Log("Failed to execute sector update for sector %d: %v", s.sectorIndex, err)
 		return err
 	}
-	
+
 	debug.Log("Successfully updated sector %d with discovered fields: %v", s.sectorIndex, getFieldNames(s.updates))
 	return nil
 }
@@ -630,36 +630,36 @@ func (p *PortTracker) Execute(db *sql.DB) error {
 	if len(p.updates) == 0 {
 		return nil // No updates to perform
 	}
-	
+
 	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
-	
+
 	// Ensure port record exists (UPSERT pattern)
 	_, err := db.Exec("INSERT OR IGNORE INTO ports (sector_index) VALUES (?)", p.sectorIndex)
 	if err != nil {
 		debug.Log("Failed to ensure port record exists for sector %d: %v", p.sectorIndex, err)
 		return err
 	}
-	
+
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("ports").
 		SetMap(p.updates).
 		Set("updated_at", "CURRENT_TIMESTAMP").
 		Where(squirrel.Eq{"sector_index": p.sectorIndex})
-	
+
 	sql, args, err := query.ToSql()
 	if err != nil {
 		debug.Log("Failed to build port update query for sector %d: %v", p.sectorIndex, err)
 		return err
 	}
-	
+
 	debug.Log("Executing port update for sector %d with %d discovered fields: %s", p.sectorIndex, len(p.updates), sql)
-	
+
 	_, err = db.Exec(sql, args...)
 	if err != nil {
 		debug.Log("Failed to execute port update for sector %d: %v", p.sectorIndex, err)
 		return err
 	}
-	
+
 	debug.Log("Successfully updated port for sector %d with discovered fields: %v", p.sectorIndex, getFieldNames(p.updates))
 	return nil
 }

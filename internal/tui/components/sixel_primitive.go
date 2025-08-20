@@ -48,33 +48,33 @@ func (sp *SixelPrimitive) Draw(screen tcell.Screen) {
 // drawBorder draws just the border without clearing
 func (sp *SixelPrimitive) drawBorder(screen tcell.Screen) {
 	style := tcell.StyleDefault.Foreground(sp.borderColor)
-	
+
 	// Top border
 	for x := sp.x; x < sp.x+sp.width; x++ {
 		screen.SetContent(x, sp.y, '─', nil, style)
 	}
-	
+
 	// Bottom border
 	for x := sp.x; x < sp.x+sp.width; x++ {
 		screen.SetContent(x, sp.y+sp.height-1, '─', nil, style)
 	}
-	
+
 	// Left border
 	for y := sp.y; y < sp.y+sp.height; y++ {
 		screen.SetContent(sp.x, y, '│', nil, style)
 	}
-	
+
 	// Right border
 	for y := sp.y; y < sp.y+sp.height; y++ {
 		screen.SetContent(sp.x+sp.width-1, y, '│', nil, style)
 	}
-	
+
 	// Corners
 	screen.SetContent(sp.x, sp.y, '┌', nil, style)
 	screen.SetContent(sp.x+sp.width-1, sp.y, '┐', nil, style)
 	screen.SetContent(sp.x, sp.y+sp.height-1, '└', nil, style)
 	screen.SetContent(sp.x+sp.width-1, sp.y+sp.height-1, '┘', nil, style)
-	
+
 	// Title
 	if sp.title != "" && len(sp.title) < sp.width-4 {
 		titleX := sp.x + 2

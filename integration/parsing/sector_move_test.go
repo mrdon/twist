@@ -5,7 +5,7 @@ import (
 	"testing"
 	"twist/integration/scripting"
 	"twist/internal/api"
-	
+
 	_ "modernc.org/sqlite"
 )
 
@@ -17,7 +17,7 @@ func TestSectorMove(t *testing.T) {
 
 	// Set up test credits BEFORE running the script
 	testCredits := 374999
-	
+
 	// Set up database schema and initial data before running the script
 	scripting.SetupTestDatabase(t, dbPath, func(db *sql.DB) {
 		_, err := db.Exec("INSERT OR REPLACE INTO player_stats (id, credits) VALUES (1, ?)", testCredits)
@@ -32,7 +32,7 @@ func TestSectorMove(t *testing.T) {
 	// Verify sectors were parsed and saved
 	result.Assert.AssertSectorExists(705) // Starting sector
 	result.Assert.AssertSectorExists(279) // Destination sector
-	
+
 	// Verify sector constellations
 	result.Assert.AssertSectorConstellation(705, "uncharted space")
 	result.Assert.AssertSectorConstellation(279, "uncharted space")
@@ -40,9 +40,9 @@ func TestSectorMove(t *testing.T) {
 	// Verify sector 705 has correct warps: 279, 903, 927
 	// (903) just means sector 903 is undiscovered, but still a valid warp
 	result.Assert.AssertSectorWithWarps(705, []int{279, 903, 927})
-	
+
 	// Verify sector 279 has correct warps: 578, 705, 810, 844, 877
-	// (578) just means sector 578 is undiscovered, but still a valid warp  
+	// (578) just means sector 578 is undiscovered, but still a valid warp
 	result.Assert.AssertSectorWithWarps(279, []int{578, 705, 810, 844, 877})
 
 	// Verify both sectors were visited and saved as etHolo (explored=3)
@@ -58,13 +58,13 @@ func TestSectorMove(t *testing.T) {
 	if len(sectorChangeCalls) < 2 {
 		t.Errorf("Expected at least 2 OnCurrentSectorChanged calls, got %d", len(sectorChangeCalls))
 	}
-	
+
 	// Check that we got calls for both sectors in the right order
 	found705 := false
 	found279 := false
 	lastCallFor705 := -1
 	firstCallFor279 := -1
-	
+
 	for i, call := range sectorChangeCalls {
 		if call.Number == 705 {
 			found705 = true
@@ -75,14 +75,14 @@ func TestSectorMove(t *testing.T) {
 			firstCallFor279 = i
 		}
 	}
-	
+
 	if !found705 {
 		t.Errorf("Expected OnCurrentSectorChanged call for sector 705")
 	}
 	if !found279 {
 		t.Errorf("Expected OnCurrentSectorChanged call for sector 279")
 	}
-	
+
 	// Verify that sector 705 calls came before sector 279 calls
 	if found705 && found279 && lastCallFor705 >= firstCallFor279 {
 		t.Errorf("Expected sector 705 events to come before sector 279 events, but last 705 call at %d >= first 279 call at %d", lastCallFor705, firstCallFor279)

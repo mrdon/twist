@@ -11,8 +11,8 @@ import (
 
 // ExecutionEngine handles the execution of parsed script commands
 type ExecutionEngine struct {
-	vm   *VirtualMachine
-	ast  *parser.ASTNode
+	vm  *VirtualMachine
+	ast *parser.ASTNode
 }
 
 // NewExecutionEngine creates a new execution engine
@@ -36,7 +36,7 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 			ee.vm.state.SetError(retErr.Error())
 		}
 	}()
-	
+
 	if ee.ast == nil || ee.vm.state.Position >= len(ee.ast.Children) {
 		ee.vm.state.SetHalted()
 		return nil
@@ -44,14 +44,14 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 
 	node := ee.ast.Children[ee.vm.state.Position]
 	err := ee.executeNode(node)
-	
+
 	// Handle script pause (like TWX caPause) - don't advance position for input pauses
 	if err != nil && errors.Is(err, types.ErrScriptPaused) {
 		ee.vm.state.SetPaused()
 		// Don't advance position - we need to re-execute this command when resumed
 		return nil // Don't treat pause as an error
 	}
-	
+
 	if err != nil {
 		ee.vm.state.SetError(err.Error())
 		return err
@@ -123,13 +123,13 @@ func (ee *ExecutionEngine) executeCommand(node *parser.ASTNode) error {
 		if cmdDef.MaxParams == -1 {
 			maxParamStr = "unlimited"
 		}
-		return fmt.Errorf("command %s expects %d-%s parameters, got %d", 
+		return fmt.Errorf("command %s expects %d-%s parameters, got %d",
 			cmdName, cmdDef.MinParams, maxParamStr, len(params))
 	}
 
 	// Execute the command
 	err = cmdDef.Handler(ee.vm, params)
-	
+
 	return err
 }
 
@@ -151,12 +151,12 @@ func (ee *ExecutionEngine) executeGosub(node *parser.ASTNode) error {
 	}
 
 	label := node.Children[0].Value
-	
+
 	// Push current position onto call stack
 	returnAddr := ee.vm.state.Position + 1
 	frame := NewStackFrame(label, ee.vm.state.Position, returnAddr)
 	ee.vm.callStack.Push(frame)
-	
+
 	// Jump to the subroutine
 	ee.vm.state.SetJumpTarget(label)
 	return nil
@@ -168,7 +168,7 @@ func (ee *ExecutionEngine) executeReturn(node *parser.ASTNode) error {
 	if err != nil {
 		return fmt.Errorf("return without gosub")
 	}
-	
+
 	// Return to the position after the gosub
 	ee.vm.state.Position = frame.ReturnAddr
 	return nil
@@ -197,7 +197,7 @@ func (ee *ExecutionEngine) executeIf(node *parser.ASTNode) error {
 		if len(node.Children) < 2 {
 			return fmt.Errorf("elseif statement requires condition and action")
 		}
-		
+
 		condition, err := ee.evaluateExpression(node.Children[0])
 		if err != nil {
 			return fmt.Errorf("error evaluating elseif condition: %v", err)
@@ -261,7 +261,7 @@ func (ee *ExecutionEngine) executeIf(node *parser.ASTNode) error {
 					if len(child.Children) < 1 {
 						return fmt.Errorf("elseif statement requires condition")
 					}
-					
+
 					elseifCondition, err := ee.evaluateExpression(child.Children[0])
 					if err != nil {
 						return fmt.Errorf("error evaluating elseif condition: %v", err)
@@ -330,45 +330,45 @@ func (ee *ExecutionEngine) executeWhile(node *parser.ASTNode) error {
 		for i := 1; i < len(node.Children); i++ {
 			// Save the current position in case we need to handle jumps
 			savedPos := ee.vm.state.Position
-			
+
 			err = ee.executeNode(node.Children[i])
 			if err != nil {
 				return err
 			}
-			
+
 			// Handle jump targets (like GOSUB) using the same logic as ExecuteStep
 			if ee.vm.state.HasJumpTarget() {
 				newPos := ee.findLabel(ee.vm.state.JumpTarget)
 				if newPos == -1 {
 					return fmt.Errorf("label not found: %s", ee.vm.state.JumpTarget)
 				}
-				
+
 				ee.vm.state.Position = newPos
 				ee.vm.state.ClearJumpTarget()
-				
+
 				// Execute from the jump target until we return or reach end
 				initialCallStackSize := ee.vm.callStack.Size()
-				
+
 				for ee.vm.state.Position < len(ee.ast.Children) && ee.vm.state.IsRunning() {
 					currentNode := ee.ast.Children[ee.vm.state.Position]
 					err = ee.executeNode(currentNode)
 					if err != nil {
 						return err
 					}
-					
+
 					// Check if a RETURN command was executed by seeing if call stack shrank
 					if ee.vm.callStack.Size() < initialCallStackSize {
 						break
 					}
-					
+
 					// Handle any new jump targets that might have been set
 					if ee.vm.state.HasJumpTarget() {
 						break
 					}
-					
+
 					ee.vm.state.Position++
 				}
-				
+
 				// Restore the saved position for the while loop
 				ee.vm.state.Position = savedPos
 			}
@@ -410,9 +410,9 @@ func (ee *ExecutionEngine) executeCompoundAssignment(node *parser.ASTNode) error
 	} else {
 		return fmt.Errorf("invalid variable in compound assignment")
 	}
-	
+
 	current := ee.vm.variables.Get(varName)
-	
+
 	// Evaluate the right-hand side
 	rhsValue, err := ee.evaluateExpression(node.Children[1])
 	if err != nil {
@@ -482,9 +482,9 @@ func (ee *ExecutionEngine) executeIncrementDecrement(node *parser.ASTNode) error
 	} else {
 		return fmt.Errorf("invalid variable in increment/decrement")
 	}
-	
+
 	current := ee.vm.variables.Get(varName)
-	
+
 	var result *types.Value
 	switch node.Value {
 	case "++":
@@ -533,11 +533,11 @@ func (ee *ExecutionEngine) findLabel(label string) int {
 // parseCommandParams parses command parameters from AST nodes
 func (ee *ExecutionEngine) parseCommandParams(nodes []*parser.ASTNode) ([]*types.CommandParam, error) {
 	params := make([]*types.CommandParam, len(nodes))
-	
+
 	for i, node := range nodes {
 		if node.Type == parser.NodeVariable {
 			params[i] = &types.CommandParam{
-				Type:         types.ParamVar,
+				Type:    types.ParamVar,
 				VarName: node.Value,
 			}
 		} else if node.Type == parser.NodeArrayAccess {
@@ -561,7 +561,7 @@ func (ee *ExecutionEngine) parseCommandParams(nodes []*parser.ASTNode) ([]*types
 			}
 		}
 	}
-	
+
 	return params, nil
 }
 
@@ -572,21 +572,21 @@ func (ee *ExecutionEngine) evaluateExpression(node *parser.ASTNode) (*types.Valu
 		// Try to parse as number first
 		if num, err := strconv.ParseFloat(node.Value, 64); err == nil {
 			return &types.Value{
-				Type:        types.NumberType,
+				Type:   types.NumberType,
 				Number: num,
 				String: node.Value,
 			}, nil
 		}
 		// Otherwise treat as string
 		return &types.Value{
-			Type:        types.StringType,
+			Type:   types.StringType,
 			String: node.Value,
 			Number: 0,
 		}, nil
-		
+
 	case parser.NodeVariable:
 		return ee.vm.variables.Get(node.Value), nil
-		
+
 	case parser.NodeExpression:
 		// Check if this is a unary expression (single child) or binary expression (two children)
 		if len(node.Children) == 1 {
@@ -594,18 +594,18 @@ func (ee *ExecutionEngine) evaluateExpression(node *parser.ASTNode) (*types.Valu
 		} else {
 			return ee.evaluateBinaryExpression(node)
 		}
-	
+
 	case parser.NodeCommand:
 		// When a command name appears as a parameter (e.g., in GOTO), treat it as a literal string
 		return &types.Value{
 			Type:   types.StringType,
 			String: node.Value,
 		}, nil
-		
+
 	case parser.NodeArrayAccess:
 		// Handle array access like $sectors[1] or $data[1][2]
 		return ee.evaluateArrayAccess(node)
-		
+
 	default:
 		return nil, fmt.Errorf("cannot evaluate node type: %v", node.Type)
 	}
@@ -616,22 +616,22 @@ func (ee *ExecutionEngine) buildArrayVarName(node *parser.ASTNode) (string, erro
 	if node.Type != parser.NodeArrayAccess {
 		return "", fmt.Errorf("node is not an array access")
 	}
-	
+
 	if len(node.Children) < 2 {
 		return "", fmt.Errorf("array access requires variable and at least one index")
 	}
-	
+
 	// First child should be the base variable
 	if node.Children[0].Type != parser.NodeVariable {
 		return "", fmt.Errorf("array access base must be a variable")
 	}
-	
+
 	baseName := node.Children[0].Value
-	
+
 	// Evaluate all index expressions and build the variable name
 	var varName strings.Builder
 	varName.WriteString(baseName)
-	
+
 	for i := 1; i < len(node.Children); i++ {
 		indexValue, err := ee.evaluateExpression(node.Children[i])
 		if err != nil {
@@ -641,7 +641,7 @@ func (ee *ExecutionEngine) buildArrayVarName(node *parser.ASTNode) (string, erro
 		varName.WriteString(indexValue.ToString())
 		varName.WriteString("]")
 	}
-	
+
 	return varName.String(), nil
 }
 
@@ -650,14 +650,14 @@ func (ee *ExecutionEngine) evaluateArrayAccess(node *parser.ASTNode) (*types.Val
 	if len(node.Children) < 2 {
 		return nil, fmt.Errorf("array access requires variable and at least one index")
 	}
-	
+
 	// First child should be the base variable
 	if node.Children[0].Type != parser.NodeVariable {
 		return nil, fmt.Errorf("array access base must be a variable")
 	}
-	
+
 	baseName := node.Children[0].Value
-	
+
 	// Get or create VarParam for this variable
 	varParam := ee.vm.variables.GetVarParam(baseName)
 	if varParam == nil {
@@ -665,7 +665,7 @@ func (ee *ExecutionEngine) evaluateArrayAccess(node *parser.ASTNode) (*types.Val
 		varParam = types.NewVarParam(baseName, types.VarParamVariable)
 		ee.vm.variables.SetVarParam(baseName, varParam)
 	}
-	
+
 	// Evaluate all index expressions and build index path
 	indexes := make([]string, len(node.Children)-1)
 	for i := 1; i < len(node.Children); i++ {
@@ -675,10 +675,10 @@ func (ee *ExecutionEngine) evaluateArrayAccess(node *parser.ASTNode) (*types.Val
 		}
 		indexes[i-1] = indexValue.ToString()
 	}
-	
+
 	// Get the indexed variable
 	indexedVar := varParam.GetIndexVar(indexes)
-	
+
 	// Return the value
 	return &types.Value{
 		Type:   types.StringType,
@@ -718,7 +718,7 @@ func (ee *ExecutionEngine) evaluateUnaryExpression(node *parser.ASTNode) (*types
 			}, nil
 		}
 		return nil, fmt.Errorf("cannot apply unary minus to non-numeric value: %s", operand.String)
-		
+
 	case "+":
 		// Unary plus (identity operation)
 		if operand.Type == types.NumberType {
@@ -733,16 +733,28 @@ func (ee *ExecutionEngine) evaluateUnaryExpression(node *parser.ASTNode) (*types
 			}, nil
 		}
 		return nil, fmt.Errorf("cannot apply unary plus to non-numeric value: %s", operand.String)
-		
+
 	case "NOT":
 		// Logical NOT
 		truthValue := ee.isTruthyValue(operand)
 		return &types.Value{
-			Type:   types.NumberType,
-			Number: func() float64 { if truthValue { return 0 } else { return 1 } }(),
-			String: func() string { if truthValue { return "0" } else { return "1" } }(),
+			Type: types.NumberType,
+			Number: func() float64 {
+				if truthValue {
+					return 0
+				} else {
+					return 1
+				}
+			}(),
+			String: func() string {
+				if truthValue {
+					return "0"
+				} else {
+					return "1"
+				}
+			}(),
 		}, nil
-		
+
 	default:
 		return nil, fmt.Errorf("unknown unary operator: %s", operator)
 	}
@@ -810,7 +822,7 @@ func (ee *ExecutionEngine) evaluateStringOperation(left, right *types.Value, ope
 	switch operator {
 	case "+":
 		return &types.Value{
-			Type:        types.StringType,
+			Type:   types.StringType,
 			String: leftStr + rightStr,
 		}, nil
 	case "-":
@@ -818,7 +830,7 @@ func (ee *ExecutionEngine) evaluateStringOperation(left, right *types.Value, ope
 		leftNum := left.ToNumber()
 		rightNum := right.ToNumber()
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: leftNum - rightNum,
 		}, nil
 	case "=":
@@ -827,7 +839,7 @@ func (ee *ExecutionEngine) evaluateStringOperation(left, right *types.Value, ope
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "<>", "!=":
@@ -836,7 +848,7 @@ func (ee *ExecutionEngine) evaluateStringOperation(left, right *types.Value, ope
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	default:
@@ -852,17 +864,17 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 	switch operator {
 	case "+":
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: leftNum + rightNum,
 		}, nil
 	case "-":
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: leftNum - rightNum,
 		}, nil
 	case "*":
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: leftNum * rightNum,
 		}, nil
 	case "/":
@@ -870,7 +882,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			return nil, fmt.Errorf("division by zero")
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: leftNum / rightNum,
 		}, nil
 	case "=":
@@ -879,7 +891,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "<>", "!=":
@@ -888,7 +900,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "<":
@@ -897,7 +909,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case ">":
@@ -906,7 +918,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "<=":
@@ -915,7 +927,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case ">=":
@@ -924,7 +936,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "and", "AND":
@@ -933,7 +945,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "or", "OR":
@@ -942,7 +954,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	case "xor", "XOR":
@@ -953,7 +965,7 @@ func (ee *ExecutionEngine) evaluateNumericOperation(left, right *types.Value, op
 			result = 1.0
 		}
 		return &types.Value{
-			Type:        types.NumberType,
+			Type:   types.NumberType,
 			Number: result,
 		}, nil
 	default:

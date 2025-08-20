@@ -6,7 +6,7 @@ import (
 
 // createSchema creates the TWX-compatible SQLite schema
 func (d *SQLiteDatabase) createSchema() error {
-	
+
 	// Main sectors table matching TWX TSector exactly
 	sectorsTable := `
 	CREATE TABLE IF NOT EXISTS sectors (
@@ -59,7 +59,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		mines_limpet_quantity INTEGER DEFAULT 0,
 		mines_limpet_owner TEXT DEFAULT ''
 	);`
-	
+
 	// Ships table (dynamic list)
 	shipsTable := `
 	CREATE TABLE IF NOT EXISTS ships (
@@ -71,7 +71,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		fighters INTEGER DEFAULT 0,
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
-	
+
 	// Traders table (dynamic list)
 	tradersTable := `
 	CREATE TABLE IF NOT EXISTS traders (
@@ -83,7 +83,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		fighters INTEGER DEFAULT 0,
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
-	
+
 	// Planets table (dynamic list) - enhanced to match parser data
 	planetsTable := `
 	CREATE TABLE IF NOT EXISTS planets (
@@ -96,7 +96,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		stardock BOOLEAN DEFAULT FALSE,
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
-	
+
 	// Sector variables table (dynamic list)
 	sectorVarsTable := `
 	CREATE TABLE IF NOT EXISTS sector_vars (
@@ -107,7 +107,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		UNIQUE(sector_index, var_name),
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
-	
+
 	// Script variables table (global persistent variables)
 	scriptVarsTable := `
 	CREATE TABLE IF NOT EXISTS script_vars (
@@ -119,7 +119,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 	);`
-	
+
 	// Script variables table with array support (per-script variables)
 	scriptVariablesTable := `
 	CREATE TABLE IF NOT EXISTS script_variables (
@@ -136,7 +136,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
 		FOREIGN KEY (parent_var_id) REFERENCES script_variables(id)
 	);`
-	
+
 	// Scripts table (active script management)
 	scriptsTable := `
 	CREATE TABLE IF NOT EXISTS scripts (
@@ -152,7 +152,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		include_scripts TEXT DEFAULT '', -- JSON array of included script names
 		description TEXT DEFAULT ''
 	);`
-	
+
 	// Script triggers table (Pascal TWX compatible trigger persistence)
 	scriptTriggersTable := `
 	CREATE TABLE IF NOT EXISTS script_triggers (
@@ -171,7 +171,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		FOREIGN KEY (script_id) REFERENCES scripts(script_id),
 		UNIQUE(script_id, trigger_id)
 	);`
-	
+
 	// Script call stack table (for GOSUB/RETURN persistence across VM instances)
 	scriptCallStackTable := `
 	CREATE TABLE IF NOT EXISTS script_call_stack (
@@ -261,7 +261,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		
 		FOREIGN KEY (sector_index) REFERENCES sectors(sector_index) ON DELETE CASCADE
 	);`
-	
+
 	// Create indexes for performance
 	indexes := []string{
 		`CREATE INDEX IF NOT EXISTS idx_sectors_constellation ON sectors(constellation);`,
@@ -288,7 +288,7 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_message_history_timestamp ON message_history(timestamp);`,
 		`CREATE INDEX IF NOT EXISTS idx_message_history_type ON message_history(message_type);`,
 		`CREATE INDEX IF NOT EXISTS idx_message_history_sender ON message_history(sender) WHERE sender != '';`,
-		
+
 		// Optimized ports table indexes
 		`CREATE INDEX IF NOT EXISTS idx_ports_name ON ports(name) WHERE name != '';`,
 		`CREATE INDEX IF NOT EXISTS idx_ports_class ON ports(class_index);`,
@@ -298,17 +298,17 @@ func (d *SQLiteDatabase) createSchema() error {
 		`CREATE INDEX IF NOT EXISTS idx_ports_buying_equ ON ports(buy_equipment) WHERE buy_equipment = TRUE;`,
 		`CREATE INDEX IF NOT EXISTS idx_ports_updated ON ports(updated_at);`,
 	}
-	
+
 	// Execute all DDL statements
 	statements := []string{sectorsTable, shipsTable, tradersTable, planetsTable, sectorVarsTable, scriptVarsTable, scriptVariablesTable, scriptsTable, scriptTriggersTable, scriptCallStackTable, messageHistoryTable, playerStatsTable, portsTable}
 	statements = append(statements, indexes...)
-	
+
 	for _, stmt := range statements {
 		if _, err := d.db.Exec(stmt); err != nil {
 			return fmt.Errorf("failed to execute schema statement: %w", err)
 		}
 	}
-	
+
 	return nil
 }
 
@@ -318,31 +318,30 @@ func (d *SQLiteDatabase) validateSchema() error {
 	query := `
 	SELECT COUNT(*) FROM pragma_table_info('sectors') 
 	WHERE name IN ('sector_index', 'warp1', 'constellation', 'beacon');`
-	
+
 	var count int
 	err := d.db.QueryRow(query).Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to validate schema: %w", err)
 	}
-	
+
 	if count < 4 {
 		return fmt.Errorf("database schema is invalid or incomplete")
 	}
-	
+
 	return nil
 }
-
 
 // getSectorCount returns the total number of sectors in the database
 func (d *SQLiteDatabase) getSectorCount() (int, error) {
 	query := `SELECT COALESCE(MAX(sector_index), 0) FROM sectors;`
-	
+
 	var count int
 	err := d.db.QueryRow(query).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("failed to get sector count: %w", err)
 	}
-	
+
 	return count, nil
 }
 
@@ -357,13 +356,13 @@ func (d *SQLiteDatabase) prepareStatements() error {
 		mines_armid_quantity, mines_armid_owner,
 		mines_limpet_quantity, mines_limpet_owner
 	FROM sectors WHERE sector_index = ?;`
-	
+
 	var err error
 	d.loadSectorStmt, err = d.db.Prepare(loadQuery)
 	if err != nil {
 		return fmt.Errorf("failed to prepare load sector statement: %w", err)
 	}
-	
+
 	// Save sector statement (UPSERT) - Phase 2: port data removed from sectors
 	saveQuery := `
 	INSERT OR REPLACE INTO sectors (
@@ -376,12 +375,12 @@ func (d *SQLiteDatabase) prepareStatements() error {
 	) VALUES (
 		?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?
 	);`
-	
+
 	d.saveSectorStmt, err = d.db.Prepare(saveQuery)
 	if err != nil {
 		return fmt.Errorf("failed to prepare save sector statement: %w", err)
 	}
-	
+
 	return nil
 }
 
@@ -394,7 +393,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		return fmt.Errorf("failed to load ships: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var ship TShip
 		if err := rows.Scan(&ship.Name, &ship.Owner, &ship.ShipType, &ship.Figs); err != nil {
@@ -402,7 +401,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		}
 		sector.Ships = append(sector.Ships, ship)
 	}
-	
+
 	// Load traders
 	tradersQuery := `SELECT name, ship_type, ship_name, fighters FROM traders WHERE sector_index = ?;`
 	rows, err = d.db.Query(tradersQuery, sectorIndex)
@@ -410,7 +409,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		return fmt.Errorf("failed to load traders: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var trader TTrader
 		if err := rows.Scan(&trader.Name, &trader.ShipType, &trader.ShipName, &trader.Figs); err != nil {
@@ -418,7 +417,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		}
 		sector.Traders = append(sector.Traders, trader)
 	}
-	
+
 	// Load planets
 	planetsQuery := `SELECT name, owner, fighters, citadel, stardock FROM planets WHERE sector_index = ?;`
 	rows, err = d.db.Query(planetsQuery, sectorIndex)
@@ -426,7 +425,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		return fmt.Errorf("failed to load planets: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var planet TPlanet
 		if err := rows.Scan(&planet.Name, &planet.Owner, &planet.Fighters, &planet.Citadel, &planet.Stardock); err != nil {
@@ -434,15 +433,15 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		}
 		sector.Planets = append(sector.Planets, planet)
 	}
-	
-	// Load sector variables  
+
+	// Load sector variables
 	varsQuery := `SELECT var_name, value FROM sector_vars WHERE sector_index = ?;`
 	rows, err = d.db.Query(varsQuery, sectorIndex)
 	if err != nil {
 		return fmt.Errorf("failed to load sector vars: %w", err)
 	}
 	defer rows.Close()
-	
+
 	for rows.Next() {
 		var sectorVar TSectorVar
 		if err := rows.Scan(&sectorVar.VarName, &sectorVar.Value); err != nil {
@@ -450,7 +449,7 @@ func (d *SQLiteDatabase) loadSectorRelatedData(sectorIndex int, sector *TSector)
 		}
 		sector.Vars = append(sector.Vars, sectorVar)
 	}
-	
+
 	return nil
 }
 
@@ -464,7 +463,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 			return fmt.Errorf("failed to clear %s: %w", table, err)
 		}
 	}
-	
+
 	// Save ships
 	if len(sector.Ships) > 0 {
 		shipQuery := `INSERT INTO ships (sector_index, name, owner, ship_type, fighters) VALUES (?, ?, ?, ?, ?);`
@@ -474,7 +473,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 			}
 		}
 	}
-	
+
 	// Save traders
 	if len(sector.Traders) > 0 {
 		traderQuery := `INSERT INTO traders (sector_index, name, ship_type, ship_name, fighters) VALUES (?, ?, ?, ?, ?);`
@@ -484,7 +483,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 			}
 		}
 	}
-	
+
 	// Save planets
 	if len(sector.Planets) > 0 {
 		planetQuery := `INSERT INTO planets (sector_index, name, owner, fighters, citadel, stardock) VALUES (?, ?, ?, ?, ?, ?);`
@@ -494,7 +493,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 			}
 		}
 	}
-	
+
 	// Save sector variables
 	if len(sector.Vars) > 0 {
 		varQuery := `INSERT INTO sector_vars (sector_index, var_name, value) VALUES (?, ?, ?);`
@@ -504,7 +503,7 @@ func (d *SQLiteDatabase) saveSectorRelatedData(sectorIndex int, sector TSector) 
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -518,7 +517,7 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 			return fmt.Errorf("failed to clear %s: %w", table, err)
 		}
 	}
-	
+
 	// Save ships from parameter
 	if len(ships) > 0 {
 		shipQuery := `INSERT INTO ships (sector_index, name, owner, ship_type, fighters) VALUES (?, ?, ?, ?, ?);`
@@ -528,7 +527,7 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 			}
 		}
 	}
-	
+
 	// Save traders from parameter
 	if len(traders) > 0 {
 		traderQuery := `INSERT INTO traders (sector_index, name, ship_type, ship_name, fighters) VALUES (?, ?, ?, ?, ?);`
@@ -538,7 +537,7 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 			}
 		}
 	}
-	
+
 	// Save planets from parameter
 	if len(planets) > 0 {
 		planetQuery := `INSERT INTO planets (sector_index, name, owner, fighters, citadel, stardock) VALUES (?, ?, ?, ?, ?, ?);`
@@ -548,8 +547,8 @@ func (d *SQLiteDatabase) saveSectorCollectionsWithParams(sectorIndex int, ships 
 			}
 		}
 	}
-	
+
 	//	sectorIndex, len(ships), len(traders), len(planets))
-	
+
 	return nil
 }

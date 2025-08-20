@@ -38,11 +38,11 @@ func TestLoginScriptReproduction_RealIntegration(t *testing.T) {
 		"LoginName is: mrdon",
 		"Password is: bob",
 		"Game is: a",
-		"GAME system constant is: a",  // User variable should override system constant
+		"GAME system constant is: a", // User variable should override system constant
 	}
 
 	expectedCommands := []string{
-		"Game selection: a",  // This should send "a", not "d" or "TradeWars 2002"
+		"Game selection: a", // This should send "a", not "d" or "TradeWars 2002"
 	}
 
 	// Check outputs
@@ -56,7 +56,7 @@ func TestLoginScriptReproduction_RealIntegration(t *testing.T) {
 		}
 	}
 
-	// Check commands sent  
+	// Check commands sent
 	for i, expected := range expectedCommands {
 		if i >= len(result.Commands) {
 			t.Errorf("Missing command %d: expected %q", i, expected)

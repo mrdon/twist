@@ -6,7 +6,6 @@ import (
 	"twist/internal/proxy/scripting/types"
 )
 
-
 // RegisterVariableCommands registers all variable manipulation commands
 func RegisterVariableCommands(vm CommandRegistry) {
 	vm.RegisterCommand("SETVAR", 2, -1, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdSetVar)
@@ -27,7 +26,7 @@ func cmdSetVar(vm types.VMInterface, params []*types.CommandParam) error {
 		for i := 1; i < len(params); i++ {
 			concatenated.WriteString(GetParamString(vm, params[i]))
 		}
-		
+
 		result := &types.Value{
 			Type:   types.StringType,
 			String: concatenated.String(),
@@ -41,19 +40,18 @@ func cmdSetVar(vm types.VMInterface, params []*types.CommandParam) error {
 	return nil
 }
 
-
 func cmdIsNum(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	_, err := strconv.ParseFloat(text, 64)
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: 0,
 	}
 	if err == nil {
 		result.Number = 1
 	}
-	
+
 	vm.SetVariable(params[1].VarName, result)
 	return nil
 }
@@ -64,9 +62,9 @@ func cmdVal(vm types.VMInterface, params []*types.CommandParam) error {
 	if err != nil {
 		value = 0
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: value,
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -86,9 +84,9 @@ func cmdStr(vm types.VMInterface, params []*types.CommandParam) error {
 	} else {
 		text = value.String
 	}
-	
+
 	result := &types.Value{
-		Type:        types.StringType,
+		Type:   types.StringType,
 		String: text,
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -100,10 +98,10 @@ func cmdStr(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdGetWordPos(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	wordNum := int(GetParamNumber(vm, params[1]))
-	
+
 	words := SplitWords(text)
 	position := 0
-	
+
 	if wordNum >= 1 && wordNum <= len(words) {
 		// Find the position of the word in the original text
 		currentPos := 0
@@ -121,9 +119,9 @@ func cmdGetWordPos(vm types.VMInterface, params []*types.CommandParam) error {
 			}
 		}
 	}
-	
+
 	vm.SetVariable(params[2].VarName, &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(position),
 	})
 	return nil
@@ -132,9 +130,9 @@ func cmdGetWordPos(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdNumWords(vm types.VMInterface, params []*types.CommandParam) error {
 	text := GetParamString(vm, params[0])
 	words := SplitWords(text)
-	
+
 	vm.SetVariable(params[1].VarName, &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(len(words)),
 	})
 	return nil

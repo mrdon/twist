@@ -9,7 +9,7 @@ import (
 func TestSimpleExpectBasic(t *testing.T) {
 	// Test expect engine directly with simulated output
 	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
-	
+
 	// Simulate script output
 	expectEngine.AddOutput("Starting port trading\r\n")
 	expectEngine.AddOutput("User selected sector: 2157\r\n")
@@ -36,7 +36,7 @@ log "Basic expect test passed"
 // TestSimpleExpectMultipleAsserts tests multiple assertions on script output
 func TestSimpleExpectMultipleAsserts(t *testing.T) {
 	expectEngine := NewSimpleExpectEngine(t, nil, "\r")
-	
+
 	// Add all script output
 	expectEngine.AddOutput("User: TestPlayer\r\n")
 	expectEngine.AddOutput("Credits: 50000\r\n")
@@ -111,13 +111,13 @@ log "Literal patterns matched"
 // TestSimpleExpectSend tests the send functionality
 func TestSimpleExpectSend(t *testing.T) {
 	var sentInputs []string
-	
+
 	inputSender := func(input string) {
 		sentInputs = append(sentInputs, input)
 	}
-	
+
 	expectEngine := NewSimpleExpectEngine(t, inputSender, "\r")
-	
+
 	expectScript := `
 send "hello world*"
 send "test input*"
@@ -128,7 +128,7 @@ log "Send test completed"
 	if err != nil {
 		t.Fatalf("Send test failed: %v", err)
 	}
-	
+
 	expectedInputs := []string{"hello world\r", "test input\r"}
 	if !slicesEqual(sentInputs, expectedInputs) {
 		t.Errorf("Expected inputs %v, got %v", expectedInputs, sentInputs)
@@ -232,7 +232,7 @@ func TestProcessEscapeSequences(t *testing.T) {
 			result := processEscapeSequences(tt.input)
 			if result != tt.expected {
 				t.Errorf("processEscapeSequences(%q) = %q; expected %q", tt.input, result, tt.expected)
-				
+
 				// Show byte-by-byte comparison for debugging
 				t.Logf("Input bytes: %v", []byte(tt.input))
 				t.Logf("Result bytes: %v", []byte(result))
@@ -247,12 +247,12 @@ func TestProcessEscapeSequences_ByteValues(t *testing.T) {
 	input := "\\r\\n\\t\\x1b\\x00\\xff"
 	result := processEscapeSequences(input)
 	expected := []byte{13, 10, 9, 27, 0, 255} // CR, LF, TAB, ESC, NULL, 255
-	
+
 	resultBytes := []byte(result)
 	if len(resultBytes) != len(expected) {
 		t.Fatalf("Length mismatch: got %d bytes, expected %d", len(resultBytes), len(expected))
 	}
-	
+
 	for i, expectedByte := range expected {
 		if resultBytes[i] != expectedByte {
 			t.Errorf("Byte %d: got %d, expected %d", i, resultBytes[i], expectedByte)

@@ -7,7 +7,6 @@ import (
 	"twist/internal/proxy/scripting/types"
 )
 
-
 // RegisterMathCommands registers all mathematical commands
 func RegisterMathCommands(vm CommandRegistry) {
 	vm.RegisterCommand("ADD", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdAdd)
@@ -85,9 +84,9 @@ func cmdMod(vm types.VMInterface, params []*types.CommandParam) error {
 	if divisor == 0 {
 		return vm.Error("Division by zero")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Mod(num1, divisor),
 	}
 	vm.SetVariable(params[2].VarName, result)
@@ -99,10 +98,10 @@ func cmdRandom(vm types.VMInterface, params []*types.CommandParam) error {
 	if max <= 0 {
 		max = 1
 	}
-	
+
 	randomValue := rng.Intn(max) + 1 // TWX random is 1-based
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: float64(randomValue),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -112,7 +111,7 @@ func cmdRandom(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdAbs(vm types.VMInterface, params []*types.CommandParam) error {
 	num := GetParamNumber(vm, params[0])
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Abs(num),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -122,7 +121,7 @@ func cmdAbs(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdInt(vm types.VMInterface, params []*types.CommandParam) error {
 	num := GetParamNumber(vm, params[0])
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Trunc(num),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -132,7 +131,7 @@ func cmdInt(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdRound(vm types.VMInterface, params []*types.CommandParam) error {
 	num := GetParamNumber(vm, params[0])
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Round(num),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -144,9 +143,9 @@ func cmdSqr(vm types.VMInterface, params []*types.CommandParam) error {
 	if value < 0 {
 		return vm.Error("Square root of negative number")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Sqrt(value),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -156,7 +155,7 @@ func cmdSqr(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdPower(vm types.VMInterface, params []*types.CommandParam) error {
 	base := GetParamNumber(vm, params[0])
 	exponent := GetParamNumber(vm, params[1])
-	
+
 	// Handle special cases that might cause errors
 	if base == 0 && exponent < 0 {
 		return vm.Error("Cannot raise zero to negative power")
@@ -164,9 +163,9 @@ func cmdPower(vm types.VMInterface, params []*types.CommandParam) error {
 	if base < 0 && exponent != math.Trunc(exponent) {
 		return vm.Error("Cannot raise negative number to fractional power")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Pow(base, exponent),
 	}
 	vm.SetVariable(params[2].VarName, result)
@@ -177,7 +176,7 @@ func cmdSin(vm types.VMInterface, params []*types.CommandParam) error {
 	// Convert degrees to radians for TWX compatibility
 	radians := GetParamNumber(vm, params[0]) * math.Pi / 180
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Sin(radians),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -188,7 +187,7 @@ func cmdCos(vm types.VMInterface, params []*types.CommandParam) error {
 	// Convert degrees to radians for TWX compatibility
 	radians := GetParamNumber(vm, params[0]) * math.Pi / 180
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Cos(radians),
 	}
 	vm.SetVariable(params[1].VarName, result)
@@ -198,15 +197,15 @@ func cmdCos(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdTan(vm types.VMInterface, params []*types.CommandParam) error {
 	// Convert degrees to radians for TWX compatibility
 	radians := GetParamNumber(vm, params[0]) * math.Pi / 180
-	
+
 	// Check for values that would make tan undefined
 	cos := math.Cos(radians)
 	if math.Abs(cos) < 1e-15 {
 		return vm.Error("Tangent undefined at this angle")
 	}
-	
+
 	result := &types.Value{
-		Type:        types.NumberType,
+		Type:   types.NumberType,
 		Number: math.Tan(radians),
 	}
 	vm.SetVariable(params[1].VarName, result)

@@ -16,13 +16,13 @@ const (
 	TokenEOF TokenType = iota
 	TokenNewline
 	TokenComment
-	
+
 	// Literals
 	TokenString
 	TokenNumber
 	TokenVariable
 	TokenLabel
-	
+
 	// Keywords
 	TokenIf
 	TokenElseif
@@ -34,7 +34,7 @@ const (
 	TokenGosub
 	TokenReturn
 	TokenInclude
-	
+
 	// Operators
 	TokenAssign    // :=
 	TokenEqual     // =
@@ -53,7 +53,7 @@ const (
 	TokenDivide    // /
 	TokenModulus   // MOD
 	TokenConcat    // &
-	
+
 	// Assignment operators
 	TokenPlusAssign     // +=
 	TokenMinusAssign    // -=
@@ -62,15 +62,15 @@ const (
 	TokenConcatAssign   // &=
 	TokenIncrement      // ++
 	TokenDecrement      // --
-	
+
 	// Delimiters
-	TokenLeftParen  // (
-	TokenRightParen // )
-	TokenLeftBracket // [
+	TokenLeftParen    // (
+	TokenRightParen   // )
+	TokenLeftBracket  // [
 	TokenRightBracket // ]
-	TokenComma      // ,
-	TokenQuote      // "
-	
+	TokenComma        // ,
+	TokenQuote        // "
+
 	// Commands
 	TokenCommand
 )
@@ -108,21 +108,21 @@ func (l *Lexer) nextChar() {
 	if l.eof {
 		return
 	}
-	
+
 	ch, _, err := l.reader.ReadRune()
 	if err != nil {
 		l.eof = true
 		l.ch = 0
 		return
 	}
-	
+
 	if l.ch == '\n' {
 		l.line++
 		l.column = 0
 	} else {
 		l.column++
 	}
-	
+
 	l.ch = ch
 }
 
@@ -131,12 +131,12 @@ func (l *Lexer) peekChar() rune {
 	if l.eof {
 		return 0
 	}
-	
+
 	ch, _, err := l.reader.ReadRune()
 	if err != nil {
 		return 0
 	}
-	
+
 	// Put the character back
 	l.reader.UnreadRune()
 	return ch
@@ -153,7 +153,7 @@ func (l *Lexer) skipWhitespace() {
 func (l *Lexer) readString() string {
 	var result strings.Builder
 	l.nextChar() // skip opening quote
-	
+
 	for !l.eof && l.ch != '"' {
 		if l.ch == '\\' {
 			l.nextChar()
@@ -178,11 +178,11 @@ func (l *Lexer) readString() string {
 		}
 		l.nextChar()
 	}
-	
+
 	if l.ch == '"' {
 		l.nextChar() // skip closing quote
 	}
-	
+
 	// Convert * to carriage returns like TWX (matches ScriptCmp.pas line 782)
 	resultStr := result.String()
 	resultStr = strings.ReplaceAll(resultStr, "*", "\r")
@@ -192,24 +192,24 @@ func (l *Lexer) readString() string {
 // readIdentifier reads an identifier or keyword
 func (l *Lexer) readIdentifier() string {
 	var result strings.Builder
-	
+
 	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_') {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}
-	
+
 	return result.String()
 }
 
 // readNumber reads a numeric literal
 func (l *Lexer) readNumber() string {
 	var result strings.Builder
-	
+
 	for !l.eof && (unicode.IsDigit(l.ch) || l.ch == '.') {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}
-	
+
 	return result.String()
 }
 
@@ -218,12 +218,12 @@ func (l *Lexer) readVariable() string {
 	var result strings.Builder
 	result.WriteRune(l.ch) // include the $
 	l.nextChar()
-	
+
 	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_' || l.ch == '.') {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}
-	
+
 	return result.String()
 }
 
@@ -232,30 +232,30 @@ func (l *Lexer) readLabel() string {
 	var result strings.Builder
 	result.WriteRune(l.ch) // include the first :
 	l.nextChar()
-	
+
 	// Check if there's a second : (TWX labels start with ::)
 	if l.ch == ':' {
 		result.WriteRune(l.ch) // include the second :
 		l.nextChar()
 	}
-	
+
 	for !l.eof && (unicode.IsLetter(l.ch) || unicode.IsDigit(l.ch) || l.ch == '_') {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}
-	
+
 	return result.String()
 }
 
 // readComment reads a comment line
 func (l *Lexer) readComment() string {
 	var result strings.Builder
-	
+
 	for !l.eof && l.ch != '\n' {
 		result.WriteRune(l.ch)
 		l.nextChar()
 	}
-	
+
 	return result.String()
 }
 
@@ -300,31 +300,31 @@ func getKeywordType(word string) TokenType {
 // NextToken returns the next token
 func (l *Lexer) NextToken() (*Token, error) {
 	l.skipWhitespace()
-	
+
 	if l.eof {
 		return &Token{Type: TokenEOF, Line: l.line, Column: l.column}, nil
 	}
-	
+
 	token := &Token{Line: l.line, Column: l.column}
-	
+
 	switch l.ch {
 	case '\n':
 		token.Type = TokenNewline
 		token.Value = "\n"
 		l.nextChar()
-		
+
 	case '#':
 		token.Type = TokenComment
 		token.Value = l.readComment()
-		
+
 	case '"':
 		token.Type = TokenString
 		token.Value = l.readString()
-		
+
 	case '$':
 		token.Type = TokenVariable
 		token.Value = l.readVariable()
-		
+
 	case ':':
 		// Check if it's an assignment or label
 		if l.peekChar() == '=' {
@@ -336,12 +336,12 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Type = TokenLabel
 			token.Value = l.readLabel()
 		}
-		
+
 	case '=':
 		token.Type = TokenEqual
 		token.Value = "="
 		l.nextChar()
-		
+
 	case '<':
 		if l.peekChar() == '=' {
 			token.Type = TokenLessEq
@@ -358,7 +358,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "<"
 			l.nextChar()
 		}
-		
+
 	case '>':
 		if l.peekChar() == '=' {
 			token.Type = TokenGreaterEq
@@ -370,7 +370,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = ">"
 			l.nextChar()
 		}
-		
+
 	case '+':
 		if l.peekChar() == '=' {
 			token.Type = TokenPlusAssign
@@ -387,7 +387,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "+"
 			l.nextChar()
 		}
-		
+
 	case '-':
 		if l.peekChar() == '=' {
 			token.Type = TokenMinusAssign
@@ -404,7 +404,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "-"
 			l.nextChar()
 		}
-		
+
 	case '*':
 		if l.peekChar() == '=' {
 			token.Type = TokenMultiplyAssign
@@ -416,7 +416,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "*"
 			l.nextChar()
 		}
-		
+
 	case '/':
 		if l.peekChar() == '=' {
 			token.Type = TokenDivideAssign
@@ -428,32 +428,32 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "/"
 			l.nextChar()
 		}
-		
+
 	case '(':
 		token.Type = TokenLeftParen
 		token.Value = "("
 		l.nextChar()
-		
+
 	case ')':
 		token.Type = TokenRightParen
 		token.Value = ")"
 		l.nextChar()
-		
+
 	case '[':
 		token.Type = TokenLeftBracket
 		token.Value = "["
 		l.nextChar()
-		
+
 	case ']':
 		token.Type = TokenRightBracket
 		token.Value = "]"
 		l.nextChar()
-		
+
 	case ',':
 		token.Type = TokenComma
 		token.Value = ","
 		l.nextChar()
-		
+
 	case '&':
 		if l.peekChar() == '=' {
 			token.Type = TokenConcatAssign
@@ -465,7 +465,7 @@ func (l *Lexer) NextToken() (*Token, error) {
 			token.Value = "&"
 			l.nextChar()
 		}
-		
+
 	default:
 		if unicode.IsDigit(l.ch) {
 			token.Type = TokenNumber
@@ -478,26 +478,26 @@ func (l *Lexer) NextToken() (*Token, error) {
 			return nil, fmt.Errorf("unexpected character '%c' at line %d, column %d", l.ch, l.line, l.column)
 		}
 	}
-	
+
 	return token, nil
 }
 
 // TokenizeAll returns all tokens from the input
 func (l *Lexer) TokenizeAll() ([]*Token, error) {
 	var tokens []*Token
-	
+
 	for {
 		token, err := l.NextToken()
 		if err != nil {
 			return nil, err
 		}
-		
+
 		tokens = append(tokens, token)
-		
+
 		if token.Type == TokenEOF {
 			break
 		}
 	}
-	
+
 	return tokens, nil
 }

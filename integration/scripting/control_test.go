@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -32,7 +30,7 @@ func TestGotoCommand_RealIntegration(t *testing.T) {
 	// but NOT "This should be skipped"
 	expectedOutputs := []string{
 		"Before goto",
-		"After goto", 
+		"After goto",
 		"Counter: 2",
 	}
 
@@ -85,11 +83,11 @@ func TestGosubReturn_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"Main: Start",
-		"Subroutine: Start", 
+		"Subroutine: Start",
 		"Subroutine: End",
 		"Main: After subroutine",
 		"Main: End",
-		"Final main_var: 111",  // 1 + 10 + 100 = 111
+		"Final main_var: 111", // 1 + 10 + 100 = 111
 		"Final sub_var: 10",
 	}
 
@@ -203,7 +201,7 @@ func TestTWXLooping_WhileLoop_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"Loop iteration: 1",
-		"Loop iteration: 2", 
+		"Loop iteration: 2",
 		"Loop iteration: 3",
 		"Loop complete",
 	}
@@ -479,7 +477,7 @@ func TestErrorHandling_InvalidLabel_RealIntegration(t *testing.T) {
 	}
 
 	// Test GOSUB to non-existent label
-	result2 := tester.ExecuteScript("gosub nonexistent_subroutine") 
+	result2 := tester.ExecuteScript("gosub nonexistent_subroutine")
 	if result2.Error == nil {
 		t.Errorf("Expected error for GOSUB to non-existent label, but script succeeded")
 	}
@@ -528,7 +526,7 @@ func TestComplexControlFlow_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"Factorial result: 120",  // 5! = 120
+		"Factorial result: 120", // 5! = 120
 		"Calculation complete",
 	}
 
@@ -691,7 +689,7 @@ func TestMacroPreprocessor_SimpleWhile_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"Counter: 1",
-		"Counter: 2", 
+		"Counter: 2",
 		"Counter: 3",
 		"Counter: 4",
 		"Counter: 5",
@@ -745,7 +743,7 @@ func TestMacroPreprocessor_NestedIfWhile_RealIntegration(t *testing.T) {
 		"  Inner first iteration",
 		"  Inner second iteration",
 		"Outer loop: 2",
-		"  Inner first iteration", 
+		"  Inner first iteration",
 		"  Inner second iteration",
 		"Outer loop: 3",
 		"  Inner first iteration",
@@ -867,7 +865,7 @@ func TestMacroPreprocessor_ErrorHandling_RealIntegration(t *testing.T) {
 			errorMsg:    "IF/WHILE .. END structure mismatch",
 		},
 		{
-			name: "ELSE without IF", 
+			name: "ELSE without IF",
 			script: `
 				echo "before"
 				else
@@ -915,7 +913,7 @@ func TestMacroPreprocessor_ErrorHandling_RealIntegration(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			tester := NewIntegrationScriptTester(t)
 			result := tester.ExecuteScript(tt.script)
-			
+
 			if tt.shouldError {
 				if result.Error == nil {
 					t.Errorf("Expected error containing %q, but script succeeded", tt.errorMsg)

@@ -22,7 +22,7 @@ func (tc *ThemedComponents) NewList() *tview.List {
 	list := tview.NewList()
 	colors := tc.theme.DialogColors()
 	border := tc.theme.BorderStyle()
-	
+
 	list.SetBackgroundColor(colors.Background)
 	list.SetMainTextColor(colors.Foreground)
 	list.SetSelectedTextColor(colors.SelectedFg)
@@ -31,7 +31,7 @@ func (tc *ThemedComponents) NewList() *tview.List {
 	list.SetTitleColor(colors.Title)
 	list.SetBorder(true)
 	list.SetBorderPadding(border.Padding, border.Padding, border.Padding, border.Padding)
-	
+
 	return list
 }
 
@@ -39,12 +39,12 @@ func (tc *ThemedComponents) NewList() *tview.List {
 func (tc *ThemedComponents) NewModal() *tview.Modal {
 	modal := tview.NewModal()
 	colors := tc.theme.DialogColors()
-	
+
 	modal.SetBackgroundColor(colors.Background)
 	modal.SetTextColor(colors.Foreground)
 	modal.SetButtonBackgroundColor(colors.ButtonBg)
 	modal.SetButtonTextColor(colors.ButtonFg)
-	
+
 	return modal
 }
 
@@ -53,13 +53,13 @@ func (tc *ThemedComponents) NewTextView() *tview.TextView {
 	textView := tview.NewTextView()
 	colors := tc.theme.TerminalColors()
 	border := tc.theme.BorderStyle()
-	
+
 	textView.SetBackgroundColor(colors.Background)
 	textView.SetTextColor(colors.Foreground)
 	textView.SetBorderColor(colors.Border)
 	textView.SetTitleColor(border.TitleColor)
 	// Border styling applied via theme colors
-	
+
 	return textView
 }
 
@@ -67,12 +67,12 @@ func (tc *ThemedComponents) NewTextView() *tview.TextView {
 func (tc *ThemedComponents) NewInputField() *tview.InputField {
 	input := tview.NewInputField()
 	colors := tc.theme.TerminalColors()
-	
+
 	input.SetBackgroundColor(colors.Background)
 	input.SetFieldBackgroundColor(colors.Background)
 	input.SetFieldTextColor(colors.Foreground)
 	input.SetLabelColor(colors.Foreground)
-	
+
 	return input
 }
 
@@ -80,14 +80,14 @@ func (tc *ThemedComponents) NewInputField() *tview.InputField {
 func (tc *ThemedComponents) NewTable() *tview.Table {
 	table := tview.NewTable()
 	colors := tc.theme.PanelColors()
-	
+
 	table.SetBackgroundColor(colors.Background)
 	table.SetBorderColor(colors.Border)
 	table.SetTitleColor(colors.Title)
 	table.SetSelectedStyle(tcell.StyleDefault.
 		Background(colors.HeaderBg).
 		Foreground(colors.HeaderFg))
-	
+
 	return table
 }
 
@@ -95,9 +95,9 @@ func (tc *ThemedComponents) NewTable() *tview.Table {
 func (tc *ThemedComponents) NewFlex() *tview.Flex {
 	flex := tview.NewFlex()
 	colors := tc.theme.TerminalColors()
-	
+
 	flex.SetBackgroundColor(colors.Background)
-	
+
 	return flex
 }
 
@@ -105,14 +105,14 @@ func (tc *ThemedComponents) NewFlex() *tview.Flex {
 func (tc *ThemedComponents) NewMenuList() *tview.List {
 	list := tview.NewList()
 	colors := tc.theme.MenuColors()
-	
+
 	list.SetBackgroundColor(colors.Background)
 	list.SetMainTextColor(colors.Foreground)
 	list.SetSelectedTextColor(colors.SelectedFg)
 	list.SetSelectedBackgroundColor(colors.SelectedBg)
 	list.SetBorderColor(colors.Foreground)
 	list.SetBorder(true)
-	
+
 	return list
 }
 
@@ -121,26 +121,26 @@ func (tc *ThemedComponents) NewTwistMenu() *components.TwistMenu {
 	colors := tc.theme.MenuColors()
 	borderStyle := tc.theme.MenuBorderStyle()
 	borderChars := components.NewSimpleBorderChars(borderStyle)
-	
+
 	menu := components.NewTwistMenu(borderChars)
-	
+
 	// Set the overall background color
 	menu.SetBackgroundColor(colors.Background)
-	
+
 	// Set the main text style with explicit background color for unselected items
 	mainStyle := tcell.StyleDefault.
 		Foreground(colors.Foreground).
 		Background(colors.Background)
 	menu.SetMainTextStyle(mainStyle)
-	
+
 	// Set selected item colors
 	menu.SetSelectedTextColor(colors.SelectedFg)
 	menu.SetSelectedBackgroundColor(colors.SelectedBg)
-	
+
 	// Set border styling
 	menu.SetBorderColor(colors.Foreground)
 	menu.SetBorder(true)
-	
+
 	return menu
 }
 
@@ -148,11 +148,11 @@ func (tc *ThemedComponents) NewTwistMenu() *components.TwistMenu {
 func (tc *ThemedComponents) NewStatusBar() *tview.TextView {
 	textView := tview.NewTextView()
 	colors := tc.theme.StatusColors()
-	
+
 	textView.SetBackgroundColor(colors.Background)
 	textView.SetTextColor(colors.Foreground)
 	textView.SetDynamicColors(true)
-	
+
 	return textView
 }
 
@@ -160,11 +160,11 @@ func (tc *ThemedComponents) NewStatusBar() *tview.TextView {
 func (tc *ThemedComponents) NewMenuBar() *tview.TextView {
 	textView := tview.NewTextView()
 	colors := tc.theme.MenuColors()
-	
+
 	textView.SetBackgroundColor(colors.Background)
 	textView.SetTextColor(colors.Foreground)
 	textView.SetDynamicColors(true)
-	
+
 	return textView
 }
 
@@ -173,7 +173,7 @@ func (tc *ThemedComponents) NewPanelView() *tview.TextView {
 	textView := tview.NewTextView()
 	colors := tc.theme.PanelColors()
 	border := tc.theme.BorderStyle()
-	
+
 	textView.SetBackgroundColor(colors.Background)
 	textView.SetTextColor(colors.Foreground)
 	textView.SetBorderColor(colors.Border)
@@ -181,7 +181,7 @@ func (tc *ThemedComponents) NewPanelView() *tview.TextView {
 	textView.SetBorder(true)
 	textView.SetBorderPadding(border.Padding, border.Padding, border.Padding, border.Padding)
 	// Border styling applied via theme colors
-	
+
 	return textView
 }
 
@@ -189,7 +189,7 @@ func (tc *ThemedComponents) NewPanelView() *tview.TextView {
 func (tc *ThemedComponents) NewForm() *tview.Form {
 	form := tview.NewForm()
 	colors := tc.theme.DialogColors()
-	
+
 	form.SetBackgroundColor(colors.Background)
 	form.SetFieldBackgroundColor(colors.FieldBg)
 	form.SetFieldTextColor(colors.FieldFg)
@@ -198,7 +198,7 @@ func (tc *ThemedComponents) NewForm() *tview.Form {
 	form.SetButtonTextColor(colors.ButtonFg)
 	form.SetBorderColor(colors.Border)
 	form.SetTitleColor(colors.Title)
-	
+
 	return form
 }
 

@@ -41,7 +41,7 @@ func cmdLoadVar(vm types.VMInterface, params []*types.CommandParam) error {
 
 	varName := params[0].VarName
 	gameInterface := vm.GetGameInterface()
-	
+
 	// Load from persistent storage via GameInterface
 	value, err := gameInterface.LoadScriptVariable(varName)
 	if err != nil {
@@ -52,7 +52,7 @@ func cmdLoadVar(vm types.VMInterface, params []*types.CommandParam) error {
 		})
 		return nil
 	}
-	
+
 	vm.SetVariable(varName, value)
 	return nil
 }
@@ -66,7 +66,7 @@ func cmdSaveVar(vm types.VMInterface, params []*types.CommandParam) error {
 	varName := params[0].VarName
 	value := vm.GetVariable(varName)
 	gameInterface := vm.GetGameInterface()
-	
+
 	// Save to persistent storage via GameInterface
 	return gameInterface.SaveScriptVariable(varName, value)
 }
@@ -79,9 +79,9 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 		return vm.Error("BRANCH requires at least 1 parameter: value")
 	}
 
-	// Get the raw expression 
+	// Get the raw expression
 	expression := GetParamString(vm, params[0])
-	
+
 	// Get label - use second param if available, otherwise use hard-coded label for testing
 	label := "mylabel"
 	if len(params) >= 2 {
@@ -90,7 +90,7 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 			label = paramLabel
 		}
 	}
-	
+
 	// Evaluate the expression to get a numeric value
 	var numericValue float64
 	if expression == "" {
@@ -103,11 +103,11 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 		}
 		numericValue = result.ToNumber()
 	}
-	
+
 	// TWX logic: branch when value is NOT equal to 1
 	// Check both exact equality and rounded equality (like TWX does)
 	shouldBranch := !(numericValue == 1.0 || int(numericValue+0.5) == 1)
-	
+
 	if shouldBranch {
 		return vm.Goto(label)
 	}

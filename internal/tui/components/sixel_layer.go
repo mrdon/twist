@@ -8,11 +8,11 @@ import (
 
 // SixelRegion represents a screen region that contains sixel graphics
 type SixelRegion struct {
-	X, Y          int    // Screen coordinates
-	Width, Height int    // Current region dimensions
-	MaxWidth, MaxHeight int // Maximum dimensions ever used (for clearing)
-	SixelData     string // The sixel sequence
-	Visible       bool   // Whether to render this region
+	X, Y                int    // Screen coordinates
+	Width, Height       int    // Current region dimensions
+	MaxWidth, MaxHeight int    // Maximum dimensions ever used (for clearing)
+	SixelData           string // The sixel sequence
+	Visible             bool   // Whether to render this region
 }
 
 // SixelLayer manages direct terminal sixel rendering outside of tview
@@ -28,7 +28,7 @@ func NewSixelLayer() *SixelLayer {
 	if err != nil {
 		tty = nil // Fallback to stdout
 	}
-	
+
 	return &SixelLayer{
 		regions: make(map[string]*SixelRegion),
 		tty:     tty,
@@ -39,11 +39,11 @@ func NewSixelLayer() *SixelLayer {
 func (sl *SixelLayer) AddRegion(id string, region *SixelRegion) {
 	sl.mutex.Lock()
 	defer sl.mutex.Unlock()
-	
+
 	// If region already exists, clear it first using max dimensions
 	if existingRegion, exists := sl.regions[id]; exists {
 		sl.clearRegionArea(existingRegion)
-		
+
 		// Update max dimensions for the region
 		if region.Width > existingRegion.MaxWidth {
 			existingRegion.MaxWidth = region.Width
@@ -51,7 +51,7 @@ func (sl *SixelLayer) AddRegion(id string, region *SixelRegion) {
 		if region.Height > existingRegion.MaxHeight {
 			existingRegion.MaxHeight = region.Height
 		}
-		
+
 		// Update the existing region with new data
 		existingRegion.X = region.X
 		existingRegion.Y = region.Y
@@ -114,10 +114,10 @@ func (sl *SixelLayer) ClearRegion(id string) {
 func (sl *SixelLayer) ClearAllRegions() {
 	sl.mutex.Lock()
 	defer sl.mutex.Unlock()
-	
+
 	// Remove all regions from the map
 	sl.regions = make(map[string]*SixelRegion)
-	
+
 	// Only use the aggressive terminal clearing that actually works
 	sl.forceTerminalRefresh()
 }
@@ -128,11 +128,11 @@ func (sl *SixelLayer) forceTerminalRefresh() {
 	if output == nil {
 		output = os.Stdout
 	}
-	
+
 	// Clear the screen without resetting terminal capabilities
-	fmt.Fprint(output, "\x1b[2J")    // Clear entire screen
-	fmt.Fprint(output, "\x1b[H")     // Move cursor to home position
-	fmt.Fprint(output, "\x1b[0m")    // Reset text attributes only
+	fmt.Fprint(output, "\x1b[2J") // Clear entire screen
+	fmt.Fprint(output, "\x1b[H")  // Move cursor to home position
+	fmt.Fprint(output, "\x1b[0m") // Reset text attributes only
 }
 
 // ResetRegionMaxDimensions resets the max dimensions tracking for a region
@@ -149,12 +149,12 @@ func (sl *SixelLayer) ResetRegionMaxDimensions(id string) {
 func (sl *SixelLayer) Render() {
 	sl.mutex.RLock()
 	defer sl.mutex.RUnlock()
-	
+
 	output := sl.tty
 	if output == nil {
 		output = os.Stdout
 	}
-	
+
 	for _, region := range sl.regions {
 		if region.Visible && region.SixelData != "" {
 			// Position cursor and output sixel
@@ -179,11 +179,11 @@ func (sl *SixelLayer) clearRegionArea(region *SixelRegion) {
 	if output == nil {
 		output = os.Stdout
 	}
-	
+
 	// Use maximum dimensions to ensure we clear any remnants from larger previous graphics
 	clearWidth := region.MaxWidth
 	clearHeight := region.MaxHeight
-	
+
 	// Fallback to current dimensions if max dimensions aren't set
 	if clearWidth == 0 {
 		clearWidth = region.Width
@@ -191,22 +191,22 @@ func (sl *SixelLayer) clearRegionArea(region *SixelRegion) {
 	if clearHeight == 0 {
 		clearHeight = region.Height
 	}
-	
+
 	// Use a more aggressive clearing approach for sixel graphics
 	// Sixel graphics can leave artifacts, so we use a wider clear pattern
-	clearWidth = clearWidth + 2  // Add some padding to be safe
+	clearWidth = clearWidth + 2   // Add some padding to be safe
 	clearHeight = clearHeight + 2 // Add some padding to be safe
-	
+
 	// Position cursor at the start of the region (with padding)
 	startX := region.X
 	startY := region.Y
 	if startX > 0 {
-		startX = startX - 1  // Start one character earlier if possible
+		startX = startX - 1 // Start one character earlier if possible
 	}
 	if startY > 0 {
-		startY = startY - 1  // Start one row earlier if possible
+		startY = startY - 1 // Start one row earlier if possible
 	}
-	
+
 	// Clear the region by overwriting with spaces (keep simple for normal operation)
 	// This uses ANSI escape sequences to clear the area
 	for row := 0; row < clearHeight; row++ {

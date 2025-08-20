@@ -8,33 +8,33 @@ import (
 
 	"twist/internal/debug"
 	"twist/internal/proxy/database"
+	"twist/internal/proxy/input"
 	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/menu/display"
-	"twist/internal/proxy/input"
 	"twist/internal/proxy/scripting/types"
 )
 
 type TerminalMenuManager struct {
-	currentMenu   *TerminalMenuItem
-	activeMenus   map[string]*TerminalMenuItem
-	menuKey       rune // default '$'
-	isActive      int32 // atomic bool (0 = false, 1 = true)
-	
+	currentMenu *TerminalMenuItem
+	activeMenus map[string]*TerminalMenuItem
+	menuKey     rune  // default '$'
+	isActive    int32 // atomic bool (0 = false, 1 = true)
+
 	// Function to inject data into the stream - will be set by proxy
 	// This is the only field that needs protection since it's set by another goroutine
 	injectDataFunc atomic.Value // stores func([]byte)
-	
+
 	// Reference to proxy for accessing ScriptManager and Database
 	proxyInterface ProxyInterface
-	
+
 	// Script-created menus (separate from built-in menus)
-	scriptMenus map[string]*ScriptMenuData
+	scriptMenus      map[string]*ScriptMenuData
 	scriptMenuValues map[string]string // Menu values for script menus
-	
+
 	// Separate components for advanced features
 	inputCollector *input.InputCollector // Two-stage input collection
 	helpSystem     *HelpSystem           // Contextual help system
-	
+
 	// Burst command storage (like TWX LastBurst)
 	lastBurst string // Last burst command sent
 }
@@ -58,7 +58,7 @@ type ScriptMenuData struct {
 type ProxyInterface interface {
 	GetScriptManager() ScriptManagerInterface
 	GetDatabase() interface{}
-	SendInput(input string) // For burst commands and other menu actions
+	SendInput(input string)          // For burst commands and other menu actions
 	SendDirectToServer(input string) // Direct server communication bypassing menu system
 }
 
@@ -90,10 +90,10 @@ func NewTerminalMenuManager() *TerminalMenuManager {
 
 	// Initialize input collector with output function
 	tmm.inputCollector = input.NewInputCollector(tmm.sendOutput)
-	
+
 	// Initialize help system with output function
 	tmm.helpSystem = NewHelpSystem(tmm.sendOutput)
-	
+
 	// Register input completion handlers
 	tmm.setupInputHandlers()
 
@@ -106,27 +106,27 @@ func (tmm *TerminalMenuManager) setupInputHandlers() {
 	tmm.inputCollector.RegisterCompletionHandler("SCRIPT_LOAD", func(menuName, value string) error {
 		return tmm.handleScriptLoadInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("SCRIPT_TERMINATE", func(menuName, value string) error {
 		return tmm.handleScriptTerminateInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("BURST_SEND", func(menuName, value string) error {
 		return tmm.handleBurstSendInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("BURST_EDIT", func(menuName, value string) error {
 		return tmm.handleBurstEditInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("SECTOR_DISPLAY", func(menuName, value string) error {
 		return tmm.handleSectorDisplayInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("PORT_DISPLAY", func(menuName, value string) error {
 		return tmm.handlePortDisplayInput(value)
 	})
-	
+
 	tmm.inputCollector.RegisterCompletionHandler("VARIABLE_DUMP", func(menuName, value string) error {
 		return tmm.handleVariableDumpInput(value)
 	})
@@ -151,7 +151,7 @@ func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
 		tmm.ActivateMainMenu()
 		return true // Consumed the input - don't send to server
 	}
-	
+
 	return false // Let input pass through to server
 }
 
@@ -167,10 +167,10 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	}
 
 	input = strings.TrimSpace(input)
-	
+
 	// Debug logging to see what's happening
 	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollector.IsCollecting())
-	
+
 	// DISABLED: Script input handling is done at the proxy level for proper character buffering
 	// The proxy.go handles script input with proper buffering, menu system handles menu operations
 	/* DISABLED - conflicts with proxy script input handling
@@ -192,14 +192,14 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 		}
 	}
 	*/
-	
+
 	// Handle two-stage input collection mode using the input collector
 	// This only handles MENU input collection (like script loading, menu operations)
 	if tmm.inputCollector.IsCollecting() {
 		debug.Log("Handling menu input collection for: '%s'", input)
 		return tmm.inputCollector.HandleInput(input)
 	}
-	
+
 	// Handle special cases
 	switch input {
 	case "?":
@@ -229,7 +229,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	// Invalid input
 	tmm.sendOutput("Invalid selection. Press '?' for help.\r\n")
 	tmm.displayCurrentMenu()
-	
+
 	return nil
 }
 
@@ -242,14 +242,14 @@ func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 
 	// Create the proper TWX_MAIN menu structure
 	mainMenu := tmm.createTWXMainMenu()
-	
+
 	// Store the menu and activate the menu system
 	tmm.currentMenu = mainMenu
 	tmm.activeMenus[TWX_MAIN] = mainMenu
 	atomic.StoreInt32(&tmm.isActive, 1) // atomic true
-	
+
 	tmm.displayCurrentMenu()
-	
+
 	return nil
 }
 
@@ -273,12 +273,12 @@ func (tmm *TerminalMenuManager) selectMenuItem(item *TerminalMenuItem) error {
 			tmm.sendOutput("Menu item not implemented: " + item.Name + "\r\n")
 			tmm.displayCurrentMenu()
 		}
-		
+
 		if item.CloseMenu {
 			tmm.closeCurrentMenu()
 		}
 	}
-	
+
 	return nil
 }
 
@@ -295,11 +295,11 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 
 	// Build output with ANSI formatting
 	var output strings.Builder
-	
+
 	// Add menu title with formatting
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle(tmm.currentMenu.Description))
-	
+
 	// Add menu options with ANSI formatting
 	for _, child := range tmm.currentMenu.Children {
 		output.WriteString(display.FormatMenuOption(child.Hotkey, child.Description, true))
@@ -308,18 +308,18 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 
 	// Add standard navigation options
 	if tmm.currentMenu.Parent != nil {
-		output.WriteString(display.FormatMenuOption('Q', "Back to " + tmm.currentMenu.Parent.Name, true))
+		output.WriteString(display.FormatMenuOption('Q', "Back to "+tmm.currentMenu.Parent.Name, true))
 	} else {
 		output.WriteString(display.FormatMenuOption('Q', "Exit Menu", true))
 	}
 	output.WriteString("\r\n")
-	
+
 	output.WriteString(display.FormatMenuOption('?', "Help", true))
 	output.WriteString("\r\n")
-	
+
 	// Add input prompt
 	output.WriteString(display.FormatInputPrompt("Selection"))
-	
+
 	tmm.sendOutput(output.String())
 }
 
@@ -360,11 +360,11 @@ func (tmm *TerminalMenuManager) AddCustomMenu(name string, parent *TerminalMenuI
 
 	menu := NewTerminalMenuItem(name, name, 0)
 	tmm.activeMenus[name] = menu
-	
+
 	if parent != nil {
 		parent.AddChild(menu)
 	}
-	
+
 	return menu
 }
 
@@ -403,32 +403,32 @@ func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
 	}()
 
 	mainMenu := NewTerminalMenuItem(TWX_MAIN, "TWX Main Menu", 0)
-	
+
 	// Add menu items matching TWX structure
 	burstItem := NewTerminalMenuItem("Burst Commands", "Burst Commands", 'B')
 	burstItem.Handler = tmm.handleBurstCommands
 	mainMenu.AddChild(burstItem)
-	
+
 	loadScriptItem := NewTerminalMenuItem("Load Script", "Load Script", 'L')
 	loadScriptItem.Handler = tmm.handleLoadScript
 	mainMenu.AddChild(loadScriptItem)
-	
+
 	terminateScriptItem := NewTerminalMenuItem("Terminate Script", "Terminate Script", 'T')
 	terminateScriptItem.Handler = tmm.handleTerminateScript
 	mainMenu.AddChild(terminateScriptItem)
-	
+
 	scriptMenuItem := NewTerminalMenuItem("Script Menu", "Script Menu", 'S')
 	scriptMenuItem.Handler = tmm.handleScriptMenu
 	mainMenu.AddChild(scriptMenuItem)
-	
+
 	dataMenuItem := NewTerminalMenuItem("View Data Menu", "View Data Menu", 'V')
 	dataMenuItem.Handler = tmm.handleDataMenu
 	mainMenu.AddChild(dataMenuItem)
-	
+
 	portMenuItem := NewTerminalMenuItem("Port Menu", "Port Menu", 'P')
 	portMenuItem.Handler = tmm.handlePortMenu
 	mainMenu.AddChild(portMenuItem)
-	
+
 	return mainMenu
 }
 
@@ -470,7 +470,7 @@ func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params 
 	// For now, prompt for a script filename
 	tmm.sendOutput("\r\nEnter script filename to load (e.g., 'myscript.ts'):\r\n")
 	tmm.sendOutput("Common scripts: login.ts, autorun.ts, trading.ts\r\n")
-	
+
 	// Start input collection for script filename
 	tmm.inputCollector.StartCollection("SCRIPT_LOAD", "Script filename")
 	return nil
@@ -502,9 +502,9 @@ func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, pa
 	for key, value := range status {
 		tmm.sendOutput(fmt.Sprintf("- %s: %v\r\n", key, value))
 	}
-	
+
 	tmm.sendOutput("\r\nEnter script name to terminate (or 'ALL' for all scripts):\r\n")
-	
+
 	// Start input collection for script termination
 	tmm.inputCollector.StartCollection("SCRIPT_TERMINATE", "Script to terminate")
 	return nil
@@ -563,37 +563,37 @@ func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
 	}()
 
 	scriptMenu := NewTerminalMenuItem(TWX_SCRIPT, "TWX Script Menu", 0)
-	
+
 	// Load Script
 	loadScriptItem := NewTerminalMenuItem("Load Script", "Load Script", 'L')
 	loadScriptItem.Handler = tmm.handleScriptLoad
 	scriptMenu.AddChild(loadScriptItem)
-	
+
 	// Terminate Script
 	terminateScriptItem := NewTerminalMenuItem("Terminate Script", "Terminate Script", 'T')
 	terminateScriptItem.Handler = tmm.handleScriptTerminate
 	scriptMenu.AddChild(terminateScriptItem)
-	
+
 	// Pause Script (placeholder - TWX has this but our engine may not support it yet)
 	pauseScriptItem := NewTerminalMenuItem("Pause Script", "Pause Script", 'P')
 	pauseScriptItem.Handler = tmm.handleScriptPause
 	scriptMenu.AddChild(pauseScriptItem)
-	
+
 	// Resume Script (placeholder)
 	resumeScriptItem := NewTerminalMenuItem("Resume Script", "Resume Script", 'R')
 	resumeScriptItem.Handler = tmm.handleScriptResume
 	scriptMenu.AddChild(resumeScriptItem)
-	
+
 	// Debug Script
 	debugScriptItem := NewTerminalMenuItem("Debug Script", "Debug Script", 'D')
 	debugScriptItem.Handler = tmm.handleScriptDebug
 	scriptMenu.AddChild(debugScriptItem)
-	
+
 	// Variable Dump
 	variableDumpItem := NewTerminalMenuItem("Variable Dump", "Variable Dump", 'V')
 	variableDumpItem.Handler = tmm.handleVariableDump
 	scriptMenu.AddChild(variableDumpItem)
-	
+
 	return scriptMenu
 }
 
@@ -605,42 +605,42 @@ func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 	}()
 
 	dataMenu := NewTerminalMenuItem(TWX_DATA, "TWX Data Menu", 0)
-	
+
 	// Display sector as last seen (D) - matches TWX
 	sectorDisplayItem := NewTerminalMenuItem("Display sector as last seen", "Display sector as last seen", 'D')
 	sectorDisplayItem.Handler = tmm.handleSectorDisplay
 	dataMenu.AddChild(sectorDisplayItem)
-	
+
 	// Show all sectors with foreign fighters (F) - matches TWX
 	fightersItem := NewTerminalMenuItem("Show all sectors with foreign fighters", "Show all sectors with foreign fighters", 'F')
 	fightersItem.Handler = tmm.handleShowFighters
 	dataMenu.AddChild(fightersItem)
-	
+
 	// Show all sectors with mines (M) - matches TWX
 	minesItem := NewTerminalMenuItem("Show all sectors with mines", "Show all sectors with mines", 'M')
 	minesItem.Handler = tmm.handleShowMines
 	dataMenu.AddChild(minesItem)
-	
+
 	// Show all sectors by density comparison (S) - matches TWX
 	densityItem := NewTerminalMenuItem("Show all sectors by density comparison", "Show all sectors by density comparison", 'S')
 	densityItem.Handler = tmm.handleShowDensity
 	dataMenu.AddChild(densityItem)
-	
+
 	// Show all sectors with Anomaly (A) - matches TWX
 	anomalyItem := NewTerminalMenuItem("Show all sectors with Anomaly", "Show all sectors with Anomaly", 'A')
 	anomalyItem.Handler = tmm.handleShowAnomaly
 	dataMenu.AddChild(anomalyItem)
-	
+
 	// Show all sectors with traders (R) - matches TWX
 	tradersItem := NewTerminalMenuItem("Show all sectors with traders", "Show all sectors with traders", 'R')
 	tradersItem.Handler = tmm.handleShowTraders
 	dataMenu.AddChild(tradersItem)
-	
+
 	// Plot warp course (C) - matches TWX
 	plotCourseItem := NewTerminalMenuItem("Plot warp course", "Plot warp course", 'C')
 	plotCourseItem.Handler = tmm.handlePlotCourse
 	dataMenu.AddChild(plotCourseItem)
-	
+
 	return dataMenu
 }
 
@@ -652,27 +652,27 @@ func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
 	}()
 
 	portMenu := NewTerminalMenuItem("TWX_PORT", "TWX Port Menu", 0)
-	
+
 	// Show port details as last seen (D) - matches TWX
 	showPortItem := NewTerminalMenuItem("Show port details as last seen", "Show port details as last seen", 'D')
 	showPortItem.Handler = tmm.handleShowPort
 	portMenu.AddChild(showPortItem)
-	
+
 	// Show all class 0/9 port sectors (0) - matches TWX
 	specialPortsItem := NewTerminalMenuItem("Show all class 0/9 port sectors", "Show all class 0/9 port sectors", '0')
 	specialPortsItem.Handler = tmm.handleShowSpecialPorts
 	portMenu.AddChild(specialPortsItem)
-	
+
 	// List all ports (L) - matches TWX
 	listPortsItem := NewTerminalMenuItem("List all ports", "List all ports", 'L')
 	listPortsItem.Handler = tmm.handlePortList
 	portMenu.AddChild(listPortsItem)
-	
+
 	// List all heavily upgraded ports (U) - matches TWX
 	upgradedPortsItem := NewTerminalMenuItem("List all heavily upgraded ports", "List all heavily upgraded ports", 'U')
 	upgradedPortsItem.Handler = tmm.handleListUpgradedPorts
 	portMenu.AddChild(upgradedPortsItem)
-	
+
 	return portMenu
 }
 
@@ -684,22 +684,22 @@ func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
 	}()
 
 	burstMenu := NewTerminalMenuItem("TWX_BURST", "TWX Burst Menu", 0)
-	
+
 	// Send burst
 	sendBurstItem := NewTerminalMenuItem("Send burst", "Send burst", 'B')
 	sendBurstItem.Handler = tmm.handleSendBurst
 	burstMenu.AddChild(sendBurstItem)
-	
+
 	// Repeat last burst
 	repeatBurstItem := NewTerminalMenuItem("Repeat last burst", "Repeat last burst", 'R')
 	repeatBurstItem.Handler = tmm.handleRepeatBurst
 	burstMenu.AddChild(repeatBurstItem)
-	
+
 	// Edit/Send last burst
 	editBurstItem := NewTerminalMenuItem("Edit/Send last burst", "Edit/Send last burst", 'E')
 	editBurstItem.Handler = tmm.handleEditBurst
 	burstMenu.AddChild(editBurstItem)
-	
+
 	return burstMenu
 }
 
@@ -728,18 +728,18 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 	var output strings.Builder
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle("Script Loading"))
-	
+
 	// Show current running scripts
 	engine := scriptManager.GetEngine()
 	if engine != nil {
 		scripts := engine.GetRunningScripts()
 		output.WriteString("Currently running scripts: " + fmt.Sprintf("%d", len(scripts)) + "\r\n")
 	}
-	
+
 	output.WriteString("\r\nEnter script filename to load:\r\n")
 	output.WriteString("Examples: login.ts, autorun.ts, trading.ts\r\n")
 	tmm.sendOutput(output.String())
-	
+
 	// Start input collection for script filename
 	tmm.inputCollector.StartCollection("SCRIPT_LOAD", "Script filename")
 	return nil
@@ -772,7 +772,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, pa
 	} else {
 		tmm.sendOutput(display.FormatSuccessMessage("All scripts terminated successfully"))
 	}
-	
+
 	tmm.displayCurrentMenu()
 	return nil
 }
@@ -825,14 +825,14 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 	var output strings.Builder
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle("Script Debug Information"))
-	
+
 	// First show all loaded scripts with their statuses
 	engine := scriptManager.GetEngine()
 	if engine != nil {
 		allScripts := engine.GetAllScripts()
 		runningScripts := engine.GetRunningScripts()
 		output.WriteString(fmt.Sprintf("Currently running scripts: %d\r\n", len(runningScripts)))
-		
+
 		if len(allScripts) > 0 {
 			output.WriteString("\r\nLoaded Scripts:\r\n")
 			output.WriteString("---------------\r\n")
@@ -846,7 +846,7 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 		} else {
 			output.WriteString("No scripts loaded.\r\n")
 		}
-		
+
 		output.WriteString("\r\nRunning Scripts:\r\n")
 		output.WriteString("----------------\r\n")
 		if len(runningScripts) > 0 {
@@ -860,14 +860,14 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 	} else {
 		output.WriteString("No script engine available.\r\n")
 	}
-	
+
 	// Then show general status information
 	output.WriteString("Engine Status:\r\n")
 	output.WriteString("-------------\r\n")
 	for key, value := range status {
 		output.WriteString(key + ": " + fmt.Sprintf("%v", value) + "\r\n")
 	}
-	
+
 	tmm.sendOutput(output.String())
 	tmm.displayCurrentMenu()
 	return nil
@@ -895,7 +895,7 @@ func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, param
 
 	// Follow TWX pattern: ask for variable name pattern first
 	tmm.sendOutput("\r\nEnter a full or partial variable name to search for (or blank to list them all):\r\n")
-	
+
 	// Start input collection for variable pattern
 	tmm.inputCollector.StartCollection("VARIABLE_DUMP", "Variable pattern")
 	return nil
@@ -929,10 +929,10 @@ func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, para
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		sectorCount := db.GetSectors()
 		tmm.sendOutput("\r\nEnter sector number to display (1-" + fmt.Sprintf("%d", sectorCount) + "):\r\n")
-		
+
 		// Start input collection for sector number
 		tmm.inputCollector.StartCollection("SECTOR_DISPLAY", "Sector number")
 		return nil
@@ -1253,18 +1253,18 @@ func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, par
 	if scriptMenu.Prompt != "" {
 		// Two-stage input collection: Start collecting input with the custom prompt
 		tmm.inputCollector.StartCollection(menuName, scriptMenu.Prompt)
-		
+
 		// Show options if available
 		if scriptMenu.Options != "" {
 			tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
 		}
-		
+
 		// Don't redisplay menu - we're now in input collection mode
 		return nil
 	} else {
 		// No prompt - just activate the menu item
 		tmm.sendOutput(display.FormatSuccessMessage("Menu item activated: " + scriptMenu.Description))
-		
+
 		// If options are set, display them
 		if scriptMenu.Options != "" {
 			tmm.sendOutput("Options: " + scriptMenu.Options + "\r\n")
@@ -1293,24 +1293,24 @@ func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
 
 	// Validate script file exists
 	tmm.sendOutput("\r\nValidating script: " + filename + "...\r\n")
-	
+
 	// Check if file exists
 	if _, err := os.Stat(filename); os.IsNotExist(err) {
 		tmm.sendOutput(display.FormatErrorMessage("Script file not found: " + filename))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	// CRITICAL: Exit menu system completely - script input now handled by proxy
 	// This ensures clean separation between menu operations and script input
 	tmm.sendOutput("Script validated. Exiting menu system...\r\n")
-	
+
 	// Completely deactivate menu system - proxy will handle script input directly
-	atomic.StoreInt32(&tmm.isActive, 0) // Deactivate menu system  
+	atomic.StoreInt32(&tmm.isActive, 0) // Deactivate menu system
 	tmm.currentMenu = nil               // Clear current menu
-	
+
 	tmm.sendOutput("Loading and starting script: " + filename + "...\r\n")
-	
+
 	// Now load and run the script - any getinput calls will be handled by proxy
 	err := scriptManager.LoadAndRunScript(filename)
 	if err != nil {
@@ -1318,14 +1318,14 @@ func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
 		// On error, user can manually return to menu with '$'
 	}
 	// Note: No success message - script output speaks for itself
-	
+
 	return nil
 }
 
-// handleScriptTerminateInput handles the actual script termination after input collection  
+// handleScriptTerminateInput handles the actual script termination after input collection
 func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) error {
 	scriptName = strings.TrimSpace(scriptName)
-	
+
 	scriptManager := tmm.proxyInterface.GetScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
@@ -1352,7 +1352,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) er
 			tmm.sendOutput(display.FormatSuccessMessage("All scripts terminated"))
 		}
 	}
-	
+
 	// Return to the current menu
 	tmm.displayCurrentMenu()
 	return nil
@@ -1372,7 +1372,7 @@ func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params [
 	tmm.sendOutput("Enter burst text to send to server:\r\n")
 	tmm.sendOutput("Use '*' character for ENTER (e.g., 'lt1*' lists trader #1)\r\n")
 	tmm.sendOutput("Examples: 'bp100*' (buy 100 product), 'sp50*' (sell 50 product), 'tw1234*' (transwarp to sector 1234)\r\n")
-	
+
 	// Start input collection for burst command
 	tmm.inputCollector.StartCollection("BURST_SEND", "Burst command")
 	return nil
@@ -1393,7 +1393,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 	}
 
 	tmm.sendOutput("Repeating last burst: " + tmm.lastBurst + "\r\n")
-	
+
 	// Send the burst command (replace * with newline)
 	burstText := strings.ReplaceAll(tmm.lastBurst, "*", "\r\n")
 	if tmm.proxyInterface != nil {
@@ -1402,7 +1402,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 		// For now, we'll use a simple approach by injecting the data
 		tmm.sendBurstToServer(burstText)
 		tmm.sendOutput(display.FormatSuccessMessage("Burst command repeated and sent"))
-		
+
 		// Exit menu system after sending burst command so user input goes to game
 		atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 		tmm.currentMenu = nil
@@ -1410,7 +1410,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 		tmm.sendOutput(display.FormatErrorMessage("Unable to send burst - no connection"))
 		tmm.displayCurrentMenu()
 	}
-	
+
 	return nil
 }
 
@@ -1431,7 +1431,7 @@ func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params [
 	tmm.sendOutput("\r\n" + display.FormatMenuTitle("Edit Last Burst Command"))
 	tmm.sendOutput("Previous burst: " + tmm.lastBurst + "\r\n")
 	tmm.sendOutput("Edit and press Enter to send (or cancel with 'q'):\r\n")
-	
+
 	// Pre-fill the input collection with the last burst
 	tmm.inputCollector.StartCollection("BURST_EDIT", "Edit burst command")
 	// Set the current input to the last burst for editing
@@ -1441,7 +1441,7 @@ func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params [
 // handleBurstSendInput handles input collection for sending a new burst command
 func (tmm *TerminalMenuManager) handleBurstSendInput(burstText string) error {
 	burstText = strings.TrimSpace(burstText)
-	
+
 	if burstText == "" {
 		tmm.sendOutput(display.FormatErrorMessage("Empty burst command cancelled"))
 		return nil
@@ -1449,13 +1449,13 @@ func (tmm *TerminalMenuManager) handleBurstSendInput(burstText string) error {
 
 	// Store as last burst
 	tmm.lastBurst = burstText
-	
+
 	// Send the burst command (replace * with newline)
 	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
 	tmm.sendBurstToServer(expandedText)
-	
+
 	tmm.sendOutput(display.FormatSuccessMessage("Burst command sent: " + burstText))
-	
+
 	// Exit menu system after sending burst command so user input goes to game
 	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 	tmm.currentMenu = nil
@@ -1465,7 +1465,7 @@ func (tmm *TerminalMenuManager) handleBurstSendInput(burstText string) error {
 // handleBurstEditInput handles input collection for editing and sending a burst command
 func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
 	burstText = strings.TrimSpace(burstText)
-	
+
 	if burstText == "" {
 		tmm.sendOutput(display.FormatErrorMessage("Empty burst command cancelled"))
 		return nil
@@ -1473,13 +1473,13 @@ func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
 
 	// Store as last burst
 	tmm.lastBurst = burstText
-	
+
 	// Send the burst command (replace * with newline)
 	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
 	tmm.sendBurstToServer(expandedText)
-	
+
 	tmm.sendOutput(display.FormatSuccessMessage("Edited burst command sent: " + burstText))
-	
+
 	// Exit menu system after sending burst command so user input goes to game
 	atomic.StoreInt32(&tmm.isActive, 0) // atomic false
 	tmm.currentMenu = nil
@@ -1492,7 +1492,7 @@ func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 		debug.Log("Cannot send burst - no proxy interface")
 		return
 	}
-	
+
 	// Split into individual commands (separated by \r\n from * expansion)
 	commands := strings.Split(text, "\r\n")
 	for _, cmd := range commands {
@@ -1507,72 +1507,72 @@ func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 // handleSectorDisplayInput handles input collection for sector display
 func (tmm *TerminalMenuManager) handleSectorDisplayInput(sectorStr string) error {
 	sectorStr = strings.TrimSpace(sectorStr)
-	
+
 	if sectorStr == "" {
 		tmm.sendOutput(display.FormatErrorMessage("No sector number provided"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	sectorNum := 0
 	if _, err := fmt.Sscanf(sectorStr, "%d", &sectorNum); err != nil {
 		tmm.sendOutput(display.FormatErrorMessage("Invalid sector number: " + sectorStr))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	dbInterface := tmm.proxyInterface.GetDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	if db, ok := dbInterface.(database.Database); ok {
 		if !db.GetDatabaseOpen() {
 			tmm.sendOutput(display.FormatErrorMessage("Database not open"))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		sectorCount := db.GetSectors()
 		if sectorNum < 1 || sectorNum > sectorCount {
 			tmm.sendOutput(display.FormatErrorMessage("That is not a valid sector"))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		sectorData, err := db.LoadSector(sectorNum)
 		if err != nil {
 			tmm.sendOutput(display.FormatErrorMessage("Error loading sector: " + err.Error()))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		// Display the sector information in TWX format
 		tmm.displaySectorInTWXFormat(sectorData, sectorNum)
 	} else {
 		tmm.sendOutput(display.FormatErrorMessage("Invalid database interface"))
 		tmm.displayCurrentMenu()
 	}
-	
+
 	return nil
 }
 
 // displaySectorInTWXFormat displays a sector in the TWX format
 func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector, sectorIndex int) {
 	var output strings.Builder
-	
+
 	// Last seen date/time (TWX format)
 	output.WriteString("\r\nLast seen on " + sector.UpDate.Format("01/02/2006") + " at " + sector.UpDate.Format("15:04:05") + "\r\n\r\n")
-	
+
 	// Sector and constellation
 	constellation := sector.Constellation
 	if constellation == "" || constellation == "uncharted space." {
 		constellation = "uncharted space."
 	}
 	output.WriteString("Sector  : " + fmt.Sprintf("%d", sectorIndex) + " in " + constellation + "\r\n")
-	
+
 	// Check if sector has not been recorded (unexplored)
 	if sector.Explored == database.EtNo {
 		output.WriteString("\r\nThat sector has not been recorded\r\n\r\n")
@@ -1580,8 +1580,8 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 		tmm.displayCurrentMenu()
 		return
 	}
-	
-	// Density (if available) 
+
+	// Density (if available)
 	// Note: TWX shows density with segments, but we'll show the raw number for now
 	// TODO: Implement the Segment() function equivalent
 	if sector.Density > -1 {
@@ -1591,15 +1591,15 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 		}
 		output.WriteString("\r\n")
 	}
-	
+
 	// Beacon
 	if sector.Beacon != "" {
 		output.WriteString("Beacon  : " + sector.Beacon + "\r\n")
 	}
-	
+
 	// Port information (from separate port table)
 	tmm.displayPortInformation(&output, sectorIndex)
-	
+
 	// Planets
 	if len(sector.Planets) > 0 {
 		for i, planet := range sector.Planets {
@@ -1610,7 +1610,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 			}
 		}
 	}
-	
+
 	// Traders
 	if len(sector.Traders) > 0 {
 		for i, trader := range sector.Traders {
@@ -1622,7 +1622,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 			output.WriteString("           in " + trader.ShipName + " (" + trader.ShipType + ")\r\n")
 		}
 	}
-	
+
 	// Ships
 	if len(sector.Ships) > 0 {
 		for i, ship := range sector.Ships {
@@ -1634,7 +1634,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 			output.WriteString("           (" + ship.ShipType + ")\r\n")
 		}
 	}
-	
+
 	// Fighters
 	if sector.Figs.Quantity > 0 {
 		output.WriteString("Fighters: " + fmt.Sprintf("%d", sector.Figs.Quantity) + " (" + sector.Figs.Owner + ") ")
@@ -1642,7 +1642,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 		case database.FtToll:
 			output.WriteString("[Toll]")
 		case database.FtDefensive:
-			output.WriteString("[Defensive]") 
+			output.WriteString("[Defensive]")
 		case database.FtOffensive:
 			output.WriteString("[Offensive]")
 		default:
@@ -1650,12 +1650,12 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 		}
 		output.WriteString("\r\n")
 	}
-	
+
 	// NavHaz
 	if sector.NavHaz > 0 {
 		output.WriteString("NavHaz  : " + fmt.Sprintf("%d", sector.NavHaz) + "% (Space Debris/Asteroids)\r\n")
 	}
-	
+
 	// Mines
 	if sector.MinesArmid.Quantity > 0 {
 		output.WriteString("Mines   : " + fmt.Sprintf("%d", sector.MinesArmid.Quantity) + " (Type 1 Armid) (" + sector.MinesArmid.Owner + ")\r\n")
@@ -1665,7 +1665,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 	} else if sector.MinesLimpet.Quantity > 0 {
 		output.WriteString("Mines   : " + fmt.Sprintf("%d", sector.MinesLimpet.Quantity) + " (Type 2 Limpet) (" + sector.MinesLimpet.Owner + ")\r\n")
 	}
-	
+
 	// Warps
 	output.WriteString("Warps to Sector(s) :  ")
 	firstWarp := true
@@ -1680,9 +1680,9 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 			break
 		}
 	}
-	
+
 	// TODO: Add backdoors information when available
-	
+
 	output.WriteString("\r\n\r\n\r\n")
 	tmm.sendOutput(output.String())
 	tmm.displayCurrentMenu()
@@ -1694,12 +1694,12 @@ func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, 
 	if dbInterface == nil {
 		return
 	}
-	
+
 	if db, ok := dbInterface.(database.Database); ok {
 		port, err := db.LoadPort(sectorIndex)
 		if err == nil && port.Name != "" && !port.Dead {
 			output.WriteString("Ports   : " + port.Name + ", Class " + fmt.Sprintf("%d", port.ClassIndex) + " (")
-			
+
 			if port.ClassIndex == 0 || port.ClassIndex == 9 {
 				output.WriteString("Special")
 			} else {
@@ -1724,7 +1724,7 @@ func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, 
 				}
 			}
 			output.WriteString(")\r\n")
-			
+
 			// Construction status
 			if port.BuildTime > 0 {
 				output.WriteString("           (Under Construction - " + fmt.Sprintf("%d", port.BuildTime) + " days left)\r\n")
@@ -1761,10 +1761,10 @@ func (tmm *TerminalMenuManager) handleShowPort(item *TerminalMenuItem, params []
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		sectorCount := db.GetSectors()
 		tmm.sendOutput("\r\nEnter sector number to show port details (1-" + fmt.Sprintf("%d", sectorCount) + "):\r\n")
-		
+
 		// Start input collection for sector number
 		tmm.inputCollector.StartCollection("PORT_DISPLAY", "Sector number")
 		return nil
@@ -1780,7 +1780,7 @@ func (tmm *TerminalMenuManager) displayPortSummary(output *strings.Builder, sect
 	// Format: sector number, class, buy/sell pattern, product amounts and percentages, update time
 	sectorStr := fmt.Sprintf("%6d", sectorIndex)
 	classStr := fmt.Sprintf("%5d", port.ClassIndex)
-	
+
 	// Build buy/sell pattern (BSS format)
 	pattern := ""
 	if port.BuyProduct[0] {
@@ -1798,15 +1798,15 @@ func (tmm *TerminalMenuManager) displayPortSummary(output *strings.Builder, sect
 	} else {
 		pattern += "S"
 	}
-	
+
 	// Format product amounts and percentages
 	fuelOreStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[0], port.ProductPercent[0])
 	organicsStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[1], port.ProductPercent[1])
 	equipmentStr := fmt.Sprintf("%5d (%3d%%)", port.ProductAmount[2], port.ProductPercent[2])
-	
+
 	// Format update time
 	updateStr := port.UpDate.Format("15:04")
-	
+
 	output.WriteString(fmt.Sprintf("%s %s %s %s %s %s %s\r\n",
 		sectorStr,
 		classStr,
@@ -1820,41 +1820,41 @@ func (tmm *TerminalMenuManager) displayPortSummary(output *strings.Builder, sect
 // handlePortDisplayInput handles input collection for port display
 func (tmm *TerminalMenuManager) handlePortDisplayInput(sectorStr string) error {
 	sectorStr = strings.TrimSpace(sectorStr)
-	
+
 	if sectorStr == "" {
 		tmm.sendOutput(display.FormatErrorMessage("No sector number provided"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	sectorNum := 0
 	if _, err := fmt.Sscanf(sectorStr, "%d", &sectorNum); err != nil {
 		tmm.sendOutput(display.FormatErrorMessage("Invalid sector number: " + sectorStr))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	dbInterface := tmm.proxyInterface.GetDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
-	
+
 	if db, ok := dbInterface.(database.Database); ok {
 		if !db.GetDatabaseOpen() {
 			tmm.sendOutput(display.FormatErrorMessage("Database not open"))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		sectorCount := db.GetSectors()
 		if sectorNum < 1 || sectorNum > sectorCount {
 			tmm.sendOutput(display.FormatErrorMessage("That is not a valid sector"))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		// Load the port data for this sector
 		port, err := db.LoadPort(sectorNum)
 		if err != nil || port.Name == "" {
@@ -1862,36 +1862,36 @@ func (tmm *TerminalMenuManager) handlePortDisplayInput(sectorStr string) error {
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		// Check if port has been updated (TWX checks S.SPort.Update = 0)
 		if port.UpDate.IsZero() {
 			tmm.sendOutput(display.FormatErrorMessage("That port has not been recorded"))
 			tmm.displayCurrentMenu()
 			return nil
 		}
-		
+
 		// Display the port information in TWX format
 		tmm.displayPortInTWXFormat(port, sectorNum)
 	} else {
 		tmm.sendOutput(display.FormatErrorMessage("Invalid database interface"))
 		tmm.displayCurrentMenu()
 	}
-	
+
 	return nil
 }
 
 // displayPortInTWXFormat displays a port in the TWX commerce report format
 func (tmm *TerminalMenuManager) displayPortInTWXFormat(port database.TPort, sectorIndex int) {
 	var output strings.Builder
-	
+
 	// Commerce report header (like TWX DisplayPort)
 	output.WriteString("\r\nCommerce report for " + port.Name + " (sector " + fmt.Sprintf("%d", sectorIndex) + ") : ")
 	output.WriteString(port.UpDate.Format("15:04:05 01/02/2006") + "\r\n\r\n")
-	
+
 	// Product table header
 	output.WriteString(" Items     Status  Trading % of max\r\n")
 	output.WriteString(" -----     ------  ------- --------\r\n")
-	
+
 	// Fuel Ore
 	output.WriteString("Fuel Ore   ")
 	if port.BuyProduct[0] {
@@ -1900,7 +1900,7 @@ func (tmm *TerminalMenuManager) displayPortInTWXFormat(port database.TPort, sect
 		output.WriteString("Selling  ")
 	}
 	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[0], port.ProductPercent[0]))
-	
+
 	// Organics
 	output.WriteString("Organics   ")
 	if port.BuyProduct[1] {
@@ -1909,7 +1909,7 @@ func (tmm *TerminalMenuManager) displayPortInTWXFormat(port database.TPort, sect
 		output.WriteString("Selling  ")
 	}
 	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[1], port.ProductPercent[1]))
-	
+
 	// Equipment
 	output.WriteString("Equipment  ")
 	if port.BuyProduct[2] {
@@ -1918,7 +1918,7 @@ func (tmm *TerminalMenuManager) displayPortInTWXFormat(port database.TPort, sect
 		output.WriteString("Selling  ")
 	}
 	output.WriteString(fmt.Sprintf("%5d    %3d%%\r\n", port.ProductAmount[2], port.ProductPercent[2]))
-	
+
 	output.WriteString("\r\n\r\n")
 	tmm.sendOutput(output.String())
 	tmm.displayCurrentMenu()
@@ -2027,7 +2027,6 @@ func (tmm *TerminalMenuManager) handleListUpgradedPorts(item *TerminalMenuItem, 
 	return nil
 }
 
-
 // handleVariableDumpInput handles input collection for variable dump
 func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
 	if tmm.proxyInterface == nil {
@@ -2044,11 +2043,11 @@ func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
 	}
 
 	pattern = strings.TrimSpace(pattern)
-	
+
 	var output strings.Builder
 	output.WriteString("\r\n")
 	output.WriteString(display.FormatMenuTitle("Variable Dump"))
-	
+
 	if pattern != "" {
 		output.WriteString("Searching for variables matching: '" + pattern + "'\r\n")
 	} else {
@@ -2059,11 +2058,11 @@ func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
 	// Get the VM engine and try to access its variables
 	engine := scriptManager.GetEngine()
 	variableCount := 0
-	
+
 	if engine != nil {
 		// Try to access the VM's variable manager using our new interface
-		if vm, ok := engine.(interface{ 
-			GetAllVariables() map[string]*types.Value 
+		if vm, ok := engine.(interface {
+			GetAllVariables() map[string]*types.Value
 		}); ok {
 			variables := vm.GetAllVariables()
 			for name, value := range variables {
@@ -2108,11 +2107,11 @@ func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
 	for key, value := range status {
 		output.WriteString(fmt.Sprintf("- %s: %v\r\n", key, value))
 	}
-	
+
 	output.WriteString("\r\nVariable Dump Complete.\r\n")
 	tmm.sendOutput(output.String())
 	tmm.displayCurrentMenu()
-	
+
 	return nil
 }
 
@@ -2136,9 +2135,9 @@ func (tmm *TerminalMenuManager) StartScriptInputCollection(prompt string, callba
 		callback(value)
 		return nil
 	})
-	
+
 	// Start input collection with script prompt
 	tmm.inputCollector.StartCollection("SCRIPT_INPUT", prompt)
-	
+
 	return nil
 }

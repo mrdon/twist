@@ -1,5 +1,3 @@
-
-
 package scripting
 
 import (
@@ -13,16 +11,16 @@ import (
 // TestSendCommand_RealIntegration tests SEND command with real VM and database
 func TestSendCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		send "look"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// SEND commands don't produce echo output, they send to game server
 	// We can verify the command executed without error
 }
@@ -30,13 +28,13 @@ func TestSendCommand_RealIntegration(t *testing.T) {
 // TestSendCommand_MultipleParameters tests SEND with multiple parameters
 func TestSendCommand_MultipleParameters_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		setVar $action "look"
 		setVar $target "north"
 		send $action " " $target
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
@@ -46,7 +44,7 @@ func TestSendCommand_MultipleParameters_RealIntegration(t *testing.T) {
 // TestSendCommand_WithVariables tests SEND using variables with persistence
 func TestSendCommand_WithVariables_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		setVar $command "examine"
 		setVar $object "sword"
@@ -54,7 +52,7 @@ func TestSendCommand_WithVariables_RealIntegration(t *testing.T) {
 		saveVar $object
 		send $command " " $object
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
@@ -64,84 +62,83 @@ func TestSendCommand_WithVariables_RealIntegration(t *testing.T) {
 // TestWaitForCommand_RealIntegration tests WAITFOR command
 func TestWaitForCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	// This test simulates a WAITFOR that should complete when matching text arrives
 	script := `
 		echo "Starting wait"
 		waitfor "test pattern"
 		echo "Wait completed"
 	`
-	
+
 	// Start script execution asynchronously since WAITFOR will block
 	resultChan, err := tester.ExecuteScriptAsync(script)
 	if err != nil {
 		t.Fatalf("Failed to start async script execution: %v", err)
 	}
-	
+
 	// Give script time to start and reach WAITFOR
 	time.Sleep(1 * time.Millisecond)
-	
+
 	// Verify the script is waiting
 	if !tester.IsWaiting() {
 		t.Error("Script should be waiting after WAITFOR command")
 	}
-	
+
 	// Simulate incoming network text that matches the pattern
 	err = tester.SimulateNetworkInput("This contains test pattern in the middle")
 	if err != nil {
 		t.Errorf("Failed to simulate network input: %v", err)
 	}
-	
+
 	// Wait for script completion
 	select {
 	case result := <-resultChan:
 		if result.Error != nil {
 			t.Errorf("Script execution failed: %v", result.Error)
 		}
-		
+
 		// Should have both echo messages
 		if len(result.Output) < 2 {
 			t.Errorf("Expected at least 2 output lines, got %d: %v", len(result.Output), result.Output)
 		}
-		
+
 		if len(result.Output) > 0 && result.Output[0] != "Starting wait" {
 			t.Errorf("First echo: got %q, want %q", result.Output[0], "Starting wait")
 		}
-		
+
 		if len(result.Output) > 1 && result.Output[1] != "Wait completed" {
 			t.Errorf("Second echo: got %q, want %q", result.Output[1], "Wait completed")
 		}
-		
+
 	case <-time.After(5 * time.Second):
 		t.Error("WAITFOR test timed out - WAITFOR may not be working correctly")
 	}
 }
 
-
 // TestPauseCommand_RealIntegration tests PAUSE command
 func TestPauseCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		echo "Before pause"
 		pause
 		echo "After pause"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// PAUSE should allow script to continue and complete
 	if len(result.Output) != 2 {
 		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Before pause" {
 		t.Errorf("First echo: got %q, want %q", result.Output[0], "Before pause")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "After pause" {
 		t.Errorf("Second echo: got %q, want %q", result.Output[1], "After pause")
 	}
@@ -150,23 +147,23 @@ func TestPauseCommand_RealIntegration(t *testing.T) {
 // TestHaltCommand_RealIntegration tests HALT command
 func TestHaltCommand_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		echo "Before halt"
 		halt
 		echo "This should not execute"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// HALT should stop execution, so only first echo should appear
 	if len(result.Output) != 1 {
 		t.Errorf("Expected 1 output line after HALT, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Before halt" {
 		t.Errorf("Echo before halt: got %q, want %q", result.Output[0], "Before halt")
 	}
@@ -176,7 +173,7 @@ func TestHaltCommand_RealIntegration(t *testing.T) {
 func TestGameCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	// First script execution - save command template
 	tester1 := NewIntegrationScriptTester(t)
-	
+
 	script1 := `
 		setVar $base_command "examine"
 		setVar $default_target "room"
@@ -184,31 +181,31 @@ func TestGameCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 		saveVar $default_target
 		echo "Saved command template"
 	`
-	
+
 	result1 := tester1.ExecuteScript(script1)
 	if result1.Error != nil {
 		t.Errorf("First script execution failed: %v", result1.Error)
 	}
-	
+
 	// Second script execution - load and use template (simulates VM restart)
 	tester2 := NewIntegrationScriptTesterWithSharedDB(t, tester1.setupData)
-	
+
 	script2 := `
 		loadVar $base_command
 		loadVar $default_target
 		send $base_command " " $default_target
 		echo "Sent: " $base_command " " $default_target
 	`
-	
+
 	result2 := tester2.ExecuteScript(script2)
 	if result2.Error != nil {
 		t.Errorf("Second script execution failed: %v", result2.Error)
 	}
-	
+
 	if len(result2.Output) != 1 {
 		t.Errorf("Expected 1 output line from second script, got %d", len(result2.Output))
 	}
-	
+
 	expected := "Sent: examine room"
 	if len(result2.Output) > 0 && result2.Output[0] != expected {
 		t.Errorf("Cross-instance command: got %q, want %q", result2.Output[0], expected)
@@ -218,7 +215,7 @@ func TestGameCommands_CrossInstancePersistence_RealIntegration(t *testing.T) {
 // TestGameCommands_ConditionalSending tests sending with comparison results
 func TestGameCommands_ConditionalSending_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		# Test comparison-based logic without complex conditionals
 		setVar $health 50
@@ -235,25 +232,25 @@ func TestGameCommands_ConditionalSending_RealIntegration(t *testing.T) {
 		send "check health status"
 		echo "Health check command sent"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	// Should have 3 echo outputs
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && result.Output[0] != "Health comparison result (50 == 75): 0" {
 		t.Errorf("Equality comparison: got %q, want %q", result.Output[0], "Health comparison result (50 == 75): 0")
 	}
-	
+
 	if len(result.Output) > 1 && result.Output[1] != "Threshold comparison result (75 > 50): 1" {
 		t.Errorf("Greater comparison: got %q, want %q", result.Output[1], "Threshold comparison result (75 > 50): 1")
 	}
-	
+
 	if len(result.Output) > 2 && result.Output[2] != "Health check command sent" {
 		t.Errorf("Send command echo: got %q, want %q", result.Output[2], "Health check command sent")
 	}
@@ -262,7 +259,7 @@ func TestGameCommands_ConditionalSending_RealIntegration(t *testing.T) {
 // TestGameCommands_StringConcatenation tests complex string building for commands
 func TestGameCommands_StringConcatenation_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		setVar $verb "tell"
 		setVar $target "merchant"
@@ -272,16 +269,16 @@ func TestGameCommands_StringConcatenation_RealIntegration(t *testing.T) {
 		send $verb " " $target " " $message $punctuation
 		echo "Sent message to " $target
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 1 {
 		t.Errorf("Expected 1 output line, got %d", len(result.Output))
 	}
-	
+
 	expected := "Sent message to merchant"
 	if len(result.Output) > 0 && result.Output[0] != expected {
 		t.Errorf("String concatenation: got %q, want %q", result.Output[0], expected)
@@ -291,7 +288,7 @@ func TestGameCommands_StringConcatenation_RealIntegration(t *testing.T) {
 // TestGameCommands_EmptyAndSpecialCommands tests edge cases
 func TestGameCommands_EmptyAndSpecialCommands_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		setVar $empty ""
 		setVar $newline "\n"
@@ -306,22 +303,22 @@ func TestGameCommands_EmptyAndSpecialCommands_RealIntegration(t *testing.T) {
 		send "say" $space "hello world"
 		echo "Sent spaced command"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 3 {
 		t.Errorf("Expected 3 output lines, got %d", len(result.Output))
 	}
-	
+
 	expectedOutputs := []string{
 		"Sent empty command",
-		"Sent multiline command", 
+		"Sent multiline command",
 		"Sent spaced command",
 	}
-	
+
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Output line %d: got %q, want %q", i, result.Output[i], expected)
@@ -332,7 +329,7 @@ func TestGameCommands_EmptyAndSpecialCommands_RealIntegration(t *testing.T) {
 // TestGameCommands_NumberToStringConversion tests sending numeric values
 func TestGameCommands_NumberToStringConversion_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
-	
+
 	script := `
 		setVar $sector_num 1234
 		setVar $credits 5000.50
@@ -343,20 +340,20 @@ func TestGameCommands_NumberToStringConversion_RealIntegration(t *testing.T) {
 		send "offer " $credits " credits"
 		echo "Offered " $credits " credits"
 	`
-	
+
 	result := tester.ExecuteScript(script)
 	if result.Error != nil {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
-	
+
 	if len(result.Output) != 2 {
 		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
 	}
-	
+
 	if len(result.Output) > 0 && !strings.Contains(result.Output[0], "1234") {
 		t.Errorf("Sector echo should contain '1234': got %q", result.Output[0])
 	}
-	
+
 	if len(result.Output) > 1 && !strings.Contains(result.Output[1], "5000.5") {
 		t.Errorf("Credits echo should contain '5000.5': got %q", result.Output[1])
 	}
@@ -384,7 +381,7 @@ echo "Wait completed"
 `
 
 	result := Execute(t, serverScript, clientScript, &api.ConnectOptions{ScriptName: twxScript})
-	
+
 	if result.Database != nil {
 		t.Error("Expected no database instance when DatabasePath not provided")
 	}
@@ -393,11 +390,11 @@ echo "Wait completed"
 	if !strings.Contains(result.ClientOutput, "Setting up trigger") {
 		t.Errorf("Expected 'Setting up trigger' in client output, got: %q", result.ClientOutput)
 	}
-	
+
 	if !strings.Contains(result.ClientOutput, "continue with the script") {
 		t.Errorf("Expected 'continue with the script' in client output, got: %q", result.ClientOutput)
 	}
-	
+
 	t.Log("WAITFOR with trigger interaction test completed successfully!")
 }
 
@@ -451,10 +448,10 @@ func TestGetSectorCommand_RealIntegration(t *testing.T) {
 		"Density: 45",
 		"Explored: DENSITY",
 		"Port class: 1",
-		"Port exists: 1", 
+		"Port exists: 1",
 		"Warps: 3",
 		"Warp[1]: 2",
-		"Warp[2]: 3", 
+		"Warp[2]: 3",
 		"Beacon: Test Beacon",
 	}
 
@@ -537,15 +534,15 @@ func TestGetSectorCommand_TradingScriptPattern_RealIntegration(t *testing.T) {
 
 	// Create test sectors like a real trading scenario
 	sectors := []struct {
-		index int
-		density int
-		hasPort bool
+		index     int
+		density   int
+		hasPort   bool
 		portClass int
 	}{
-		{1, 0, false, 0},        // Empty sector
-		{2, 100, true, 1},       // Port sector with 100 density (bad for trading)
-		{3, 45, false, 0},       // Good density sector without port
-		{4, 67, true, 2},        // Good density sector with port
+		{1, 0, false, 0},  // Empty sector
+		{2, 100, true, 1}, // Port sector with 100 density (bad for trading)
+		{3, 45, false, 0}, // Good density sector without port
+		{4, 67, true, 2},  // Good density sector with port
 	}
 
 	for _, s := range sectors {
@@ -600,9 +597,9 @@ func TestGetSectorCommand_TradingScriptPattern_RealIntegration(t *testing.T) {
 	// Sector 3: weight = 100 + 45 = 145 (good density)
 	// Sector 4: weight = 100 + 67 = 167 (good density)
 	expectedOutputs := []string{
-		"Sector 2 weight: 0",      // High density sector avoided
-		"Sector 3 weight: 145",    // Good density sector
-		"Sector 4 weight: 167",    // Good density sector
+		"Sector 2 weight: 0",   // High density sector avoided
+		"Sector 3 weight: 145", // Good density sector
+		"Sector 4 weight: 167", // Good density sector
 	}
 
 	if len(result.Output) != len(expectedOutputs) {
@@ -620,7 +617,7 @@ func TestGetSectorCommand_TradingScriptPattern_RealIntegration(t *testing.T) {
 func TestGetSectorCommand_CrossInstancePersistence_RealIntegration(t *testing.T) {
 	// First instance - save sector data and verify getSector works
 	tester1 := NewIntegrationScriptTester(t)
-	
+
 	err := tester1.setupData.DB.SaveSector(createTestSector(), 456)
 	if err != nil {
 		t.Fatalf("Failed to save test sector: %v", err)
@@ -674,7 +671,7 @@ func TestGetSectorCommand_CrossInstancePersistence_RealIntegration(t *testing.T)
 	}
 
 	expectedOutputs2 := []string{
-		"Second instance density: 45", 
+		"Second instance density: 45",
 		"Second instance port class: 1",
 	}
 
@@ -722,7 +719,7 @@ func createTestSectorWithData(density int, hasPort bool, portClass int) database
 		Density:       density,
 		NavHaz:        0,
 		Beacon:        "Test Beacon",
-		Constellation: "Test Constellation", 
+		Constellation: "Test Constellation",
 		Explored:      database.EtDensity,
 	}
 

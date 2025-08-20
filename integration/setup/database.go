@@ -1,5 +1,3 @@
-
-
 package setup
 
 import (
@@ -12,9 +10,9 @@ import (
 
 // DatabaseTestSetup provides database-specific test utilities
 type DatabaseTestSetup struct {
-	DB           database.Database
-	GameAdapter  *scripting.GameAdapter
-	TempDBPath   string
+	DB          database.Database
+	GameAdapter *scripting.GameAdapter
+	TempDBPath  string
 }
 
 // SetupTestDatabase creates a temporary SQLite database for testing
@@ -22,33 +20,33 @@ func SetupTestDatabase(t *testing.T) *DatabaseTestSetup {
 	// Create temporary file for test database
 	tempDir := t.TempDir()
 	dbPath := filepath.Join(tempDir, "test.db")
-	
+
 	// Create database instance
 	db := database.NewDatabase()
 	err := db.CreateDatabase(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to create test database: %v", err)
 	}
-	
+
 	err = db.OpenDatabase(dbPath)
 	if err != nil {
 		t.Fatalf("Failed to open test database: %v", err)
 	}
-	
+
 	// Create game adapter with real database
 	gameAdapter := scripting.NewGameAdapter(db)
-	
+
 	setup := &DatabaseTestSetup{
 		DB:          db,
 		GameAdapter: gameAdapter,
 		TempDBPath:  dbPath,
 	}
-	
+
 	// Register cleanup
 	t.Cleanup(func() {
 		setup.Cleanup()
 	})
-	
+
 	return setup
 }
 
@@ -66,22 +64,22 @@ func (setup *DatabaseTestSetup) VerifyScriptVariable(t *testing.T, name string, 
 		t.Errorf("Failed to load script variable %s: %v", name, err)
 		return
 	}
-	
+
 	switch expectedValue := expectedValue.(type) {
 	case string:
 		if value.Type != types.StringType || value.String != expectedValue {
-			t.Errorf("Variable %s: expected string %q, got %v %q", 
+			t.Errorf("Variable %s: expected string %q, got %v %q",
 				name, expectedValue, value.Type, value.String)
 		}
 	case float64:
 		if value.Type != types.NumberType || value.Number != expectedValue {
-			t.Errorf("Variable %s: expected number %f, got %v %f", 
+			t.Errorf("Variable %s: expected number %f, got %v %f",
 				name, expectedValue, value.Type, value.Number)
 		}
 	case int:
 		expectedFloat := float64(expectedValue)
 		if value.Type != types.NumberType || value.Number != expectedFloat {
-			t.Errorf("Variable %s: expected number %f, got %v %f", 
+			t.Errorf("Variable %s: expected number %f, got %v %f",
 				name, expectedFloat, value.Type, value.Number)
 		}
 	default:
@@ -109,14 +107,14 @@ func (setup *DatabaseTestSetup) LoadVariableFromDatabase(name string) (*types.Va
 func (setup *DatabaseTestSetup) CreateSharedDatabaseSetup(t *testing.T) *DatabaseTestSetup {
 	// Create new game adapter using the same database
 	gameAdapter := scripting.NewGameAdapter(setup.DB)
-	
+
 	sharedSetup := &DatabaseTestSetup{
 		DB:          setup.DB, // Share the same database
 		GameAdapter: gameAdapter,
 		TempDBPath:  setup.TempDBPath,
 	}
-	
+
 	// Note: No cleanup registration here since the original setup handles database cleanup
-	
+
 	return sharedSetup
 }

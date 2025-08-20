@@ -2,7 +2,7 @@ package components
 
 import (
 	"twist/internal/theme"
-	
+
 	"github.com/rivo/tview"
 )
 
@@ -31,7 +31,7 @@ func NewModalList(title string, items []string, callback func(string)) *ModalLis
 func (ml *ModalList) setupComponents() {
 	// Create the list using theme factory for convenience
 	ml.list = theme.NewList()
-	
+
 	// Set title
 	ml.list.SetTitle(" " + ml.title + " ")
 	ml.list.SetTitleAlign(tview.AlignLeft)
@@ -64,11 +64,11 @@ func (ml *ModalList) setupComponents() {
 
 	// Create modal wrapper using theme factory
 	ml.modal = theme.NewModal()
-	
+
 	// Replace modal's content with our custom flex
 	ml.modal.SetText("")
 	ml.modal.AddButtons([]string{})
-	
+
 	// We need to manually handle the modal content
 	// This is a bit of a hack since tview.Modal doesn't easily allow custom content
 	// Instead, we'll return the flex directly and handle it as a page
@@ -89,7 +89,7 @@ func (ml *ModalList) GetView() tview.Primitive {
 	// Apply theme colors for modal overlay effect
 	currentTheme := theme.Current()
 	flex.SetBackgroundColor(currentTheme.TerminalColors().Background)
-	
+
 	return flex
 }
 

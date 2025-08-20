@@ -14,18 +14,18 @@ func RegisterGameCommands(vm CommandRegistry) {
 	vm.RegisterCommand("PAUSE", 0, 0, []types.ParameterType{}, cmdPause)
 	vm.RegisterCommand("HALT", 0, 0, []types.ParameterType{}, cmdHalt)
 	vm.RegisterCommand("LOGGING", 1, 1, []types.ParameterType{types.ParamValue}, cmdLogging)
-	
-	// Timer commands  
+
+	// Timer commands
 	vm.RegisterCommand("SETTIMER", 1, 1, []types.ParameterType{types.ParamValue}, cmdSetTimer)
 	vm.RegisterCommand("GETTIMER", 1, 1, []types.ParameterType{types.ParamVar}, cmdGetTimer)
-	
+
 	// Input commands
 	vm.RegisterCommand("GETINPUT", 2, 3, []types.ParameterType{types.ParamVar, types.ParamValue, types.ParamValue}, cmdGetInput)
 	vm.RegisterCommand("GETCONSOLEINPUT", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdGetConsoleInput)
-	
+
 	// Text processing commands
 	vm.RegisterCommand("MERGETEXT", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdMergeText)
-	
+
 	// Game data commands - TWX compatibility
 	vm.RegisterCommand("GETSECTOR", 2, 2, []types.ParameterType{types.ParamValue, types.ParamVar}, cmdGetSector)
 }
@@ -44,13 +44,13 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 			message += param.Value.ToString()
 		}
 	}
-	
+
 	scriptName := "unknown"
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
 	debug.Log("SEND command [%s] (line %d): sending message %q", scriptName, vm.GetCurrentLine(), message)
-	
+
 	// Send message as-is (carriage returns from lexer are preserved)
 	return vm.Send(message)
 }
@@ -83,7 +83,6 @@ func cmdLogging(vm types.VMInterface, params []*types.CommandParam) error {
 	return nil
 }
 
-
 func cmdSetTimer(vm types.VMInterface, params []*types.CommandParam) error {
 	// Set timer value
 	return nil
@@ -99,59 +98,55 @@ func cmdGetTimer(vm types.VMInterface, params []*types.CommandParam) error {
 	return nil
 }
 
-
-
-
-
 func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 	// Extract prompt text (2nd parameter)
 	prompt := ""
 	if len(params) > 1 {
 		prompt = GetParamString(vm, params[1])
 	}
-	
+
 	// Extract default value (3rd parameter, optional)
 	defaultValue := ""
 	if len(params) > 2 {
 		defaultValue = GetParamString(vm, params[2])
 	}
-	
+
 	// Debug logging
 	scriptName := "unknown"
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
 	debug.Log("GETINPUT [%s] (line %d): prompt=%q, default=%q", scriptName, vm.GetCurrentLine(), prompt, defaultValue)
-	debug.Log("GETINPUT [%s]: pendingResult=%q, waitingForInput=%v, pendingPrompt=%q", 
+	debug.Log("GETINPUT [%s]: pendingResult=%q, waitingForInput=%v, pendingPrompt=%q",
 		scriptName, vm.GetPendingInputResult(), vm.IsWaitingForInput(), vm.GetPendingInputPrompt())
-	
+
 	// Check if there's a pending input result (we're resuming from input)
 	// We use JustResumedFromInput to handle cases where input is empty string
 	if vm.IsWaitingForInput() || vm.JustResumedFromInput() {
 		// We're resuming - get the input result and store it
 		debug.Log("GETINPUT [%s]: RESUMING from input, processing stored result", scriptName)
 		input := vm.GetPendingInputResult()
-		
+
 		// Use default value if input is empty
 		if input == "" && defaultValue != "" {
 			input = defaultValue
 		}
-		
+
 		debug.Log("GETINPUT [%s]: setting variable %s = %q", scriptName, params[0].VarName, input)
-		
+
 		// Store result in the variable
 		result := &types.Value{
 			Type:   types.StringType,
 			String: input,
 		}
 		vm.SetVariable(params[0].VarName, result)
-		
+
 		// Clear the pending input state since we've processed it
 		vm.ClearPendingInput()
-		
+
 		return nil // This will allow the execution to advance to the next command
 	}
-	
+
 	// First time executing this command - initiate input collection
 	debug.Log("GETINPUT [%s]: FIRST TIME - initiating input collection", scriptName)
 	// Format the prompt like TWX does
@@ -159,14 +154,14 @@ func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 	if defaultValue != "" {
 		fullPrompt = prompt + " [" + defaultValue + "]"
 	}
-	
+
 	// Initiate input collection and pause script execution
 	// GetInput will handle displaying the prompt
 	_, err := vm.GetInput(fullPrompt)
 	if err != nil {
 		return err
 	}
-	
+
 	// Return a pause error to stop execution until input is provided
 	return types.ErrScriptPaused
 }
@@ -181,7 +176,6 @@ func cmdGetConsoleInput(vm types.VMInterface, params []*types.CommandParam) erro
 	return nil
 }
 
-
 func cmdMergeText(vm types.VMInterface, params []*types.CommandParam) error {
 	// Merge two text strings
 	text1 := GetParamString(vm, params[0])
@@ -193,7 +187,6 @@ func cmdMergeText(vm types.VMInterface, params []*types.CommandParam) error {
 	vm.SetVariable(params[2].VarName, result)
 	return nil
 }
-
 
 // cmdTime gets the current time
 func cmdTime(vm types.VMInterface, params []*types.CommandParam) error {
@@ -338,7 +331,7 @@ func cmdGetSector(vm types.VMInterface, params []*types.CommandParam) error {
 	// Get sector index from first parameter
 	indexValue := GetParamValue(vm, params[0])
 	sectorIndex := int(indexValue.ToNumber())
-	
+
 	// Ignore invalid call with index of zero (Pascal TWX behavior)
 	if sectorIndex == 0 {
 		return nil
@@ -378,30 +371,30 @@ func setSectorVariables(vm types.VMInterface, varName string, index int, sector 
 	switch sector.Explored {
 	case 0: // etNo
 		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "NO"})
-	case 1: // etCalc  
+	case 1: // etCalc
 		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "CALC"})
 	case 2: // etDensity
-		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "DENSITY"})  
+		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "DENSITY"})
 	case 3: // etHolo
 		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "YES"})
 	default:
 		vm.SetVariable(varName+".EXPLORED", &types.Value{Type: types.StringType, String: "NO"})
 	}
-	
+
 	// Basic sector properties
 	vm.SetVariable(varName+".BEACON", &types.Value{Type: types.StringType, String: sector.Beacon})
 	vm.SetVariable(varName+".CONSTELLATION", &types.Value{Type: types.StringType, String: sector.Constellation})
-	
+
 	// Mines - for now set to empty (would need full mine implementation)
 	vm.SetVariable(varName+".ARMIDMINES.QUANTITY", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".LIMPETMINES.QUANTITY", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".ARMIDMINES.OWNER", &types.Value{Type: types.StringType, String: ""})
 	vm.SetVariable(varName+".LIMPETMINES.OWNER", &types.Value{Type: types.StringType, String: ""})
-	
+
 	// Fighters - for now set to empty
 	vm.SetVariable(varName+".FIGS.QUANTITY", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".FIGS.OWNER", &types.Value{Type: types.StringType, String: ""})
-	
+
 	// Warp and density information
 	vm.SetVariable(varName+".WARPS", &types.Value{Type: types.NumberType, Number: float64(len(sector.Warps))})
 	vm.SetVariable(varName+".DENSITY", &types.Value{Type: types.NumberType, Number: float64(sector.Density)})
@@ -420,10 +413,10 @@ func setSectorVariables(vm types.VMInterface, varName string, index int, sector 
 
 	// Port information (key part for 1_Trade.ts compatibility)
 	setPortVariables(vm, varName, sector)
-	
+
 	// Trader, ship, planet counts - for basic compatibility set to 0
 	vm.SetVariable(varName+".TRADERS", &types.Value{Type: types.NumberType, Number: 0})
-	vm.SetVariable(varName+".SHIPS", &types.Value{Type: types.NumberType, Number: 0})  
+	vm.SetVariable(varName+".SHIPS", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".PLANETS", &types.Value{Type: types.NumberType, Number: 0})
 }
 
@@ -445,17 +438,17 @@ func setPortVariables(vm types.VMInterface, varName string, sector *types.Sector
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: float64(sector.PortClass)})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 1})
 		vm.SetVariable(varName+".PORT.BUILDTIME", &types.Value{Type: types.NumberType, Number: 0})
-		
+
 		// Product percentages (placeholder values)
 		vm.SetVariable(varName+".PORT.PERC_ORE", &types.Value{Type: types.NumberType, Number: 100})
 		vm.SetVariable(varName+".PORT.PERC_ORG", &types.Value{Type: types.NumberType, Number: 100})
 		vm.SetVariable(varName+".PORT.PERC_EQUIP", &types.Value{Type: types.NumberType, Number: 100})
-		
+
 		// Product amounts (placeholder values)
 		vm.SetVariable(varName+".PORT.ORE", &types.Value{Type: types.NumberType, Number: 0})
 		vm.SetVariable(varName+".PORT.ORG", &types.Value{Type: types.NumberType, Number: 0})
 		vm.SetVariable(varName+".PORT.EQUIP", &types.Value{Type: types.NumberType, Number: 0})
-		
+
 		// Port update timestamp (placeholder)
 		vm.SetVariable(varName+".PORT.UPDATED", &types.Value{Type: types.StringType, String: "01/01/2024 00:00:00"})
 
@@ -475,16 +468,15 @@ func setDefaultSectorValues(vm types.VMInterface, varName string) {
 	vm.SetVariable(varName+".WARPS", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".DENSITY", &types.Value{Type: types.NumberType, Number: -1})
 	vm.SetVariable(varName+".NAVHAZ", &types.Value{Type: types.NumberType, Number: 0})
-	
+
 	// Default warp array
 	for i := 1; i <= 6; i++ {
 		vm.SetVariable(varName+".WARP["+fmt.Sprintf("%d", i)+"]", &types.Value{
 			Type: types.NumberType, Number: 0,
 		})
 	}
-	
+
 	// No port
 	vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: 0})
 	vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 0})
 }
-

@@ -34,43 +34,44 @@ func (vm *VariableManager) SetScriptID(scriptID string) {
 }
 
 // parseVariableName parses a variable name and extracts indexes and properties
-// Examples: 
-//   "array[1][2]" returns ("array", ["1", "2"], [])
-//   "obj.prop.subprop" returns ("obj", [], ["prop", "subprop"])
-//   "array[1].port.class" returns ("array", ["1"], ["port", "class"])
+// Examples:
+//
+//	"array[1][2]" returns ("array", ["1", "2"], [])
+//	"obj.prop.subprop" returns ("obj", [], ["prop", "subprop"])
+//	"array[1].port.class" returns ("array", ["1"], ["port", "class"])
 func (vm *VariableManager) parseVariableName(name string) (string, []string, []string) {
 	// Remove $ prefix if present
 	cleanName := strings.TrimPrefix(name, "$")
-	
+
 	var baseName string
 	var indexes []string
 	var properties []string
-	
+
 	// First, handle array indexing
 	openBracket := strings.Index(cleanName, "[")
 	dotIndex := strings.Index(cleanName, ".")
-	
+
 	// Determine what comes first - bracket or dot
 	if openBracket == -1 && dotIndex == -1 {
 		// Simple variable with no indexing or properties
 		// Convert to uppercase for system constant lookup
 		return strings.ToUpper(cleanName), nil, nil
 	}
-	
+
 	var nameAfterBrackets string
-	
+
 	if openBracket != -1 && (dotIndex == -1 || openBracket < dotIndex) {
 		// Brackets come first or are the only thing
 		baseName = strings.ToUpper(cleanName[:openBracket])
 		remaining := cleanName[openBracket:]
-		
+
 		// Extract all [index] pairs
 		for len(remaining) > 0 && strings.HasPrefix(remaining, "[") {
 			closeBracket := strings.Index(remaining, "]")
 			if closeBracket == -1 {
 				break
 			}
-			
+
 			index := remaining[1:closeBracket]
 			indexes = append(indexes, index)
 			remaining = remaining[closeBracket+1:]
@@ -80,7 +81,7 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 		// Dot comes first or no brackets
 		nameAfterBrackets = cleanName
 	}
-	
+
 	// Now handle dot notation for properties
 	if strings.Contains(nameAfterBrackets, ".") {
 		if baseName == "" {
@@ -89,7 +90,7 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 			baseName = strings.ToUpper(parts[0])
 			nameAfterBrackets = "." + parts[1]
 		}
-		
+
 		// Extract properties from dot notation
 		if strings.HasPrefix(nameAfterBrackets, ".") {
 			propStr := strings.TrimPrefix(nameAfterBrackets, ".")
@@ -99,7 +100,7 @@ func (vm *VariableManager) parseVariableName(name string) (string, []string, []s
 		// No brackets and no dots
 		baseName = strings.ToUpper(nameAfterBrackets)
 	}
-	
+
 	return baseName, indexes, properties
 }
 
@@ -112,8 +113,7 @@ func (vm *VariableManager) parseVariableNameOld(name string) (string, []string) 
 // Get retrieves a variable value by name, supporting array indexing and object properties
 func (vm *VariableManager) Get(name string) *types.Value {
 	baseName, indexes, properties := vm.parseVariableName(name)
-	
-	
+
 	// Get or create the base variable (check user variables first, then system constants)
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
@@ -124,13 +124,13 @@ func (vm *VariableManager) Get(name string) *types.Value {
 			for _, index := range indexes {
 				fullName += "[" + index + "]"
 			}
-			
+
 			if value, err := vm.gameInterface.LoadScriptVariable(fullName); err == nil {
 				// Variable exists in database, return it directly
 				return value
 			}
 		}
-		
+
 		// Check if this is a system constant (only if no user variable exists)
 		if vm.gameInterface != nil {
 			if systemConstants := vm.gameInterface.GetSystemConstants(); systemConstants != nil {
@@ -147,12 +147,12 @@ func (vm *VariableManager) Get(name string) *types.Value {
 				}
 			}
 		}
-		
+
 		// Auto-vivification: create new variable if not found anywhere
 		baseVar = types.NewVarParam(baseName, types.VarParamVariable)
 		vm.variables[baseName] = baseVar
 	}
-	
+
 	// Resolve variable references in indexes (e.g. $bestWarp -> "2")
 	resolvedIndexes := make([]string, len(indexes))
 	for i, index := range indexes {
@@ -165,15 +165,15 @@ func (vm *VariableManager) Get(name string) *types.Value {
 			resolvedIndexes[i] = index
 		}
 	}
-	
+
 	// Navigate to the indexed variable
 	targetVar := baseVar.GetIndexVar(resolvedIndexes)
-	
+
 	// Handle object property access if present
 	if len(properties) > 0 {
 		return vm.getObjectProperty(targetVar, properties)
 	}
-	
+
 	// Convert VarParam to Value for compatibility (GET method)
 	return vm.varParamToValue(targetVar)
 }
@@ -187,9 +187,9 @@ func (vm *VariableManager) Set(name string, value *types.Value) {
 			Number: 0,
 		}
 	}
-	
+
 	baseName, indexes, properties := vm.parseVariableName(name)
-	
+
 	// Special handling for ArrayType values
 	if value.Type == types.ArrayType && len(indexes) == 0 {
 		// Setting a full array - convert Value to VarParam structure
@@ -197,14 +197,14 @@ func (vm *VariableManager) Set(name string, value *types.Value) {
 		vm.variables[baseName] = baseVar
 		return
 	}
-	
+
 	// Get or create the base variable
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		baseVar = types.NewVarParam(baseName, types.VarParamVariable)
 		vm.variables[baseName] = baseVar
 	}
-	
+
 	// Resolve variable references in indexes (e.g. $bestWarp -> "2")
 	resolvedIndexes := make([]string, len(indexes))
 	for i, index := range indexes {
@@ -217,16 +217,16 @@ func (vm *VariableManager) Set(name string, value *types.Value) {
 			resolvedIndexes[i] = index
 		}
 	}
-	
+
 	// Navigate to the indexed variable
 	targetVar := baseVar.GetIndexVar(resolvedIndexes)
-	
+
 	// Handle object property access if present
 	if len(properties) > 0 {
 		vm.setObjectProperty(targetVar, properties, value)
 		return
 	}
-	
+
 	// Set the value
 	targetVar.SetValue(vm.valueToString(value))
 }
@@ -234,7 +234,7 @@ func (vm *VariableManager) Set(name string, value *types.Value) {
 // SetVarParam sets a variable using the VarParam directly
 func (vm *VariableManager) SetVarParam(name string, varParam *types.VarParam) {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	if len(indexes) == 0 {
 		// Setting base variable
 		vm.variables[baseName] = varParam
@@ -245,7 +245,7 @@ func (vm *VariableManager) SetVarParam(name string, varParam *types.VarParam) {
 			baseVar = types.NewVarParam(baseName, types.VarParamVariable)
 			vm.variables[baseName] = baseVar
 		}
-		
+
 		// Navigate to parent and set the indexed element
 		if len(indexes) == 1 {
 			baseVar.SetArrayElement(indexes[0], varParam)
@@ -259,20 +259,20 @@ func (vm *VariableManager) SetVarParam(name string, varParam *types.VarParam) {
 // GetVarParam gets the VarParam directly for advanced operations
 func (vm *VariableManager) GetVarParam(name string) *types.VarParam {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		baseVar = types.NewVarParam(baseName, types.VarParamVariable)
 		vm.variables[baseName] = baseVar
 	}
-	
+
 	return baseVar.GetIndexVar(indexes)
 }
 
 // SetArray initializes an array variable with given dimensions
 func (vm *VariableManager) SetArray(name string, dimensions []int) {
 	baseName, _ := vm.parseVariableNameOld(name)
-	
+
 	varParam := types.NewVarParam(baseName, types.VarParamVariable)
 	varParam.SetArray(dimensions)
 	vm.variables[baseName] = varParam
@@ -281,7 +281,7 @@ func (vm *VariableManager) SetArray(name string, dimensions []int) {
 // SetArrayFromStrings sets array from string list (TWX style)
 func (vm *VariableManager) SetArrayFromStrings(name string, strings []string) {
 	baseName, _ := vm.parseVariableNameOld(name)
-	
+
 	varParam := types.NewVarParam(baseName, types.VarParamVariable)
 	varParam.SetArrayFromStrings(strings)
 	vm.variables[baseName] = varParam
@@ -290,16 +290,16 @@ func (vm *VariableManager) SetArrayFromStrings(name string, strings []string) {
 // Exists checks if a variable exists
 func (vm *VariableManager) Exists(name string) bool {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		return false
 	}
-	
+
 	if len(indexes) == 0 {
 		return true
 	}
-	
+
 	// Check if indexed element exists
 	targetVar := baseVar.GetIndexVar(indexes)
 	return targetVar != nil && targetVar.GetValue() != ""
@@ -308,7 +308,7 @@ func (vm *VariableManager) Exists(name string) bool {
 // Delete removes a variable
 func (vm *VariableManager) Delete(name string) {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	if len(indexes) == 0 {
 		// Delete entire variable
 		delete(vm.variables, baseName)
@@ -339,16 +339,16 @@ func (vm *VariableManager) Clear() {
 // GetAll returns all variables as Value map for compatibility
 func (vm *VariableManager) GetAll() map[string]*types.Value {
 	result := make(map[string]*types.Value)
-	
+
 	for name, varParam := range vm.variables {
 		result[name] = vm.varParamToValue(varParam)
-		
+
 		// Add array elements if any
 		if varParam.IsArray() {
 			vm.addArrayElements(name, varParam, result)
 		}
 	}
-	
+
 	return result
 }
 
@@ -357,11 +357,11 @@ func (vm *VariableManager) addArrayElements(baseName string, varParam *types.Var
 	if varParam == nil || !varParam.IsArray() {
 		return
 	}
-	
+
 	for index, subVar := range varParam.Vars {
 		elementName := fmt.Sprintf("%s[%s]", baseName, index)
 		result[elementName] = vm.varParamToValue(subVar)
-		
+
 		// Recursively add sub-elements
 		if subVar.IsArray() {
 			vm.addArrayElements(elementName, subVar, result)
@@ -392,7 +392,7 @@ func (vm *VariableManager) varParamToValue(varParam *types.VarParam) *types.Valu
 			Number: 0,
 		}
 	}
-	
+
 	if varParam.IsArray() {
 		// Convert array to Value with array type
 		value := &types.Value{
@@ -400,17 +400,17 @@ func (vm *VariableManager) varParamToValue(varParam *types.VarParam) *types.Valu
 			Array:  make(map[string]*types.Value),
 			Number: float64(varParam.ArraySize), // Preserve array size
 		}
-		
+
 		for index, subVar := range varParam.Vars {
 			value.Array[index] = vm.varParamToValue(subVar)
 		}
-		
+
 		return value
 	}
-	
+
 	// Simple value
 	valueStr := varParam.GetValue()
-	
+
 	// Try to parse as number
 	if num, err := strconv.ParseFloat(valueStr, 64); err == nil {
 		return &types.Value{
@@ -419,7 +419,7 @@ func (vm *VariableManager) varParamToValue(varParam *types.VarParam) *types.Valu
 			String: valueStr,
 		}
 	}
-	
+
 	// String value
 	return &types.Value{
 		Type:   types.StringType,
@@ -432,7 +432,7 @@ func (vm *VariableManager) valueToString(value *types.Value) string {
 	if value == nil {
 		return ""
 	}
-	
+
 	switch value.Type {
 	case types.StringType:
 		return value.String
@@ -453,12 +453,12 @@ func (vm *VariableManager) valueToString(value *types.Value) string {
 // GetArrayElementCount returns the number of elements in an array variable
 func (vm *VariableManager) GetArrayElementCount(name string) int {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		return 0
 	}
-	
+
 	targetVar := baseVar.GetIndexVar(indexes)
 	return targetVar.GetElementCount()
 }
@@ -466,12 +466,12 @@ func (vm *VariableManager) GetArrayElementCount(name string) int {
 // GetArrayKeys returns the keys of an array variable
 func (vm *VariableManager) GetArrayKeys(name string) []string {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		return nil
 	}
-	
+
 	targetVar := baseVar.GetIndexVar(indexes)
 	return targetVar.GetArrayKeys()
 }
@@ -479,12 +479,12 @@ func (vm *VariableManager) GetArrayKeys(name string) []string {
 // IsArray checks if a variable is an array
 func (vm *VariableManager) IsArray(name string) bool {
 	baseName, indexes := vm.parseVariableNameOld(name)
-	
+
 	baseVar, exists := vm.variables[baseName]
 	if !exists {
 		return false
 	}
-	
+
 	targetVar := baseVar.GetIndexVar(indexes)
 	return targetVar.IsArray()
 }
@@ -495,11 +495,11 @@ func (vm *VariableManager) Clone() *VariableManager {
 		variables: make(map[string]*types.VarParam),
 		scriptID:  vm.scriptID,
 	}
-	
+
 	for name, varParam := range vm.variables {
 		clone.variables[name] = varParam.Clone()
 	}
-	
+
 	return clone
 }
 
@@ -511,21 +511,21 @@ func (vm *VariableManager) valueToVarParam(name string, value *types.Value) *typ
 		varParam.SetValue(vm.valueToString(value))
 		return varParam
 	}
-	
+
 	// For arrays, create VarParam with array structure
 	varParam := types.NewVarParam(name, types.VarParamVariable)
 	varParam.Vars = make(map[string]*types.VarParam)
-	
+
 	// Set the array size from the Value.Number field (used by cmdArray)
 	varParam.ArraySize = int(value.Number)
-	
+
 	// Convert all array elements
 	for index, elemValue := range value.Array {
 		elemName := fmt.Sprintf("%s[%s]", name, index)
 		elemVarParam := vm.valueToVarParam(elemName, elemValue)
 		varParam.Vars[index] = elemVarParam
 	}
-	
+
 	return varParam
 }
 
@@ -534,12 +534,12 @@ func (vm *VariableManager) ToJSON() (string, error) {
 	data := make(map[string]interface{})
 	data["scriptID"] = vm.scriptID
 	data["variables"] = vm.variables
-	
+
 	jsonBytes, err := json.Marshal(data)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal variables to JSON: %w", err)
 	}
-	
+
 	return string(jsonBytes), nil
 }
 
@@ -548,17 +548,17 @@ func (vm *VariableManager) FromJSON(jsonStr string) error {
 	if jsonStr == "" {
 		return nil
 	}
-	
+
 	var data map[string]interface{}
 	err := json.Unmarshal([]byte(jsonStr), &data)
 	if err != nil {
 		return fmt.Errorf("failed to unmarshal variables from JSON: %w", err)
 	}
-	
+
 	if scriptID, ok := data["scriptID"].(string); ok {
 		vm.scriptID = scriptID
 	}
-	
+
 	if variables, ok := data["variables"].(map[string]interface{}); ok {
 		vm.variables = make(map[string]*types.VarParam)
 		for name, varData := range variables {
@@ -569,7 +569,7 @@ func (vm *VariableManager) FromJSON(jsonStr string) error {
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -577,14 +577,14 @@ func (vm *VariableManager) FromJSON(jsonStr string) error {
 func (vm *VariableManager) getObjectProperty(varParam *types.VarParam, properties []string) *types.Value {
 	// For object property access like $s.port.class, we check if this is a special object
 	// Currently we handle the case where the varParam contains an object structure
-	
+
 	// Navigate through the property chain
 	current := varParam
 	for _, prop := range properties {
 		if current == nil {
 			return &types.Value{Type: types.StringType, String: ""}
 		}
-		
+
 		// Check if current VarParam has this property as a sub-variable
 		if current.Vars != nil {
 			if propVar, exists := current.Vars[strings.ToUpper(prop)]; exists {
@@ -598,7 +598,7 @@ func (vm *VariableManager) getObjectProperty(varParam *types.VarParam, propertie
 			return &types.Value{Type: types.StringType, String: ""}
 		}
 	}
-	
+
 	// Convert the final VarParam to Value
 	return vm.varParamToValue(current)
 }
@@ -607,20 +607,20 @@ func (vm *VariableManager) getObjectProperty(varParam *types.VarParam, propertie
 func (vm *VariableManager) setObjectProperty(varParam *types.VarParam, properties []string, value *types.Value) {
 	// Navigate through the property chain, creating structure as needed
 	current := varParam
-	
+
 	// Make sure we have a vars map
 	if current.Vars == nil {
 		current.Vars = make(map[string]*types.VarParam)
 	}
-	
+
 	// Navigate to the parent of the final property
 	for i := 0; i < len(properties)-1; i++ {
 		prop := strings.ToUpper(properties[i])
-		
+
 		if current.Vars == nil {
 			current.Vars = make(map[string]*types.VarParam)
 		}
-		
+
 		// Get or create the property variable
 		if propVar, exists := current.Vars[prop]; exists {
 			current = propVar
@@ -631,13 +631,13 @@ func (vm *VariableManager) setObjectProperty(varParam *types.VarParam, propertie
 			current = newVar
 		}
 	}
-	
+
 	// Set the final property
 	finalProp := strings.ToUpper(properties[len(properties)-1])
 	if current.Vars == nil {
 		current.Vars = make(map[string]*types.VarParam)
 	}
-	
+
 	// Create or update the final property
 	if propVar, exists := current.Vars[finalProp]; exists {
 		propVar.SetValue(vm.valueToString(value))
@@ -665,13 +665,13 @@ func (vm *VariableManager) resolveConstantProperties(baseName string, properties
 			for _, prop := range properties {
 				fullConstantName += "." + strings.ToUpper(prop)
 			}
-			
+
 			if constantValue, exists := systemConstants.GetConstant(fullConstantName); exists {
 				return constantValue
 			}
 		}
 	}
-	
+
 	// Property not found, return empty string
 	return &types.Value{Type: types.StringType, String: ""}
 }

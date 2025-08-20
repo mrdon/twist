@@ -6,10 +6,9 @@ import (
 	"twist/internal/proxy/scripting/types"
 )
 
-
 // RegisterComparisonCommands registers comparison commands with the VM
 func RegisterComparisonCommands(vm CommandRegistry) {
-	// Comparison commands  
+	// Comparison commands
 	vm.RegisterCommand("ISEQUAL", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdIsEqual)
 	vm.RegisterCommand("ISNOTEQUAL", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdIsNotEqual)
 	vm.RegisterCommand("ISGREATER", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdIsGreater)
@@ -26,7 +25,7 @@ func cmdIsEqual(vm types.VMInterface, params []*types.CommandParam) error {
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) == 0 {
 		result = 1.0
@@ -48,7 +47,7 @@ func cmdIsNotEqual(vm types.VMInterface, params []*types.CommandParam) error {
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) != 0 {
 		result = 1.0
@@ -70,7 +69,7 @@ func cmdIsGreater(vm types.VMInterface, params []*types.CommandParam) error {
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) > 0 {
 		result = 1.0
@@ -92,7 +91,7 @@ func cmdIsLesser(vm types.VMInterface, params []*types.CommandParam) error {
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) < 0 {
 		result = 1.0
@@ -114,7 +113,7 @@ func cmdIsGreaterEqual(vm types.VMInterface, params []*types.CommandParam) error
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) >= 0 {
 		result = 1.0
@@ -136,7 +135,7 @@ func cmdIsLesserEqual(vm types.VMInterface, params []*types.CommandParam) error 
 
 	val1 := GetParamValue(vm, params[0])
 	val2 := GetParamValue(vm, params[1])
-	
+
 	result := 0.0
 	if compareValues(val1, val2) <= 0 {
 		result = 1.0
@@ -152,8 +151,9 @@ func cmdIsLesserEqual(vm types.VMInterface, params []*types.CommandParam) error 
 
 // compareValues compares two values and returns:
 // -1 if val1 < val2
-//  0 if val1 == val2  
-//  1 if val1 > val2
+//
+//	0 if val1 == val2
+//	1 if val1 > val2
 func compareValues(val1, val2 *types.Value) int {
 	// Handle nil values
 	if val1 == nil && val2 == nil {

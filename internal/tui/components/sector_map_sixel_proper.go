@@ -9,7 +9,7 @@ import (
 	"os"
 	"twist/internal/api"
 	"twist/internal/theme"
-	
+
 	"github.com/gdamore/tcell/v2"
 	"github.com/mattn/go-sixel"
 	"github.com/rivo/tview"
@@ -32,18 +32,18 @@ func NewProperSixelSectorMapComponent() *ProperSixelSectorMapComponent {
 	// Get theme colors for panels
 	currentTheme := theme.Current()
 	panelColors := currentTheme.PanelColors()
-	
+
 	box := tview.NewBox()
 	box.SetBackgroundColor(panelColors.Background)
 	box.SetBorderColor(panelColors.Border)
 	box.SetTitleColor(panelColors.Title)
-	
+
 	component := &ProperSixelSectorMapComponent{
-		Box:           box,
-		sectorData:    make(map[int]api.SectorInfo),
-		needsRedraw:   true,
+		Box:         box,
+		sectorData:  make(map[int]api.SectorInfo),
+		needsRedraw: true,
 	}
-	
+
 	component.SetBorder(true).SetTitle("Sector Map (Sixel)")
 	return component
 }
@@ -71,7 +71,7 @@ func (psmc *ProperSixelSectorMapComponent) UpdateCurrentSectorWithInfo(sectorInf
 func (psmc *ProperSixelSectorMapComponent) UpdateSectorData(sectorInfo api.SectorInfo) {
 	// Update the sector data in our cache
 	psmc.sectorData[sectorInfo.Number] = sectorInfo
-	
+
 	// If this sector is connected to current sector or is the current sector, trigger redraw
 	if psmc.currentSector > 0 && (sectorInfo.Number == psmc.currentSector || psmc.isSectorConnected(sectorInfo.Number)) {
 		psmc.needsRedraw = true
@@ -95,16 +95,16 @@ func (psmc *ProperSixelSectorMapComponent) LoadRealMapData() {
 	if psmc.proxyAPI == nil {
 		return
 	}
-	
+
 	playerInfo, err := psmc.proxyAPI.GetPlayerInfo()
 	if err != nil {
 		return
 	}
-	
+
 	if playerInfo.CurrentSector <= 0 {
 		return
 	}
-	
+
 	psmc.currentSector = playerInfo.CurrentSector
 	psmc.needsRedraw = true
 }
@@ -112,18 +112,18 @@ func (psmc *ProperSixelSectorMapComponent) LoadRealMapData() {
 // Draw renders the sixel sector map using proper tview integration
 func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 	psmc.Box.DrawForSubclass(screen, psmc)
-	
+
 	x, y, width, height := psmc.GetInnerRect()
-	
+
 	if width <= 0 || height <= 0 {
 		return
 	}
-	
+
 	// Debug text removed - sixel graphics are working
-	
+
 	// Debug output removed to prevent screen interference
 	//	psmc.currentSector, psmc.needsRedraw, psmc.image != nil)
-	
+
 	// Always use sector map now that we know colors work
 	// if psmc.currentSector == 0 {
 	// 	// Create a simple test image to verify sixel rendering works
@@ -139,30 +139,30 @@ func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 	// 	}
 	// 	return
 	// }
-	
+
 	// Generate or update the sector map image if needed
 	if psmc.needsRedraw || psmc.image == nil {
 		psmc.generateSectorMapImage(200, 150) // Use fixed reasonable size like test image
 		psmc.needsRedraw = false
 	}
-	
+
 	// Render sixel graphics using the working tview-sixel approach
 	if psmc.image != nil {
 		// Generate sixel data
 		var buf bytes.Buffer
 		encoder := sixel.NewEncoder(&buf)
 		encoder.Dither = false
-		
+
 		if err := encoder.Encode(psmc.image); err == nil {
 			sixelData := buf.String()
-			
+
 			// Try multiple approaches to work around modern tview/tcell changes
-			
+
 			// Method 1: Original working approach
 			screen.ShowCursor(x, y+2)
 			fmt.Print(sixelData)
 			screen.Sync()
-			
+
 			// Method 2: Try bypassing buffering with direct terminal access
 			// This works around potential tcell v2 buffer isolation
 			go func() {
@@ -172,10 +172,10 @@ func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 					fmt.Fprintf(tty, "\x1b[%d;%dH%s", y+3, x+1, sixelData)
 				}
 			}()
-			
+
 			// Debug output removed to prevent screen interference
 		}
-		
+
 		// Show sector info as text too
 		psmc.drawStatusText(screen, x, y+10, width, height-10, fmt.Sprintf("Sector %d", psmc.currentSector))
 	} else {
@@ -186,11 +186,11 @@ func (psmc *ProperSixelSectorMapComponent) Draw(screen tcell.Screen) {
 // drawStatusText draws simple status text in the panel
 func (psmc *ProperSixelSectorMapComponent) drawStatusText(screen tcell.Screen, x, y, width, height int, text string) {
 	style := tcell.StyleDefault.Foreground(tcell.ColorYellow)
-	
+
 	// Center the text
 	startX := x + (width-len(text))/2
 	startY := y + height/2
-	
+
 	for i, char := range text {
 		if startX+i < x+width {
 			screen.SetContent(startX+i, startY, char, nil, style)
@@ -203,14 +203,13 @@ func (psmc *ProperSixelSectorMapComponent) generateSectorMapImage(imgWidth, imgH
 	if psmc.currentSector == 0 {
 		return
 	}
-	
-	
+
 	// Create a new RGBA image
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
-	
+
 	// Fill with black background
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0, 0, 0, 255}}, image.ZP, draw.Src)
-	
+
 	// Get current sector info from real data
 	currentInfo, hasCurrentInfo := psmc.sectorData[psmc.currentSector]
 	if !hasCurrentInfo && psmc.proxyAPI != nil {
@@ -221,10 +220,10 @@ func (psmc *ProperSixelSectorMapComponent) generateSectorMapImage(imgWidth, imgH
 		}
 		psmc.sectorData[psmc.currentSector] = currentInfo
 	}
-	
+
 	// Draw sector map using pixel operations
 	psmc.drawSectorMapOnImage(img, currentInfo)
-	
+
 	psmc.image = img
 }
 
@@ -234,41 +233,41 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 	centerX := bounds.Dx() / 2
 	centerY := bounds.Dy() / 2
 	nodeRadius := 25
-	
+
 	// Dark blue background for contrast
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{0, 0, 50, 255}}, image.ZP, draw.Src)
-	
+
 	// Draw current sector (bright yellow circle with black border)
-	psmc.drawFilledCircle(img, centerX, centerY, nodeRadius+2, color.RGBA{0, 0, 0, 255}) // Black border
+	psmc.drawFilledCircle(img, centerX, centerY, nodeRadius+2, color.RGBA{0, 0, 0, 255})   // Black border
 	psmc.drawFilledCircle(img, centerX, centerY, nodeRadius, color.RGBA{255, 255, 0, 255}) // Yellow center
-	
+
 	// Get connected sectors from real data
 	connectedSectors := currentInfo.Warps
 	// Debug log removed to prevent screen interference
 	//	currentInfo.Number, len(connectedSectors), connectedSectors)
-	
+
 	if len(connectedSectors) == 0 {
 		return
 	}
-	
+
 	// Position connected sectors around the center
 	positions := []struct{ x, y int }{
-		{centerX, centerY - 60}, // North
-		{centerX + 60, centerY}, // East  
-		{centerX, centerY + 60}, // South
-		{centerX - 60, centerY}, // West
+		{centerX, centerY - 60},      // North
+		{centerX + 60, centerY},      // East
+		{centerX, centerY + 60},      // South
+		{centerX - 60, centerY},      // West
 		{centerX + 40, centerY - 40}, // NE
 		{centerX + 40, centerY + 40}, // SE
 		{centerX - 40, centerY + 40}, // SW
 		{centerX - 40, centerY - 40}, // NW
 	}
-	
+
 	// Draw connected sectors
 	for i, sectorNum := range connectedSectors {
 		if i >= len(positions) {
 			break
 		}
-		
+
 		// Choose color based on sector type (using real sector data)
 		sectorColor := color.RGBA{0, 200, 0, 255} // Bright green default
 		if info, hasInfo := psmc.sectorData[sectorNum]; hasInfo {
@@ -278,29 +277,29 @@ func (psmc *ProperSixelSectorMapComponent) drawSectorMapOnImage(img *image.RGBA,
 				sectorColor = color.RGBA{255, 0, 0, 255} // Red for dangerous
 			}
 		}
-		
+
 		pos := positions[i]
-		
+
 		// Draw sector circle with black border
 		psmc.drawFilledCircle(img, pos.x, pos.y, nodeRadius-1, color.RGBA{0, 0, 0, 255}) // Black border
-		psmc.drawFilledCircle(img, pos.x, pos.y, nodeRadius-3, sectorColor) // Colored center
-		
+		psmc.drawFilledCircle(img, pos.x, pos.y, nodeRadius-3, sectorColor)              // Colored center
+
 		// Draw connection line from center to this sector
 		psmc.drawLine(img, centerX, centerY, pos.x, pos.y, color.RGBA{255, 255, 255, 255})
 	}
-	
+
 }
 
 // drawFilledCircle draws a filled circle on the image
 func (psmc *ProperSixelSectorMapComponent) drawFilledCircle(img *image.RGBA, centerX, centerY, radius int, c color.RGBA) {
 	bounds := img.Bounds()
-	
-	for y := centerY - radius; y <= centerY + radius; y++ {
-		for x := centerX - radius; x <= centerX + radius; x++ {
+
+	for y := centerY - radius; y <= centerY+radius; y++ {
+		for x := centerX - radius; x <= centerX+radius; x++ {
 			if x >= bounds.Min.X && x < bounds.Max.X && y >= bounds.Min.Y && y < bounds.Max.Y {
 				dx := x - centerX
 				dy := y - centerY
-				if dx*dx + dy*dy <= radius*radius {
+				if dx*dx+dy*dy <= radius*radius {
 					img.SetRGBA(x, y, c)
 				}
 			}
@@ -313,7 +312,7 @@ func (psmc *ProperSixelSectorMapComponent) drawLine(img *image.RGBA, x1, y1, x2,
 	// Simple line drawing using Bresenham's algorithm
 	dx := abs(x2 - x1)
 	dy := abs(y2 - y1)
-	
+
 	sx := 1
 	if x1 > x2 {
 		sx = -1
@@ -322,21 +321,21 @@ func (psmc *ProperSixelSectorMapComponent) drawLine(img *image.RGBA, x1, y1, x2,
 	if y1 > y2 {
 		sy = -1
 	}
-	
+
 	err := dx - dy
 	x, y := x1, y1
-	
+
 	bounds := img.Bounds()
-	
+
 	for {
 		if x >= bounds.Min.X && x < bounds.Max.X && y >= bounds.Min.Y && y < bounds.Max.Y {
 			img.SetRGBA(x, y, c)
 		}
-		
+
 		if x == x2 && y == y2 {
 			break
 		}
-		
+
 		e2 := 2 * err
 		if e2 > -dy {
 			err -= dy
@@ -354,30 +353,30 @@ func (psmc *ProperSixelSectorMapComponent) renderSixelImage(screen tcell.Screen,
 	if psmc.image == nil {
 		return
 	}
-	
+
 	// Create a buffer to encode sixel data
 	var buf bytes.Buffer
-	
+
 	// Create sixel encoder with explicit settings
 	encoder := sixel.NewEncoder(&buf)
-	encoder.Dither = false  // Disable dithering for cleaner colors
-	
+	encoder.Dither = false // Disable dithering for cleaner colors
+
 	// Encode image as sixel
 	err := encoder.Encode(psmc.image)
 	if err != nil {
 		return
 	}
-	
+
 	// Output sixel data after tview finishes drawing
 	sixelData := buf.String()
-	
+
 	// Try writing directly to /dev/tty to bypass tview's screen management
 	if ttyFile, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
 		defer ttyFile.Close()
-		
+
 		// Position cursor and output sixel to raw terminal
 		fmt.Fprintf(ttyFile, "\x1b[%d;%dH%s", y+2, x+1, sixelData)
-		
+
 	} else {
 		// Fallback to stdout
 		fmt.Printf("\x1b[%d;%dH%s", y+2, x+1, sixelData)
@@ -386,26 +385,26 @@ func (psmc *ProperSixelSectorMapComponent) renderSixelImage(screen tcell.Screen,
 
 // generateTestImage creates a simple test image to verify sixel rendering
 func (psmc *ProperSixelSectorMapComponent) generateTestImage(imgWidth, imgHeight int) {
-	
+
 	img := image.NewRGBA(image.Rect(0, 0, imgWidth, imgHeight))
-	
+
 	// Create a high-contrast pattern - white background
 	draw.Draw(img, img.Bounds(), &image.Uniform{color.RGBA{255, 255, 255, 255}}, image.ZP, draw.Src)
-	
+
 	// Add a black circle in the center for maximum contrast
 	centerX := imgWidth / 2
 	centerY := imgHeight / 2
 	radius := imgWidth / 4 // Large radius relative to image size
-	
+
 	psmc.drawFilledCircle(img, centerX, centerY, radius, color.RGBA{0, 0, 0, 255})
-	
-	// Add pure red corners 
+
+	// Add pure red corners
 	cornerSize := 20
 	psmc.drawFilledCircle(img, cornerSize, cornerSize, cornerSize/2, color.RGBA{255, 0, 0, 255})
 	psmc.drawFilledCircle(img, imgWidth-cornerSize, cornerSize, cornerSize/2, color.RGBA{0, 255, 0, 255})
 	psmc.drawFilledCircle(img, cornerSize, imgHeight-cornerSize, cornerSize/2, color.RGBA{0, 0, 255, 255})
 	psmc.drawFilledCircle(img, imgWidth-cornerSize, imgHeight-cornerSize, cornerSize/2, color.RGBA{255, 255, 0, 255})
-	
+
 	psmc.image = img
 }
 
@@ -414,14 +413,14 @@ func (psmc *ProperSixelSectorMapComponent) RenderSixelGraphics() {
 	if psmc.lastSixelData == "" {
 		return
 	}
-	
+
 	// Output sixel graphics directly to terminal
 	if ttyFile, err := os.OpenFile("/dev/tty", os.O_WRONLY, 0); err == nil {
 		defer ttyFile.Close()
-		
+
 		// Position cursor and output sixel to raw terminal
 		fmt.Fprintf(ttyFile, "\x1b[%d;%dH%s", psmc.lastY+2, psmc.lastX+1, psmc.lastSixelData)
-		
+
 	} else {
 		// Fallback to stdout
 		fmt.Printf("\x1b[%d;%dH%s", psmc.lastY+2, psmc.lastX+1, psmc.lastSixelData)

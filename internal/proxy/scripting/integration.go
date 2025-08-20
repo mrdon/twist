@@ -69,7 +69,7 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 	if err != nil {
 		return types.SectorData{}, err
 	}
-	
+
 	// Convert database sector to script sector data
 	scriptSector := types.SectorData{
 		Number:        index, // Use the index parameter
@@ -87,7 +87,7 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		Traders:       make([]types.TraderData, 0),
 		Planets:       make([]types.PlanetData, 0),
 	}
-	
+
 	// Load port data from separate ports table
 	port, err := g.db.LoadPort(index)
 	if err == nil {
@@ -95,14 +95,14 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		scriptSector.PortName = port.Name
 		scriptSector.PortClass = port.ClassIndex
 	}
-	
+
 	// Copy warps (TWX uses 1-6 indexing, we convert to 0-based slice)
 	for i := 0; i < 6; i++ {
 		if sector.Warp[i] > 0 {
 			scriptSector.Warps = append(scriptSector.Warps, sector.Warp[i])
 		}
 	}
-	
+
 	// Convert ships
 	for _, ship := range sector.Ships {
 		scriptShip := types.ShipData{
@@ -113,7 +113,7 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		}
 		scriptSector.Ships = append(scriptSector.Ships, scriptShip)
 	}
-	
+
 	// Convert traders
 	for _, trader := range sector.Traders {
 		scriptTrader := types.TraderData{
@@ -124,7 +124,7 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		}
 		scriptSector.Traders = append(scriptSector.Traders, scriptTrader)
 	}
-	
+
 	// Convert planets
 	for _, planet := range sector.Planets {
 		scriptPlanet := types.PlanetData{
@@ -132,7 +132,7 @@ func (g *GameAdapter) GetSector(index int) (types.SectorData, error) {
 		}
 		scriptSector.Planets = append(scriptSector.Planets, scriptPlanet)
 	}
-	
+
 	return scriptSector, nil
 }
 
@@ -224,7 +224,7 @@ func (g *GameAdapter) GetDatabase() interface{} {
 func (g *GameAdapter) SaveScriptVariable(name string, value *types.Value) error {
 	// Like Pascal TWX, save individual variables with simple values
 	// Arrays are handled by saving each element separately with its full path
-	
+
 	switch value.Type {
 	case types.StringType:
 		return g.db.SaveScriptVariable(name, value.String)
@@ -253,12 +253,12 @@ func (g *GameAdapter) SaveScriptVariable(name string, value *types.Value) error 
 func (g *GameAdapter) LoadScriptVariable(name string) (*types.Value, error) {
 	// Like Pascal TWX, load individual variables with simple values
 	// Arrays are handled by loading individual elements by their full path
-	
+
 	dbValue, err := g.db.LoadScriptVariable(name)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	// Convert database value back to Value type (simple values only)
 	switch v := dbValue.(type) {
 	case string:
@@ -299,18 +299,18 @@ type DatabaseProvider interface {
 }
 
 type ScriptManager struct {
-	engine         *Engine
-	db             database.Database
-	gameAdapter    *GameAdapter
-	dbProvider     DatabaseProvider // For getting current database when needed
-	initialScript  string           // Script to load automatically on connection
+	engine        *Engine
+	db            database.Database
+	gameAdapter   *GameAdapter
+	dbProvider    DatabaseProvider // For getting current database when needed
+	initialScript string           // Script to load automatically on connection
 }
 
 // NewScriptManager creates a new script manager
 func NewScriptManager(db database.Database) *ScriptManager {
 	gameAdapter := NewGameAdapter(db)
 	engine := NewEngine(gameAdapter)
-	
+
 	return &ScriptManager{
 		engine:      engine,
 		db:          db,
@@ -324,7 +324,7 @@ func NewScriptManagerWithProvider(dbProvider DatabaseProvider) *ScriptManager {
 	// The adapter will request the database when needed
 	gameAdapter := NewGameAdapter(nil)
 	engine := NewEngine(gameAdapter)
-	
+
 	return &ScriptManager{
 		engine:      engine,
 		db:          nil, // Will be requested from provider when needed
@@ -356,17 +356,17 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 	// Wire the proxy and terminal to the game adapter
 	sm.gameAdapter.SetProxy(proxy)
 	sm.gameAdapter.SetTerminal(terminal)
-	
+
 	// Update the game adapter with current database
 	if currentDB := sm.getCurrentDatabase(); currentDB != nil {
 		sm.gameAdapter.SetDatabase(currentDB)
 	}
-	
+
 	// Set up engine handlers for script output
 	sm.engine.SetSendHandler(func(text string) error {
 		return sm.gameAdapter.SendCommand(text)
 	})
-	
+
 	// Set up output handler (scripts can output to terminal)
 	sm.engine.SetOutputHandler(func(text string) error {
 		// Script error messages should not be routed through the input system
@@ -378,7 +378,7 @@ func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal Termina
 		// Regular script output (like ECHO commands) can still go through SendCommand
 		return sm.gameAdapter.SendCommand(text)
 	})
-	
+
 	// Set up echo handler (local echo for script commands)
 	sm.engine.SetEchoHandler(func(text string) error {
 		// Echo should display locally only, not send to server
@@ -419,12 +419,12 @@ func (sm *ScriptManager) LoadAndRunScript(filename string) error {
 	if err != nil {
 		return err
 	}
-	
+
 	err = sm.engine.RunScript(script.ID)
 	if err != nil {
 		return err
 	}
-	
+
 	return nil
 }
 
@@ -455,10 +455,9 @@ func (sm *ScriptManager) ProcessOutgoingText(text string) error {
 		// Don't process the ESC key further - it was consumed for script termination
 		return nil
 	}
-	
+
 	return sm.engine.ProcessTextOut(text)
 }
-
 
 // ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
 func (sm *ScriptManager) ActivateTriggers() error {
@@ -471,10 +470,10 @@ func (sm *ScriptManager) ActivateTriggers() error {
 func (sm *ScriptManager) ProcessAutoText(text string) error {
 	// Process auto text triggers - these are triggers that automatically respond to text
 	triggerManager := sm.engine.GetTriggerManager()
-	
+
 	// Get all auto text triggers and process them
 	autoTextTriggers := triggerManager.GetTriggersByType(types.TriggerAutoText)
-	
+
 	for _, trigger := range autoTextTriggers {
 		if trigger.Matches(text) {
 			// Auto text triggers need a VM context to execute
@@ -487,13 +486,13 @@ func (sm *ScriptManager) ProcessAutoText(text string) error {
 				// Create a temporary VM for executing the trigger
 				vmInterface = vm.NewVirtualMachine(sm.gameAdapter)
 			}
-			
+
 			if err := trigger.Execute(vmInterface); err != nil {
 				return err
 			}
 		}
 	}
-	
+
 	return nil
 }
 
@@ -512,14 +511,14 @@ func (sm *ScriptManager) GetStatus() map[string]interface{} {
 }
 
 // CollectScriptInput handles script input collection via the menu system
-// This matches TWX's BeginScriptInput() functionality  
+// This matches TWX's BeginScriptInput() functionality
 func (sm *ScriptManager) CollectScriptInput(prompt string) (string, error) {
 	// Get the menu manager from the game adapter
 	menuManager := sm.gameAdapter.GetMenuManager()
 	if menuManager == nil {
 		return "", fmt.Errorf("menu manager not available for script input collection")
 	}
-	
+
 	// Try to use the menu manager's input collector
 	if inputCollector, ok := menuManager.(interface {
 		StartScriptInputCollection(prompt string, callback func(string)) error
@@ -533,11 +532,11 @@ func (sm *ScriptManager) CollectScriptInput(prompt string) (string, error) {
 				break
 			}
 		}
-		
+
 		if waitingScript == nil {
 			return "", fmt.Errorf("no script found waiting for input")
 		}
-		
+
 		// Start input collection with callback that resumes the script
 		err := inputCollector.StartScriptInputCollection(prompt, func(input string) {
 			// Resume the script with the collected input
@@ -546,12 +545,12 @@ func (sm *ScriptManager) CollectScriptInput(prompt string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		
+
 		// Return immediately - the script will be resumed asynchronously
 		// This matches TWX's behavior where getinput pauses execution
 		return "", nil
 	}
-	
+
 	return "", fmt.Errorf("menu manager does not support script input collection")
 }
 

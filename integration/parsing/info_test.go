@@ -1,9 +1,9 @@
 package parsing
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"twist/integration/scripting"
-	"github.com/stretchr/testify/assert"
 )
 
 // TestInfo demonstrates parsing of the 'i' (info) command display and database storage
@@ -71,15 +71,15 @@ func TestInfo(t *testing.T) {
 	result.Assert.AssertPlayerMineDisruptors(expectedMineDisr)
 	result.Assert.AssertPlayerAlignment(expectedAlignment)
 	result.Assert.AssertPlayerShipNumber(expectedShipNumber)
-	
+
 	// Verify that OnPlayerStatsUpdated was called during info command
 	// The info command should trigger player stats updates
 	playerStatsCalls := result.TuiAPI.PlayerStatsCalls
 	assert.NotEmpty(t, playerStatsCalls, "Expected OnPlayerStatsUpdated to be called during info command")
-	
+
 	if len(playerStatsCalls) > 0 {
 		t.Logf("OnPlayerStatsUpdated called %d times during info command", len(playerStatsCalls))
-		
+
 		// Check that the player stats call has the expected values
 		finalStats := playerStatsCalls[len(playerStatsCalls)-1]
 		assert.Equal(t, expectedCredits, finalStats.Credits, "Final stats credits")
@@ -87,7 +87,7 @@ func TestInfo(t *testing.T) {
 		assert.Equal(t, expectedExperience, finalStats.Experience, "Final stats experience")
 		assert.Equal(t, expectedFighters, finalStats.Fighters, "Final stats fighters")
 		assert.Equal(t, expectedShields, finalStats.Shields, "Final stats shields")
-		
+
 		// Verify cargo in player stats events
 		assert.Equal(t, expectedOreHolds, finalStats.OreHolds, "Final stats ore holds")
 		assert.Equal(t, expectedOrgHolds, finalStats.OrgHolds, "Final stats org holds")

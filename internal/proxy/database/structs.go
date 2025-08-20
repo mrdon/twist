@@ -37,52 +37,51 @@ const (
 
 // TSpaceObject matches TWX TSpaceObject record
 type TSpaceObject struct {
-	Quantity int           `json:"quantity"`
-	Owner    string        `json:"owner"`    // string[40] in TWX
-	FigType  TFighterType  `json:"fig_type"`
+	Quantity int          `json:"quantity"`
+	Owner    string       `json:"owner"` // string[40] in TWX
+	FigType  TFighterType `json:"fig_type"`
 }
 
-// TPort matches TWX TPort record  
+// TPort matches TWX TPort record
 type TPort struct {
-	Name           string               `json:"name"`           // string[40] in TWX
-	Dead           bool                 `json:"dead"`
-	BuildTime      int                  `json:"build_time"`     // Byte in TWX
-	ClassIndex     int                  `json:"class_index"`    // Byte in TWX
-	BuyProduct     [3]bool              `json:"buy_product"`    // array[TProductType] of Boolean
-	ProductPercent [3]int               `json:"product_percent"` // array[TProductType] of Byte
-	ProductAmount  [3]int               `json:"product_amount"`  // array[TProductType] of Word
-	UpDate         time.Time            `json:"update"`
+	Name           string    `json:"name"` // string[40] in TWX
+	Dead           bool      `json:"dead"`
+	BuildTime      int       `json:"build_time"`      // Byte in TWX
+	ClassIndex     int       `json:"class_index"`     // Byte in TWX
+	BuyProduct     [3]bool   `json:"buy_product"`     // array[TProductType] of Boolean
+	ProductPercent [3]int    `json:"product_percent"` // array[TProductType] of Byte
+	ProductAmount  [3]int    `json:"product_amount"`  // array[TProductType] of Word
+	UpDate         time.Time `json:"update"`
 }
 
 // TSector matches TWX TSector record with Phase 2 optimization (port data separated)
 type TSector struct {
 	// Warp is array[1..6] in TWX, we'll use [6] and handle 1-indexing in code
-	Warp          [6]int               `json:"warp"`           
+	Warp [6]int `json:"warp"`
 	// SPort removed - now in separate ports table
-	NavHaz        int                  `json:"nav_haz"`        // Byte in TWX
-	Figs          TSpaceObject         `json:"figs"`
-	MinesArmid    TSpaceObject         `json:"mines_armid"`
-	MinesLimpet   TSpaceObject         `json:"mines_limpet"`
-	Constellation string               `json:"constellation"`  // string[40] in TWX
-	Beacon        string               `json:"beacon"`        // string[40] in TWX
-	UpDate        time.Time            `json:"update"`
-	Anomaly       bool                 `json:"anomaly"`
-	Density       int                  `json:"density"`       // LongInt in TWX
-	Warps         int                  `json:"warps"`         // Computed field, not stored in DB
-	Explored      TSectorExploredType  `json:"explored"`
-	
-	// In TWX these are LongInt pointers to linked lists, we'll handle differently
-	Ships    []TShip    `json:"ships"`
-	Traders  []TTrader  `json:"traders"`
-	Planets  []TPlanet  `json:"planets"`
-	Vars     []TSectorVar `json:"vars"`     // Sector variables
-}
+	NavHaz        int                 `json:"nav_haz"` // Byte in TWX
+	Figs          TSpaceObject        `json:"figs"`
+	MinesArmid    TSpaceObject        `json:"mines_armid"`
+	MinesLimpet   TSpaceObject        `json:"mines_limpet"`
+	Constellation string              `json:"constellation"` // string[40] in TWX
+	Beacon        string              `json:"beacon"`        // string[40] in TWX
+	UpDate        time.Time           `json:"update"`
+	Anomaly       bool                `json:"anomaly"`
+	Density       int                 `json:"density"` // LongInt in TWX
+	Warps         int                 `json:"warps"`   // Computed field, not stored in DB
+	Explored      TSectorExploredType `json:"explored"`
 
+	// In TWX these are LongInt pointers to linked lists, we'll handle differently
+	Ships   []TShip      `json:"ships"`
+	Traders []TTrader    `json:"traders"`
+	Planets []TPlanet    `json:"planets"`
+	Vars    []TSectorVar `json:"vars"` // Sector variables
+}
 
 // TTrader matches TWX TTrader record
 type TTrader struct {
 	Name     string `json:"name"`      // string[40] in TWX
-	ShipType string `json:"ship_type"` // string[40] in TWX  
+	ShipType string `json:"ship_type"` // string[40] in TWX
 	ShipName string `json:"ship_name"` // string[40] in TWX
 	Figs     int    `json:"figs"`      // LongInt in TWX
 }
@@ -91,7 +90,7 @@ type TTrader struct {
 type TShip struct {
 	Name     string `json:"name"`      // string[40] in TWX
 	Owner    string `json:"owner"`     // string[40] in TWX
-	ShipType string `json:"ship_type"` // string[40] in TWX  
+	ShipType string `json:"ship_type"` // string[40] in TWX
 	Figs     int    `json:"figs"`      // LongInt in TWX
 }
 
@@ -100,7 +99,7 @@ type TPlanet struct {
 	Name     string `json:"name"`     // string[40] in TWX
 	Owner    string `json:"owner"`    // Enhanced from parser
 	Fighters int    `json:"fighters"` // Enhanced from parser
-	Citadel  bool   `json:"citadel"`  // Enhanced from parser  
+	Citadel  bool   `json:"citadel"`  // Enhanced from parser
 	Stardock bool   `json:"stardock"` // Enhanced from parser
 }
 
@@ -161,7 +160,7 @@ type TPlayerStats struct {
 	PlanetScanner bool   `json:"planet_scanner"`
 	ScanType      int    `json:"scan_type"`
 	ShipClass     string `json:"ship_class"`
-	
+
 	// Current game state (like TWX Database.pas)
 	CurrentSector int    `json:"current_sector"`
 	PlayerName    string `json:"player_name"`
@@ -172,7 +171,7 @@ type TPlayerStats struct {
 // NULLSector initializes a sector with TWX default values
 func NULLSector() TSector {
 	return TSector{
-		Warp:          [6]int{0, 0, 0, 0, 0, 0},
+		Warp: [6]int{0, 0, 0, 0, 0, 0},
 		// SPort removed - now in separate ports table
 		NavHaz:        0,
 		Figs:          TSpaceObject{},
@@ -192,7 +191,7 @@ func NULLSector() TSector {
 	}
 }
 
-// NULLPort initializes a port with TWX default values  
+// NULLPort initializes a port with TWX default values
 func NULLPort() TPort {
 	return TPort{
 		Name:           "",

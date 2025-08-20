@@ -9,14 +9,14 @@ import (
 type StreamProcessor struct {
 	// ANSI converter for color conversion
 	ansiConverter *ansi.ColorConverter
-	
+
 	// Current color state
 	currentColorTag string
-	
+
 	// Fixed-size buffer for streaming data processing
 	buffer    [8192]byte
 	bufferLen int
-	
+
 	// Output callback - receives processed text with tview color tags
 	onOutput func(text string)
 }
@@ -40,24 +40,24 @@ func (sp *StreamProcessor) processDataWithANSI(data []byte) {
 	for len(data) > 0 {
 		// How much space is left in buffer?
 		spaceLeft := len(sp.buffer) - sp.bufferLen
-		
+
 		// How much can we add this iteration?
 		toAdd := len(data)
 		if toAdd > spaceLeft {
 			toAdd = spaceLeft
 		}
-		
+
 		// Add data to buffer
 		copy(sp.buffer[sp.bufferLen:], data[:toAdd])
 		sp.bufferLen += toAdd
 		data = data[toAdd:]
-		
+
 		// Process everything we can from the buffer
 		consumed := 0
 		for consumed < sp.bufferLen {
 			// Try to consume starting from current position
 			bytesConsumed := sp.tryConsumeSequence(sp.buffer[consumed:sp.bufferLen])
-			
+
 			if bytesConsumed > 0 {
 				// Successfully consumed some bytes
 				consumed += bytesConsumed
@@ -66,13 +66,13 @@ func (sp *StreamProcessor) processDataWithANSI(data []byte) {
 				break
 			}
 		}
-		
+
 		// Remove consumed data from buffer, keep unconsumed data
 		if consumed > 0 {
 			copy(sp.buffer[:], sp.buffer[consumed:sp.bufferLen])
 			sp.bufferLen -= consumed
 		}
-		
+
 		// Safety check: if buffer is full and we couldn't consume anything, force consume one character
 		if sp.bufferLen == len(sp.buffer) && consumed == 0 {
 			char, size := utf8.DecodeRune(sp.buffer[:])
@@ -88,13 +88,13 @@ func (sp *StreamProcessor) tryConsumeSequence(data []byte) int {
 	if len(data) == 0 {
 		return 0
 	}
-	
+
 	if data[0] == '\x1b' {
 		// Try to consume escape sequence
 		if len(data) < 2 {
 			return 0 // Need more data
 		}
-		
+
 		if data[1] == '[' {
 			// ANSI escape sequence - find terminator
 			i := 2
@@ -157,7 +157,7 @@ func (sp *StreamProcessor) processANSISequence(sequence []byte) {
 		}
 
 	case 'H', 'f': // Cursor position - ignore for streaming
-	case 'A', 'B', 'C', 'D': // Cursor movement - ignore for streaming  
+	case 'A', 'B', 'C', 'D': // Cursor movement - ignore for streaming
 	case 'J': // Erase display - ignore for streaming
 	case 'K': // Erase line - ignore for streaming
 	default:

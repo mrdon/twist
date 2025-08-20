@@ -9,14 +9,14 @@ import (
 // InputCollector handles two-stage input collection for menu operations
 type InputCollector struct {
 	// Collection state
-	isCollecting  bool
-	menuName      string
-	prompt        string
-	buffer        string
-	
+	isCollecting bool
+	menuName     string
+	prompt       string
+	buffer       string
+
 	// Output function to send data to stream
 	sendOutput func(string)
-	
+
 	// Completion handlers for different input types
 	completionHandlers map[string]CompletionHandler
 }
@@ -34,10 +34,10 @@ func NewInputCollector(sendOutput func(string)) *InputCollector {
 
 	return &InputCollector{
 		isCollecting:       false,
-		menuName:          "",
-		prompt:            "",
-		buffer:            "",
-		sendOutput:        sendOutput,
+		menuName:           "",
+		prompt:             "",
+		buffer:             "",
+		sendOutput:         sendOutput,
 		completionHandlers: make(map[string]CompletionHandler),
 	}
 }
@@ -60,12 +60,12 @@ func (ic *InputCollector) StartCollection(menuName, prompt string) {
 	ic.menuName = menuName
 	ic.prompt = prompt
 	ic.buffer = "" // Clear any previous input
-	
+
 	// Display the input prompt (scripts handle their own prompting)
 	if prompt != "" && !strings.HasPrefix(menuName, "SCRIPT_INPUT_") {
 		ic.sendOutput("\r\n" + prompt + "\r\n")
 	}
-	
+
 	// Show help for input collection
 	ic.sendOutput("(Enter value, or '\\' to cancel)\r\n")
 }
@@ -93,11 +93,11 @@ func (ic *InputCollector) HandleInput(input string) error {
 	}
 
 	debug.Log("HandleInput received: %q (len=%d)", input, len(input))
-	
+
 	// Check if input ends with Enter key and extract the value
 	var actualValue string
 	var hasEnter bool
-	
+
 	if strings.HasSuffix(input, "\r\n") {
 		actualValue = strings.TrimSuffix(input, "\r\n")
 		hasEnter = true
@@ -114,7 +114,7 @@ func (ic *InputCollector) HandleInput(input string) error {
 		actualValue = input
 		hasEnter = false
 	}
-	
+
 	if hasEnter {
 		// Complete collection with the value (add to existing buffer first)
 		result := ic.buffer + actualValue
@@ -181,17 +181,17 @@ func (ic *InputCollector) completeCollection(value string) error {
 	menuName := ic.menuName
 	debug.Log("completeCollection: menuName=%s, value=%q", menuName, value)
 	ic.exitCollection()
-	
+
 	if handler, exists := ic.completionHandlers[menuName]; exists {
 		return handler(menuName, value)
 	}
-	// Default behavior - show success message  
+	// Default behavior - show success message
 	if value != "" {
 		ic.sendOutput("Value set: " + value + "\r\n")
 	} else {
 		ic.sendOutput("Value cleared\r\n")
 	}
-	
+
 	return nil
 }
 

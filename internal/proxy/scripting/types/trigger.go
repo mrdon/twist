@@ -103,8 +103,8 @@ func (t *TextTrigger) Matches(input string) bool {
 	}
 	// TextTrigger matches if the pattern is contained anywhere in the input
 	// This matches Pascal TWX behavior for text triggers
-	return input != "" && t.Value != "" && 
-		   (input == t.Value || strings.Contains(input, t.Value))
+	return input != "" && t.Value != "" &&
+		(input == t.Value || strings.Contains(input, t.Value))
 }
 
 // Execute executes the trigger action
@@ -114,15 +114,15 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 			return err
 		}
 	}
-	
+
 	if t.Label != "" {
 		// In TWX, the "label" can be either a label to jump to OR a command to execute
 		// If it starts with a command (like "echo"), execute it as a command
 		// Otherwise, treat it as a label to jump to
-		if strings.HasPrefix(t.Label, "echo ") || 
-		   strings.HasPrefix(t.Label, "send ") ||
-		   strings.HasPrefix(t.Label, "setvar ") ||
-		   strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
+		if strings.HasPrefix(t.Label, "echo ") ||
+			strings.HasPrefix(t.Label, "send ") ||
+			strings.HasPrefix(t.Label, "setvar ") ||
+			strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
 			// Execute as a command by parsing and running it
 			// For now, handle common cases
 			if strings.HasPrefix(t.Label, "echo ") {
@@ -135,7 +135,7 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 		}
 		return vm.Goto(t.Label)
 	}
-	
+
 	return nil
 }
 
@@ -151,8 +151,8 @@ func (t *TextLineTrigger) Matches(input string) bool {
 	}
 	// TextLineTrigger matches if the line starts with the pattern
 	// This matches Pascal TWX behavior for text line triggers
-	return input != "" && t.Value != "" && 
-		   (input == t.Value || strings.HasPrefix(input, t.Value))
+	return input != "" && t.Value != "" &&
+		(input == t.Value || strings.HasPrefix(input, t.Value))
 }
 
 // Execute executes the trigger action
@@ -162,13 +162,13 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 			return err
 		}
 	}
-	
+
 	if t.Label != "" {
 		// Same logic as TextTrigger - handle commands vs labels
-		if strings.HasPrefix(t.Label, "echo ") || 
-		   strings.HasPrefix(t.Label, "send ") ||
-		   strings.HasPrefix(t.Label, "setvar ") ||
-		   strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
+		if strings.HasPrefix(t.Label, "echo ") ||
+			strings.HasPrefix(t.Label, "send ") ||
+			strings.HasPrefix(t.Label, "setvar ") ||
+			strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
 			if strings.HasPrefix(t.Label, "echo ") {
 				message := strings.TrimPrefix(t.Label, "echo ")
 				message = strings.Trim(message, "'\"") // Remove quotes
@@ -177,7 +177,7 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 		}
 		return vm.Goto(t.Label)
 	}
-	
+
 	return nil
 }
 
@@ -191,8 +191,8 @@ func (t *TextOutTrigger) Matches(input string) bool {
 	if !t.Active {
 		return false
 	}
-	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) && 
-		   input[len(input)-len(t.Value):] == t.Value)
+	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) &&
+		input[len(input)-len(t.Value):] == t.Value)
 }
 
 // Execute executes the trigger action
@@ -242,11 +242,11 @@ func (t *EventTrigger) Execute(vm VMInterface) error {
 			return err
 		}
 	}
-	
+
 	if t.Label != "" {
 		return vm.Goto(t.Label)
 	}
-	
+
 	return nil
 }
 
@@ -261,8 +261,8 @@ func (t *AutoTrigger) Matches(input string) bool {
 	if !t.Active {
 		return false
 	}
-	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) && 
-		   input[len(input)-len(t.Value):] == t.Value)
+	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) &&
+		input[len(input)-len(t.Value):] == t.Value)
 }
 
 // Execute executes the trigger action
@@ -272,7 +272,7 @@ func (t *AutoTrigger) Execute(vm VMInterface) error {
 			return err
 		}
 	}
-	
+
 	// Auto triggers don't jump to labels, they just respond
 	return nil
 }
@@ -288,8 +288,8 @@ func (t *AutoTextTrigger) Matches(input string) bool {
 	if !t.Active {
 		return false
 	}
-	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) && 
-		   input[len(input)-len(t.Value):] == t.Value)
+	return input == t.Value || (t.Value != "" && len(input) >= len(t.Value) &&
+		input[len(input)-len(t.Value):] == t.Value)
 }
 
 // Execute executes the trigger action
@@ -299,6 +299,6 @@ func (t *AutoTextTrigger) Execute(vm VMInterface) error {
 			return err
 		}
 	}
-	
+
 	return nil
 }

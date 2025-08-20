@@ -18,7 +18,7 @@ func GetParamString(vm types.VMInterface, param *types.CommandParam) string {
 	return value.ToString()
 }
 
-// GetParamNumber gets the numeric value from a command parameter  
+// GetParamNumber gets the numeric value from a command parameter
 func GetParamNumber(vm types.VMInterface, param *types.CommandParam) float64 {
 	value := GetParamValue(vm, param)
 	return value.ToNumber()
@@ -28,7 +28,7 @@ func GetParamNumber(vm types.VMInterface, param *types.CommandParam) float64 {
 func SplitWords(text string) []string {
 	var words []string
 	var currentWord []rune
-	
+
 	for _, r := range text {
 		if r == ' ' || r == '\t' || r == '\n' || r == '\r' {
 			if len(currentWord) > 0 {
@@ -39,10 +39,10 @@ func SplitWords(text string) []string {
 			currentWord = append(currentWord, r)
 		}
 	}
-	
+
 	if len(currentWord) > 0 {
 		words = append(words, string(currentWord))
 	}
-	
+
 	return words
 }

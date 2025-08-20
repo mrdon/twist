@@ -85,14 +85,14 @@ func (pc PortClass) String() string {
 }
 
 type PortInfo struct {
-	SectorID     int           `json:"sector_id"`
-	Name         string        `json:"name"`
-	Class        int           `json:"class"`
-	ClassType    PortClass     `json:"class_type"`
-	BuildTime    int           `json:"build_time"`
-	Products     []ProductInfo `json:"products"`
-	LastUpdate   time.Time     `json:"last_update"`
-	Dead         bool          `json:"dead"`
+	SectorID   int           `json:"sector_id"`
+	Name       string        `json:"name"`
+	Class      int           `json:"class"`
+	ClassType  PortClass     `json:"class_type"`
+	BuildTime  int           `json:"build_time"`
+	Products   []ProductInfo `json:"products"`
+	LastUpdate time.Time     `json:"last_update"`
+	Dead       bool          `json:"dead"`
 }
 
 type ProductInfo struct {
@@ -107,23 +107,23 @@ type ProxyAPI interface {
 	// Connection Management
 	Disconnect() error
 	IsConnected() bool
-	
-	// Data Processing (symmetric with OnData)  
+
+	// Data Processing (symmetric with OnData)
 	SendData(data []byte) error
-	
+
 	// Script Management (Phase 3)
 	LoadScript(filename string) error
 	StopAllScripts() error
 	GetScriptStatus() ScriptStatusInfo
-	
+
 	// Game State Management (Phase 4)
 	GetCurrentSector() (int, error)
 	GetSectorInfo(sectorNum int) (SectorInfo, error)
 	GetPlayerInfo() (PlayerInfo, error)
-	
+
 	// Port Information (Phase 2)
 	GetPortInfo(sectorNum int) (*PortInfo, error)
-	
+
 	// Player Statistics
 	GetPlayerStats() (*PlayerStatsInfo, error)
 }
@@ -140,24 +140,24 @@ type TuiAPI interface {
 
 	// Data Events - must return immediately (high frequency calls)
 	OnData(data []byte)
-	
+
 	// Script Events (Phase 3)
 	OnScriptStatusChanged(status ScriptStatusInfo)
 	OnScriptError(scriptName string, err error)
-	
+
 	// Database Events - called when game databases are loaded/unloaded
 	OnDatabaseStateChanged(info DatabaseStateInfo)
-	
+
 	// Game State Events (Phase 4.3 - MINIMAL)
 	OnCurrentSectorChanged(sectorInfo SectorInfo) // Sector change callback with full sector information
-	
+
 	// Trader and Player Info Events - called when trader data or player stats are updated
 	OnTraderDataUpdated(sectorNumber int, traders []TraderInfo) // Trader information captured from sector display
-	OnPlayerStatsUpdated(stats PlayerStatsInfo) // Player statistics updated from QuickStats or inventory commands
-	
+	OnPlayerStatsUpdated(stats PlayerStatsInfo)                 // Player statistics updated from QuickStats or inventory commands
+
 	// Port Events - called when port information is updated
 	OnPortUpdated(portInfo PortInfo) // Port information updated from parsing
-	
+
 	// Sector Events - called when sector data is updated (e.g. from etherprobe)
 	OnSectorUpdated(sectorInfo SectorInfo) // Sector information updated from parsing or probe data
 }
@@ -187,7 +187,7 @@ func (cs ConnectionStatus) String() string {
 // ScriptStatusInfo provides basic script information for Phase 3
 type ScriptStatusInfo struct {
 	ActiveCount int      `json:"active_count"` // Number of running scripts
-	TotalCount  int      `json:"total_count"`  // Total number of loaded scripts  
+	TotalCount  int      `json:"total_count"`  // Total number of loaded scripts
 	ScriptNames []string `json:"script_names"` // Names of loaded scripts
 }
 
@@ -199,32 +199,32 @@ type PlayerInfo struct {
 
 // SectorInfo provides basic sector information for panel display
 type SectorInfo struct {
-	Number        int    `json:"number"`         // Sector number
-	NavHaz        int    `json:"nav_haz"`        // Navigation hazard level  
-	HasTraders    int    `json:"has_traders"`    // Number of traders present
-	Constellation string `json:"constellation"`  // Constellation name
-	Beacon        string `json:"beacon"`         // Beacon text
-	Warps         []int  `json:"warps"`          // Warp connections to other sectors
-	HasPort       bool   `json:"has_port,omitempty"`       // True if sector has a port
-	Visited       bool   `json:"visited"`        // True only if sector has been actually visited (EtHolo)
+	Number        int    `json:"number"`             // Sector number
+	NavHaz        int    `json:"nav_haz"`            // Navigation hazard level
+	HasTraders    int    `json:"has_traders"`        // Number of traders present
+	Constellation string `json:"constellation"`      // Constellation name
+	Beacon        string `json:"beacon"`             // Beacon text
+	Warps         []int  `json:"warps"`              // Warp connections to other sectors
+	HasPort       bool   `json:"has_port,omitempty"` // True if sector has a port
+	Visited       bool   `json:"visited"`            // True only if sector has been actually visited (EtHolo)
 }
 
 // DatabaseStateInfo provides information about database loading/unloading
 type DatabaseStateInfo struct {
-	GameName     string `json:"game_name"`      // Name of the game (e.g., "Trade Wars 2002")
-	ServerHost   string `json:"server_host"`    // Server host (e.g., "twgs.geekm0nkey.com")
-	ServerPort   string `json:"server_port"`    // Server port (e.g., "23")
-	DatabaseName string `json:"database_name"`  // Database filename
-	IsLoaded     bool   `json:"is_loaded"`      // true when database is loaded, false when unloaded
+	GameName     string `json:"game_name"`     // Name of the game (e.g., "Trade Wars 2002")
+	ServerHost   string `json:"server_host"`   // Server host (e.g., "twgs.geekm0nkey.com")
+	ServerPort   string `json:"server_port"`   // Server port (e.g., "23")
+	DatabaseName string `json:"database_name"` // Database filename
+	IsLoaded     bool   `json:"is_loaded"`     // true when database is loaded, false when unloaded
 }
 
 // TraderInfo represents trader information for TUI API
 type TraderInfo struct {
-	Name      string `json:"name"`       // Trader name
-	ShipName  string `json:"ship_name"`  // Ship name (e.g., "USS Enterprise")
-	ShipType  string `json:"ship_type"`  // Ship type (e.g., "Imperial StarShip")
-	Fighters  int    `json:"fighters"`   // Number of fighters
-	Alignment string `json:"alignment"`  // Alignment (Good, Evil, Neutral, etc.)
+	Name      string `json:"name"`      // Trader name
+	ShipName  string `json:"ship_name"` // Ship name (e.g., "USS Enterprise")
+	ShipType  string `json:"ship_type"` // Ship type (e.g., "Imperial StarShip")
+	Fighters  int    `json:"fighters"`  // Number of fighters
+	Alignment string `json:"alignment"` // Alignment (Good, Evil, Neutral, etc.)
 }
 
 // PlayerStatsInfo represents current player statistics for TUI API
@@ -260,4 +260,3 @@ type PlayerStatsInfo struct {
 	CurrentSector int    `json:"current_sector"` // Current sector number
 	PlayerName    string `json:"player_name"`    // Player name
 }
-

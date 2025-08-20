@@ -9,24 +9,24 @@ import (
 // This ensures consistent colors regardless of terminal color scheme
 var (
 	// Basic 8 colors (0-7)
-	DOSBlack     = tcell.NewHexColor(0x000000)  // 0: Black
-	DOSRed       = tcell.NewHexColor(0x800000)  // 1: Red (Dark Red)
-	DOSGreen     = tcell.NewHexColor(0x008000)  // 2: Green (Dark Green)
-	DOSBrown     = tcell.NewHexColor(0x808000)  // 3: Yellow/Brown (Dark Yellow)
-	DOSBlue      = tcell.NewHexColor(0x000080)  // 4: Blue (Dark Blue)
-	DOSMagenta   = tcell.NewHexColor(0x800080)  // 5: Magenta (Dark Magenta)
-	DOSCyan      = tcell.NewHexColor(0x008080)  // 6: Cyan (Dark Cyan)
-	DOSLightGray = tcell.NewHexColor(0xC0C0C0)  // 7: White/Light Gray
-	
+	DOSBlack     = tcell.NewHexColor(0x000000) // 0: Black
+	DOSRed       = tcell.NewHexColor(0x800000) // 1: Red (Dark Red)
+	DOSGreen     = tcell.NewHexColor(0x008000) // 2: Green (Dark Green)
+	DOSBrown     = tcell.NewHexColor(0x808000) // 3: Yellow/Brown (Dark Yellow)
+	DOSBlue      = tcell.NewHexColor(0x000080) // 4: Blue (Dark Blue)
+	DOSMagenta   = tcell.NewHexColor(0x800080) // 5: Magenta (Dark Magenta)
+	DOSCyan      = tcell.NewHexColor(0x008080) // 6: Cyan (Dark Cyan)
+	DOSLightGray = tcell.NewHexColor(0xC0C0C0) // 7: White/Light Gray
+
 	// Bright 8 colors (8-15)
-	DOSDarkGray     = tcell.NewHexColor(0x808080)  // 8: Gray (Dark Gray)
-	DOSLightRed     = tcell.NewHexColor(0xFF0000)  // 9: Bright Red
-	DOSLightGreen   = tcell.NewHexColor(0x00FF00)  // 10: Bright Green
-	DOSYellow       = tcell.NewHexColor(0xFFFF00)  // 11: Bright Yellow
-	DOSLightBlue    = tcell.NewHexColor(0x0000FF)  // 12: Bright Blue
-	DOSLightMagenta = tcell.NewHexColor(0xFF00FF)  // 13: Bright Magenta
-	DOSLightCyan    = tcell.NewHexColor(0x00FFFF)  // 14: Bright Cyan
-	DOSWhite        = tcell.NewHexColor(0xFFFFFF)  // 15: Bright White
+	DOSDarkGray     = tcell.NewHexColor(0x808080) // 8: Gray (Dark Gray)
+	DOSLightRed     = tcell.NewHexColor(0xFF0000) // 9: Bright Red
+	DOSLightGreen   = tcell.NewHexColor(0x00FF00) // 10: Bright Green
+	DOSYellow       = tcell.NewHexColor(0xFFFF00) // 11: Bright Yellow
+	DOSLightBlue    = tcell.NewHexColor(0x0000FF) // 12: Bright Blue
+	DOSLightMagenta = tcell.NewHexColor(0xFF00FF) // 13: Bright Magenta
+	DOSLightCyan    = tcell.NewHexColor(0x00FFFF) // 14: Bright Cyan
+	DOSWhite        = tcell.NewHexColor(0xFFFFFF) // 15: Bright White
 )
 
 // TelixTheme implements the classic Telix DOS terminal theme
@@ -47,35 +47,35 @@ func (t *TelixTheme) DefaultColors() DefaultColors {
 	return DefaultColors{
 		Background: DOSBlack,
 		Foreground: DOSLightGray,
-		Waiting:    DOSDarkGray,       // Dark gray for waiting messages
+		Waiting:    DOSDarkGray, // Dark gray for waiting messages
 	}
 }
 
 // DialogColors returns the dialog color scheme
 func (t *TelixTheme) DialogColors() DialogColors {
 	return DialogColors{
-		Background:  DOSBlue,                            // Main dialog background
-		Foreground:  DOSWhite,                           // Text and labels
-		Border:      DOSWhite,                           // Border lines
-		Title:       DOSWhite,                           // Dialog title
-		SelectedBg:  DOSWhite,                           // Selected item background
-		SelectedFg:  DOSBlack,                           // Selected item text
-		ButtonBg:    DOSLightGray,                       // Button background (light gray)
-		ButtonFg:    DOSBlack,                           // Button text (black)
-		FieldBg:     tcell.NewHexColor(0x000040),        // Input field background (darker blue)
-		FieldFg:     DOSWhite,                           // Input field text (white)
+		Background: DOSBlue,                     // Main dialog background
+		Foreground: DOSWhite,                    // Text and labels
+		Border:     DOSWhite,                    // Border lines
+		Title:      DOSWhite,                    // Dialog title
+		SelectedBg: DOSWhite,                    // Selected item background
+		SelectedFg: DOSBlack,                    // Selected item text
+		ButtonBg:   DOSLightGray,                // Button background (light gray)
+		ButtonFg:   DOSBlack,                    // Button text (black)
+		FieldBg:    tcell.NewHexColor(0x000040), // Input field background (darker blue)
+		FieldFg:    DOSWhite,                    // Input field text (white)
 	}
 }
 
 // MenuColors returns the menu color scheme
 func (t *TelixTheme) MenuColors() MenuColors {
 	return MenuColors{
-		Background:  DOSBlue,        // Blue background for menu bar
-		Foreground:  DOSWhite,       // White text for menu bar items
-		SelectedBg:  DOSRed,         // Red background for selected items (like reference)
-		SelectedFg:  DOSWhite,       // White text on red background
-		DisabledFg:  DOSDarkGray,    // Dark gray for disabled items
-		Separator:   DOSWhite,       // White separator lines
+		Background: DOSBlue,     // Blue background for menu bar
+		Foreground: DOSWhite,    // White text for menu bar items
+		SelectedBg: DOSRed,      // Red background for selected items (like reference)
+		SelectedFg: DOSWhite,    // White text on red background
+		DisabledFg: DOSDarkGray, // Dark gray for disabled items
+		Separator:  DOSWhite,    // White separator lines
 	}
 }
 
@@ -83,8 +83,8 @@ func (t *TelixTheme) MenuColors() MenuColors {
 func (t *TelixTheme) TerminalColors() TerminalColors {
 	return TerminalColors{
 		Background: DOSBlack,
-		Foreground: DOSLightGray,      // Light gray text (standard DOS terminal)
-		Border:     DOSLightGray,      // Light gray borders
+		Foreground: DOSLightGray, // Light gray text (standard DOS terminal)
+		Border:     DOSLightGray, // Light gray borders
 		ScrollBar:  DOSDarkGray,
 	}
 }
@@ -92,15 +92,15 @@ func (t *TelixTheme) TerminalColors() TerminalColors {
 // StatusColors returns the status bar color scheme (menu bar)
 func (t *TelixTheme) StatusColors() StatusColors {
 	return StatusColors{
-		Background:     DOSRed,         // Red background for status bar (classic Telix style)
-		Foreground:     DOSYellow,      // Yellow text on red background
-		HighlightBg:    DOSRed,         // Red background for selected menu items (like reference)
-		HighlightFg:    DOSWhite,       // White text on red background
+		Background:     DOSRed,    // Red background for status bar (classic Telix style)
+		Foreground:     DOSYellow, // Yellow text on red background
+		HighlightBg:    DOSRed,    // Red background for selected menu items (like reference)
+		HighlightFg:    DOSWhite,  // White text on red background
 		ErrorBg:        DOSRed,
 		ErrorFg:        DOSWhite,
-		ConnectedFg:    DOSLightGreen,  // Bright green for connected status
-		ConnectingFg:   DOSYellow,      // Yellow for connecting status
-		DisconnectedFg: DOSLightRed,    // Bright red for disconnected status
+		ConnectedFg:    DOSLightGreen, // Bright green for connected status
+		ConnectingFg:   DOSYellow,     // Yellow for connecting status
+		DisconnectedFg: DOSLightRed,   // Bright red for disconnected status
 	}
 }
 
@@ -109,32 +109,32 @@ func (t *TelixTheme) PanelColors() PanelColors {
 	return PanelColors{
 		Background: DOSBlack,
 		Foreground: DOSLightGray,
-		Border:     DOSLightGray,      // Light gray borders (not cyan)
-		Title:      DOSLightGray,      // Light gray titles (not cyan)
-		HeaderBg:   DOSBlack,          // Black header background (not cyan)
-		HeaderFg:   DOSLightGray,      // Light gray text on black header
+		Border:     DOSLightGray, // Light gray borders (not cyan)
+		Title:      DOSLightGray, // Light gray titles (not cyan)
+		HeaderBg:   DOSBlack,     // Black header background (not cyan)
+		HeaderFg:   DOSLightGray, // Light gray text on black header
 	}
 }
 
 // SectorMapColors returns the sector map color scheme
 func (t *TelixTheme) SectorMapColors() SectorMapColors {
 	return SectorMapColors{
-		CurrentSectorBg: DOSYellow,        // Bright yellow background for current sector
-		CurrentSectorFg: DOSBlack,         // Black text on yellow background
-		PortSectorBg:    DOSGreen,         // Dark green background for ports
-		PortSectorFg:    DOSWhite,         // White text on green background
-		EmptySectorBg:   DOSBlue,          // Blue background for empty sectors
-		EmptySectorFg:   DOSWhite,         // White text on blue background
-		ConnectionLine:  DOSLightGray,     // Light gray for connection lines
-		MapBackground:   DOSBlack,         // Black background for map area
+		CurrentSectorBg: DOSYellow,    // Bright yellow background for current sector
+		CurrentSectorFg: DOSBlack,     // Black text on yellow background
+		PortSectorBg:    DOSGreen,     // Dark green background for ports
+		PortSectorFg:    DOSWhite,     // White text on green background
+		EmptySectorBg:   DOSBlue,      // Blue background for empty sectors
+		EmptySectorFg:   DOSWhite,     // White text on blue background
+		ConnectionLine:  DOSLightGray, // Light gray for connection lines
+		MapBackground:   DOSBlack,     // Black background for map area
 	}
 }
 
 // BorderStyle returns the border styling
 func (t *TelixTheme) BorderStyle() BorderStyle {
 	return BorderStyle{
-		Color:      DOSLightGray,          // Light gray borders
-		TitleColor: DOSLightGray,          // Light gray titles
+		Color:      DOSLightGray, // Light gray borders
+		TitleColor: DOSLightGray, // Light gray titles
 		Padding:    0,
 	}
 }
@@ -166,4 +166,3 @@ func (t *TelixTheme) ANSIColorPalette() [16]tcell.Color {
 		DOSWhite,        // 15: Bright White
 	}
 }
-
