@@ -369,3 +369,111 @@ func (s *SectorTracker) Execute(db *sql.DB) error {
 	debug.Log("Successfully updated sector %d with discovered fields: %v", s.sectorIndex, getFieldNames(s.updates))
 	return nil
 }
+
+// PortTracker tracks discovered port field updates during parsing
+// Uses discovered field tracking - only updates fields that were actually parsed
+type PortTracker struct {
+	sectorIndex int
+	updates     map[string]interface{}
+}
+
+// NewPortTracker creates a new port tracker for the given sector
+func NewPortTracker(sectorIndex int) *PortTracker {
+	return &PortTracker{
+		sectorIndex: sectorIndex,
+		updates:     make(map[string]interface{}),
+	}
+}
+
+// SetName records that name field was discovered during parsing
+func (p *PortTracker) SetName(name string) *PortTracker {
+	p.updates[ColPortName] = name
+	return p
+}
+
+// SetDead records that dead field was discovered during parsing
+func (p *PortTracker) SetDead(dead bool) *PortTracker {
+	p.updates[ColPortDead] = dead
+	return p
+}
+
+// SetBuildTime records that build_time field was discovered during parsing
+func (p *PortTracker) SetBuildTime(buildTime int) *PortTracker {
+	p.updates[ColPortBuildTime] = buildTime
+	return p
+}
+
+// SetClassIndex records that class_index field was discovered during parsing
+func (p *PortTracker) SetClassIndex(classIndex int) *PortTracker {
+	p.updates[ColPortClassIndex] = classIndex
+	return p
+}
+
+// SetBuyProducts records what products the port buys/sells
+func (p *PortTracker) SetBuyProducts(buyFuelOre, buyOrganics, buyEquipment bool) *PortTracker {
+	p.updates[ColPortBuyFuelOre] = buyFuelOre
+	p.updates[ColPortBuyOrganics] = buyOrganics
+	p.updates[ColPortBuyEquipment] = buyEquipment
+	return p
+}
+
+// SetProductPercents records the percentages for each product
+func (p *PortTracker) SetProductPercents(percentFuelOre, percentOrganics, percentEquipment int) *PortTracker {
+	p.updates[ColPortPercentFuelOre] = percentFuelOre
+	p.updates[ColPortPercentOrganics] = percentOrganics
+	p.updates[ColPortPercentEquipment] = percentEquipment
+	return p
+}
+
+// SetProductAmounts records the amounts for each product
+func (p *PortTracker) SetProductAmounts(amountFuelOre, amountOrganics, amountEquipment int) *PortTracker {
+	p.updates[ColPortAmountFuelOre] = amountFuelOre
+	p.updates[ColPortAmountOrganics] = amountOrganics
+	p.updates[ColPortAmountEquipment] = amountEquipment
+	return p
+}
+
+// HasUpdates returns true if any fields were discovered during parsing
+func (p *PortTracker) HasUpdates() bool {
+	return len(p.updates) > 0
+}
+
+// Execute writes discovered fields to database using Squirrel query builder
+// Only fields that were actually parsed/discovered are updated
+func (p *PortTracker) Execute(db *sql.DB) error {
+	if len(p.updates) == 0 {
+		return nil // No updates to perform
+	}
+	
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	
+	// Ensure port record exists (UPSERT pattern)
+	_, err := db.Exec("INSERT OR IGNORE INTO ports (sector_index) VALUES (?)", p.sectorIndex)
+	if err != nil {
+		debug.Log("Failed to ensure port record exists for sector %d: %v", p.sectorIndex, err)
+		return err
+	}
+	
+	// Build dynamic UPDATE query with only discovered fields
+	query := psql.Update("ports").
+		SetMap(p.updates).
+		Set("updated_at", "CURRENT_TIMESTAMP").
+		Where(squirrel.Eq{"sector_index": p.sectorIndex})
+	
+	sql, args, err := query.ToSql()
+	if err != nil {
+		debug.Log("Failed to build port update query for sector %d: %v", p.sectorIndex, err)
+		return err
+	}
+	
+	debug.Log("Executing port update for sector %d with %d discovered fields: %s", p.sectorIndex, len(p.updates), sql)
+	
+	_, err = db.Exec(sql, args...)
+	if err != nil {
+		debug.Log("Failed to execute port update for sector %d: %v", p.sectorIndex, err)
+		return err
+	}
+	
+	debug.Log("Successfully updated port for sector %d with discovered fields: %v", p.sectorIndex, getFieldNames(p.updates))
+	return nil
+}

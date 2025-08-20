@@ -51,3 +51,20 @@ const (
 	ColSectorAnomaly       = "anomaly"
 	ColSectorExplored      = "explored"
 )
+
+// Phase 3: Port column constants
+const (
+	ColPortName              = "name"
+	ColPortDead              = "dead"
+	ColPortBuildTime         = "build_time"
+	ColPortClassIndex        = "class_index"
+	ColPortBuyFuelOre        = "buy_fuel_ore"
+	ColPortBuyOrganics       = "buy_organics"
+	ColPortBuyEquipment      = "buy_equipment"
+	ColPortPercentFuelOre    = "percent_fuel_ore"
+	ColPortPercentOrganics   = "percent_organics"
+	ColPortPercentEquipment  = "percent_equipment"
+	ColPortAmountFuelOre     = "amount_fuel_ore"
+	ColPortAmountOrganics    = "amount_organics"
+	ColPortAmountEquipment   = "amount_equipment"
+)

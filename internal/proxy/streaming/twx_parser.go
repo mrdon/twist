@@ -226,6 +226,9 @@ type TWXParser struct {
 	// Phase 2: Straight SQL sector and collection trackers (replace intermediate objects)
 	sectorTracker     *SectorTracker
 	sectorCollections *SectorCollections
+	
+	// Phase 3: Straight SQL port tracker (replace intermediate objects)
+	portTracker       *PortTracker
 
 	// Info display parsing state
 	infoDisplay InfoDisplay
@@ -824,6 +827,7 @@ func (p *TWXParser) handleSectorStart(line string) {
 			// Start new discovered field session
 			p.sectorTracker = NewSectorTracker(sectorNum)
 			p.sectorCollections = NewSectorCollections(sectorNum)
+			p.portTracker = NewPortTracker(sectorNum)
 
 			p.currentDisplay = DisplaySector
 
@@ -922,7 +926,14 @@ func (p *TWXParser) handleSectorPorts(line string) {
 		classNum = p.determinePortClassFromPattern(buyOre, buyOrg, buyEquip)
 	}
 
-	// Store port information in current sector data (mirrors Pascal FCurrentSector.SPort)
+	// Phase 3: Store port information using straight-sql tracker
+	if p.portTracker != nil {
+		p.portTracker.SetName(portName).SetClassIndex(classNum).SetBuildTime(0)
+		p.portTracker.SetBuyProducts(buyOre, buyOrg, buyEquip)
+		debug.Log("PORT: Tracker updated - name=%s, class=%d, buy_pattern=%t%t%t", portName, classNum, buyOre, buyOrg, buyEquip)
+	}
+	
+	// Legacy: Store port information in current sector data (for compatibility)
 	p.currentSector.Port.Name = portName
 	p.currentSector.Port.ClassIndex = classNum
 	p.currentSector.Port.BuildTime = 0 // Reset build time, will be set by continuation line
@@ -1683,6 +1694,7 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 		p.currentSectorIndex = sectorNum
 		p.sectorTracker = NewSectorTracker(sectorNum)
 		p.sectorCollections = NewSectorCollections(sectorNum)
+		p.portTracker = NewPortTracker(sectorNum)
 	}
 	
 	// Parse density (parameter 4, remove commas)
@@ -2133,6 +2145,25 @@ func (p *TWXParser) sectorCompleted() {
 			debug.Log("SECTOR_PARSER: Failed to update sector collections: %v", err)
 		}
 	}
+	
+	// Phase 3: Execute port tracker for straight-sql approach
+	if p.portTracker != nil && p.portTracker.HasUpdates() {
+		err := p.portTracker.Execute(p.database.GetDB())
+		if err != nil {
+			debug.Log("PORT_PARSER: Failed to update port fields: %v", err)
+		} else {
+			// Phase 3: Fire OnPortUpdated API event with fresh database read
+			if p.tuiAPI != nil {
+				portInfo, err := p.database.GetPortInfo(p.currentSectorIndex)
+				if err == nil && portInfo != nil {
+					debug.Log("PORT_PARSER: Firing OnPortUpdated for sector %d: %s (Class %d)", p.currentSectorIndex, portInfo.Name, portInfo.Class)
+					p.tuiAPI.OnPortUpdated(*portInfo)
+				} else {
+					debug.Log("PORT_PARSER: Failed to read fresh port info for API event: %v", err)
+				}
+			}
+		}
+	}
 
 	// Save sector data to database - database methods will panic on errors
 	// This prevents overwriting probe warps that were saved separately
@@ -2141,24 +2172,40 @@ func (p *TWXParser) sectorCompleted() {
 	// Save the parsed warps from sector display
 	p.saveSectorWarps()
 
-	// Handle port data - save if we have it, clear if we parsed a complete sector without finding any
+	// Phase 3: Handle port data parsed from sector display using PortTracker
 	if p.currentSector.Port.Name != "" || p.currentSector.Port.ClassIndex > 0 {
-		// We found port data, save it
-		debug.Log("PORT: Saving port data for sector %d: %s (Class %d)", p.currentSectorIndex, p.currentSector.Port.Name, p.currentSector.Port.ClassIndex)
-		p.saveSectorPort()
-	} else {
-		// Only clear port data if we've finished parsing a complete sector AND we have no other sector features
-		// This prevents clearing ports for sectors with planets/citadels that might have special properties
-		hasOtherFeatures := len(p.currentShips) > 0 || len(p.currentTraders) > 0 || len(p.currentPlanets) > 0 || len(p.currentMines) > 0
-		if !hasOtherFeatures {
-			// We've completed parsing a basic sector without any features, clear any existing port data
-			debug.Log("PORT: Clearing port data for sector %d (basic sector with no features)", p.currentSectorIndex)
-			p.clearSectorPort()
-		} else {
-			debug.Log("PORT: Sector %d has other features (%d ships, %d traders, %d planets, %d mines), not clearing port data",
-				p.currentSectorIndex, len(p.currentShips), len(p.currentTraders), len(p.currentPlanets), len(p.currentMines))
+		// Port data was found in sector display - update PortTracker with discovered data
+		if p.portTracker != nil {
+			if p.currentSector.Port.Name != "" {
+				p.portTracker.SetName(p.currentSector.Port.Name)
+			}
+			if p.currentSector.Port.ClassIndex > 0 {
+				p.portTracker.SetClassIndex(p.currentSector.Port.ClassIndex)
+			}
+			if p.currentSector.Port.BuildTime > 0 {
+				p.portTracker.SetBuildTime(p.currentSector.Port.BuildTime)
+			}
+			// Set buy/sell status for products
+			p.portTracker.SetBuyProducts(
+				p.currentSector.Port.BuyOre,
+				p.currentSector.Port.BuyOrg,
+				p.currentSector.Port.BuyEquip,
+			)
+			p.portTracker.SetProductAmounts(
+				p.currentSector.Port.OreAmount,
+				p.currentSector.Port.OrgAmount,
+				p.currentSector.Port.EquipAmount,
+			)
+			p.portTracker.SetProductPercents(
+				p.currentSector.Port.OrePercent,
+				p.currentSector.Port.OrgPercent,
+				p.currentSector.Port.EquipPercent,
+			)
+			debug.Log("PORT: Updated tracker from sector display - name=%s, class=%d", 
+				p.currentSector.Port.Name, p.currentSector.Port.ClassIndex)
 		}
 	}
+	// Note: Phase 3 uses discovered field tracking - if no port found, no action needed
 
 	// Phase 2: Exploration status now handled by tracker system above
 	// Legacy saveSectorProbeData/saveSectorVisited calls removed
@@ -2191,6 +2238,7 @@ func (p *TWXParser) sectorCompleted() {
 	// Phase 2: Reset trackers for next parsing session
 	p.sectorTracker = nil
 	p.sectorCollections = nil
+	p.portTracker = nil
 
 	p.sectorSaved = true
 }

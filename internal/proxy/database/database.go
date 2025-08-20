@@ -45,6 +45,7 @@ type Database interface {
 	LoadPlayerStats() (TPlayerStats, error)
 	GetPlayerStatsInfo() (api.PlayerStatsInfo, error) // Phase 1: Straight SQL method
 	GetSectorInfo(sectorIndex int) (api.SectorInfo, error) // Phase 2: Straight SQL method
+	GetPortInfo(sectorIndex int) (*api.PortInfo, error) // Phase 3: Straight SQL method
 	AddMessageToHistory(message TMessageHistory) error
 	GetMessageHistory(limit int) ([]TMessageHistory, error)
 	
@@ -1088,6 +1089,137 @@ func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) 
 	if explored.Valid {
 		info.Visited = explored.Int64 > 0
 	}
+	
+	return info, nil
+}
+
+// GetPortInfo reads complete port info from database for API events
+// This method is used after PortTracker updates to provide fresh, complete data
+func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
+	if !d.dbOpen {
+		return nil, fmt.Errorf("database not open")
+	}
+	
+	// Query port data
+	query := `
+		SELECT name, dead, build_time, class_index,
+		       buy_fuel_ore, buy_organics, buy_equipment,
+		       percent_fuel_ore, percent_organics, percent_equipment,
+		       amount_fuel_ore, amount_organics, amount_equipment,
+		       updated_at
+		FROM ports WHERE sector_index = ?`
+	
+	row := d.db.QueryRow(query, sectorIndex)
+	
+	var name sql.NullString
+	var dead sql.NullBool
+	var buildTime, classIndex sql.NullInt64
+	var buyFuelOre, buyOrganics, buyEquipment sql.NullBool
+	var percentFuelOre, percentOrganics, percentEquipment sql.NullInt64
+	var amountFuelOre, amountOrganics, amountEquipment sql.NullInt64
+	var updateTime sql.NullTime
+	
+	err := row.Scan(&name, &dead, &buildTime, &classIndex,
+		&buyFuelOre, &buyOrganics, &buyEquipment,
+		&percentFuelOre, &percentOrganics, &percentEquipment,
+		&amountFuelOre, &amountOrganics, &amountEquipment,
+		&updateTime)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// No port record exists for this sector
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get port info for sector %d: %w", sectorIndex, err)
+	}
+	
+	// Build port info object
+	info := &api.PortInfo{
+		SectorID: sectorIndex,
+		Dead:     dead.Bool,
+	}
+	
+	if name.Valid {
+		info.Name = name.String
+	}
+	if buildTime.Valid {
+		info.BuildTime = int(buildTime.Int64)
+	}
+	if classIndex.Valid {
+		info.Class = int(classIndex.Int64)
+		info.ClassType = api.PortClass(classIndex.Int64)
+	}
+	if updateTime.Valid {
+		info.LastUpdate = updateTime.Time
+	}
+	
+	// Build products array with discovered data
+	products := make([]api.ProductInfo, 0, 3)
+	
+	// Fuel Ore (ProductType = 0)
+	if buyFuelOre.Valid || percentFuelOre.Valid || amountFuelOre.Valid {
+		product := api.ProductInfo{
+			Type: api.ProductTypeFuelOre,
+		}
+		if buyFuelOre.Valid {
+			if buyFuelOre.Bool {
+				product.Status = api.ProductStatusBuying
+			} else {
+				product.Status = api.ProductStatusSelling
+			}
+		}
+		if amountFuelOre.Valid {
+			product.Quantity = int(amountFuelOre.Int64)
+		}
+		if percentFuelOre.Valid {
+			product.Percentage = int(percentFuelOre.Int64)
+		}
+		products = append(products, product)
+	}
+	
+	// Organics (ProductType = 1)
+	if buyOrganics.Valid || percentOrganics.Valid || amountOrganics.Valid {
+		product := api.ProductInfo{
+			Type: api.ProductTypeOrganics,
+		}
+		if buyOrganics.Valid {
+			if buyOrganics.Bool {
+				product.Status = api.ProductStatusBuying
+			} else {
+				product.Status = api.ProductStatusSelling
+			}
+		}
+		if amountOrganics.Valid {
+			product.Quantity = int(amountOrganics.Int64)
+		}
+		if percentOrganics.Valid {
+			product.Percentage = int(percentOrganics.Int64)
+		}
+		products = append(products, product)
+	}
+	
+	// Equipment (ProductType = 2)
+	if buyEquipment.Valid || percentEquipment.Valid || amountEquipment.Valid {
+		product := api.ProductInfo{
+			Type: api.ProductTypeEquipment,
+		}
+		if buyEquipment.Valid {
+			if buyEquipment.Bool {
+				product.Status = api.ProductStatusBuying
+			} else {
+				product.Status = api.ProductStatusSelling
+			}
+		}
+		if amountEquipment.Valid {
+			product.Quantity = int(amountEquipment.Int64)
+		}
+		if percentEquipment.Valid {
+			product.Percentage = int(percentEquipment.Int64)
+		}
+		products = append(products, product)
+	}
+	
+	info.Products = products
 	
 	return info, nil
 }

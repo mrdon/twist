@@ -345,22 +345,48 @@ func (p *TWXParser) savePortData(portClass int) {
 		BuildTime:  0,
 	}
 	
-	// Set buy/sell status and commodity data from parsed products
+	// Phase 3: Track discovered product data using straight-sql tracker
+	var amountOre, amountOrg, amountEquip int
+	var percentOre, percentOrg, percentEquip int
+	var buyOre, buyOrg, buyEquip bool
+	
+	// Extract product data from parsed products and update tracker
 	for _, product := range p.currentProducts {
 		switch product.Type {
 		case ProductFuelOre:
 			port.BuyProduct[database.PtFuelOre] = product.Buying
 			port.ProductAmount[database.PtFuelOre] = product.Quantity
 			port.ProductPercent[database.PtFuelOre] = product.Percent
+			// Track discovered data
+			buyOre = product.Buying
+			amountOre = product.Quantity
+			percentOre = product.Percent
 		case ProductOrganics:
 			port.BuyProduct[database.PtOrganics] = product.Buying
 			port.ProductAmount[database.PtOrganics] = product.Quantity
 			port.ProductPercent[database.PtOrganics] = product.Percent
+			// Track discovered data
+			buyOrg = product.Buying
+			amountOrg = product.Quantity
+			percentOrg = product.Percent
 		case ProductEquipment:
 			port.BuyProduct[database.PtEquipment] = product.Buying
 			port.ProductAmount[database.PtEquipment] = product.Quantity
 			port.ProductPercent[database.PtEquipment] = product.Percent
+			// Track discovered data
+			buyEquip = product.Buying
+			amountEquip = product.Quantity
+			percentEquip = product.Percent
 		}
+	}
+	
+	// Update port tracker with discovered product data
+	if p.portTracker != nil && len(p.currentProducts) > 0 {
+		p.portTracker.SetName(p.currentPortName).SetClassIndex(portClass)
+		p.portTracker.SetBuyProducts(buyOre, buyOrg, buyEquip)
+		p.portTracker.SetProductAmounts(amountOre, amountOrg, amountEquip)
+		p.portTracker.SetProductPercents(percentOre, percentOrg, percentEquip)
+		debug.Log("PORT: Tracker updated with product data - %d products discovered", len(p.currentProducts))
 	}
 	
 	// Save port to database
