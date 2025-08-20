@@ -134,6 +134,11 @@ func (p *TWXParser) parseShipLine(shipInfo string) {
 	}
 
 	p.currentShips = append(p.currentShips, ship)
+	
+	// Phase 2: Add ship to collection tracker
+	if p.sectorCollections != nil {
+		p.sectorCollections.AddShip(ship.Name, ship.Owner, ship.ShipType, ship.Fighters)
+	}
 }
 
 // handleShipContinuation handles continuation lines for ship data (mirrors Pascal lines 113-117)
@@ -347,6 +352,7 @@ func (p *TWXParser) parsePlanetInfo(planetInfo string) {
 		p.validatePlanetData(&planet)
 
 		p.currentPlanets = append(p.currentPlanets, planet)
+		p.sectorCollections.AddPlanet(planet.Name, planet.Owner, planet.Fighters, planet.Citadel, planet.Stardock)
 	}
 }
 
@@ -710,6 +716,11 @@ func (p *TWXParser) handleTraderContinuation(line string) {
 
 			// Add completed trader to list
 			p.currentTraders = append(p.currentTraders, trader)
+			
+			// Phase 2: Add trader to collection tracker
+			if p.sectorCollections != nil {
+				p.sectorCollections.AddTrader(trader.Name, trader.ShipName, trader.ShipType, trader.Fighters)
+			}
 
 			// Reset currentTrader to prevent duplicate addition in sectorCompleted
 			p.currentTrader = TraderInfo{}
@@ -738,6 +749,11 @@ func (p *TWXParser) handleTraderContinuation(line string) {
 
 			// Add completed trader to list
 			p.currentTraders = append(p.currentTraders, trader)
+			
+			// Phase 2: Add trader to collection tracker
+			if p.sectorCollections != nil {
+				p.sectorCollections.AddTrader(trader.Name, trader.ShipName, trader.ShipType, trader.Fighters)
+			}
 
 			// Reset currentTrader to prevent duplicate addition in sectorCompleted
 			p.currentTrader = TraderInfo{}

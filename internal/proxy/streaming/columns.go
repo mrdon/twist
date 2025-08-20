@@ -46,6 +46,7 @@ const (
 	ColSectorWarp4         = "warp4"
 	ColSectorWarp5         = "warp5"
 	ColSectorWarp6         = "warp6"
+	ColSectorWarps         = "warps"
 	ColSectorDensity       = "density"
 	ColSectorAnomaly       = "anomaly"
 	ColSectorExplored      = "explored"

@@ -44,6 +44,7 @@ type Database interface {
 	SavePlayerStats(stats TPlayerStats) error
 	LoadPlayerStats() (TPlayerStats, error)
 	GetPlayerStatsInfo() (api.PlayerStatsInfo, error) // Phase 1: Straight SQL method
+	GetSectorInfo(sectorIndex int) (api.SectorInfo, error) // Phase 2: Straight SQL method
 	AddMessageToHistory(message TMessageHistory) error
 	GetMessageHistory(limit int) ([]TMessageHistory, error)
 	
@@ -1007,6 +1008,85 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 			return info, nil
 		}
 		return info, fmt.Errorf("failed to get player stats info: %w", err)
+	}
+	
+	return info, nil
+}
+
+// GetSectorInfo reads complete sector info from database for API events
+// This method is used after SectorTracker updates to provide fresh, complete data
+func (d *SQLiteDatabase) GetSectorInfo(sectorIndex int) (api.SectorInfo, error) {
+	info := api.SectorInfo{Number: sectorIndex}
+	
+	if !d.dbOpen {
+		return info, fmt.Errorf("database not open")
+	}
+	
+	// Query basic sector fields
+	query := `
+		SELECT constellation, beacon, nav_haz, 
+		       warp1, warp2, warp3, warp4, warp5, warp6,
+		       density, anomaly, explored
+		FROM sectors WHERE sector_index = ?`
+	
+	row := d.db.QueryRow(query, sectorIndex)
+	
+	var constellation, beacon sql.NullString
+	var navHaz, density sql.NullInt64
+	var warps [6]sql.NullInt64
+	var anomaly sql.NullBool
+	var explored sql.NullInt64
+	
+	err := row.Scan(&constellation, &beacon, &navHaz,
+	               &warps[0], &warps[1], &warps[2], &warps[3], &warps[4], &warps[5],
+	               &density, &anomaly, &explored)
+	
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Return basic info if no sector record exists yet
+			debug.Log("No sector record found for sector %d, returning basic info", sectorIndex)
+			return info, nil
+		}
+		return info, fmt.Errorf("failed to get sector info for sector %d: %w", sectorIndex, err)
+	}
+	
+	// Populate info object from nullable database values
+	if constellation.Valid {
+		info.Constellation = constellation.String
+	}
+	if beacon.Valid {
+		info.Beacon = beacon.String
+	}
+	if navHaz.Valid {
+		info.NavHaz = int(navHaz.Int64)
+	}
+	
+	// Build warps array from non-zero values
+	warpList := make([]int, 0, 6)
+	for i := 0; i < 6; i++ {
+		if warps[i].Valid && warps[i].Int64 > 0 {
+			warpList = append(warpList, int(warps[i].Int64))
+		}
+	}
+	info.Warps = warpList
+	
+	// Check for port presence
+	portQuery := `SELECT COUNT(*) FROM ports WHERE sector_index = ?`
+	var portCount int
+	if err := d.db.QueryRow(portQuery, sectorIndex).Scan(&portCount); err == nil {
+		info.HasPort = portCount > 0
+	}
+	
+	// Count traders
+	tradersQuery := `SELECT COUNT(*) FROM traders WHERE sector_index = ?`
+	var traderCount int
+	if err := d.db.QueryRow(tradersQuery, sectorIndex).Scan(&traderCount); err == nil {
+		info.HasTraders = traderCount
+	}
+	
+	// Set visited based on explored status (simplified logic for now)
+	if explored.Valid {
+		info.Visited = explored.Int64 > 0
 	}
 	
 	return info, nil

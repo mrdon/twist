@@ -222,6 +222,10 @@ type TWXParser struct {
 	
 	// Phase 1: Straight SQL player stats tracker (replaces direct playerStats usage)
 	playerStatsTracker *PlayerStatsTracker
+	
+	// Phase 2: Straight SQL sector and collection trackers (replace intermediate objects)
+	sectorTracker     *SectorTracker
+	sectorCollections *SectorCollections
 
 	// Info display parsing state
 	infoDisplay InfoDisplay
@@ -553,7 +557,8 @@ func (p *TWXParser) processLine(line string) {
 	case DisplayCIM, DisplayPortCIM, DisplayWarpCIM:
 		p.processCIMLine(line)
 	case DisplayDensity:
-		p.processDensityLine(line)
+		// Phase 2: Density data now handled through straight-sql trackers
+		p.processDensityLineTracker(line)
 	case DisplayFigScan:
 		p.processFigScanLine(line)
 	default:
@@ -808,6 +813,18 @@ func (p *TWXParser) handleSectorStart(line string) {
 			debug.Log("SECTOR: After reset current sector, lastWarp=%d", p.lastWarp)
 			p.currentSectorIndex = sectorNum
 
+			// Phase 2: Initialize straight-sql trackers for new sector
+			if p.sectorTracker != nil && p.sectorTracker.HasUpdates() {
+				debug.Log("SECTOR: Discarding incomplete sector tracker - new sector detected")
+			}
+			if p.sectorCollections != nil && p.sectorCollections.HasData() {
+				debug.Log("SECTOR: Discarding incomplete sector collections - new sector detected")
+			}
+			
+			// Start new discovered field session
+			p.sectorTracker = NewSectorTracker(sectorNum)
+			p.sectorCollections = NewSectorCollections(sectorNum)
+
 			p.currentDisplay = DisplaySector
 
 			// Extract constellation (everything after "in")
@@ -818,6 +835,11 @@ func (p *TWXParser) handleSectorStart(line string) {
 				// Remove exploration status suffixes like "(unexplored)"
 				constellation = strings.TrimSuffix(constellation, " (unexplored)")
 				p.currentSector.Constellation = constellation
+				
+				// Phase 2: Record discovered constellation field
+				if p.sectorTracker != nil {
+					p.sectorTracker.SetConstellation(constellation)
+				}
 			}
 		}
 	}
@@ -837,7 +859,13 @@ func (p *TWXParser) handleSectorWarps(line string) {
 
 func (p *TWXParser) handleSectorBeacon(line string) {
 	if len(line) > 10 {
-		p.currentSector.Beacon = line[10:]
+		beacon := line[10:]
+		p.currentSector.Beacon = beacon
+		
+		// Phase 2: Record discovered beacon field
+		if p.sectorTracker != nil {
+			p.sectorTracker.SetBeacon(beacon)
+		}
 	}
 }
 
@@ -1629,6 +1657,91 @@ func (p *TWXParser) processDensityLine(line string) {
 	}
 }
 
+// processDensityLineTracker processes density scanner data using straight-sql tracker approach
+func (p *TWXParser) processDensityLineTracker(line string) {
+	// Parse density scan format: "Sector  XXXX  ==>           DENSITY  Warps : N    NavHaz :     X%    Anom : Yes/No"
+	if !strings.HasPrefix(line, "Sector") || !strings.Contains(line, "==>") {
+		return
+	}
+	
+	if p.database == nil {
+		return
+	}
+	
+	// Extract sector number
+	x := line
+	x = strings.ReplaceAll(x, "(", "")
+	x = strings.ReplaceAll(x, ")", "")
+	
+	sectorNum := p.parseIntSafe(p.getParameter(x, 2))
+	if sectorNum <= 0 {
+		return
+	}
+	
+	// Initialize tracker for this sector if not already done
+	if p.sectorTracker == nil || p.currentSectorIndex != sectorNum {
+		p.currentSectorIndex = sectorNum
+		p.sectorTracker = NewSectorTracker(sectorNum)
+		p.sectorCollections = NewSectorCollections(sectorNum)
+	}
+	
+	// Parse density (parameter 4, remove commas)
+	densityStr := p.getParameter(x, 4)
+	densityStr = strings.ReplaceAll(densityStr, ",", "")
+	if density := p.parseIntSafe(densityStr); density > 0 {
+		p.sectorTracker.SetDensity(density)
+	}
+	
+	// Parse anomaly (parameter 13: "Yes" or "No")
+	anomalyParam := p.getParameter(x, 13)
+	p.sectorTracker.SetAnomaly(anomalyParam == "Yes")
+	
+	// Parse NavHaz (parameter 10, remove % sign)
+	navhazStr := p.getParameter(x, 10)
+	if len(navhazStr) > 0 && strings.HasSuffix(navhazStr, "%") {
+		navhazStr = navhazStr[:len(navhazStr)-1]
+	}
+	if navhaz := p.parseIntSafe(navhazStr); navhaz >= 0 {
+		p.sectorTracker.SetNavHaz(navhaz)
+	}
+	
+	// Parse warp count (parameter 7) - but for density scans this is just informational
+	// We don't update warps from density scans as they're not reliable
+	
+	// Set exploration status based on density scan discovery
+	// Check current exploration status first to preserve higher statuses
+	currentSector, err := p.database.LoadSector(sectorNum)
+	var currentExplored database.TSectorExploredType
+	if err == nil {
+		currentExplored = currentSector.Explored
+	}
+	
+	debug.Log("DENSITY: Current exploration status for sector %d: %d (EtHolo=%d, EtDensity=%d)", 
+		sectorNum, int(currentExplored), int(database.EtHolo), int(database.EtDensity))
+	
+	// Only set to EtDensity if current status is EtNo or EtCalc (preserve EtHolo)
+	if currentExplored == database.EtNo || currentExplored == database.EtCalc {
+		p.sectorTracker.SetExplored(int(database.EtDensity))
+		p.sectorTracker.SetConstellation("??? (Density only)")
+		debug.Log("DENSITY: Setting exploration to EtDensity (%d) for sector %d", int(database.EtDensity), sectorNum)
+	} else {
+		debug.Log("DENSITY: Preserving exploration status %d for sector %d", int(currentExplored), sectorNum)
+	}
+	
+	debug.Log("DENSITY: Parsed density scan for sector %d - density=%s, navhaz=%s, anomaly=%s", 
+		sectorNum, densityStr, navhazStr, anomalyParam)
+	
+	// Execute tracker immediately for density scans (they are standalone updates)
+	if p.sectorTracker != nil && p.sectorTracker.HasUpdates() {
+		err := p.sectorTracker.Execute(p.database.GetDB())
+		if err != nil {
+			debug.Log("DENSITY: Failed to update sector fields: %v", err)
+		} else {
+			debug.Log("DENSITY: Successfully updated sector %d with density scan data", sectorNum)
+		}
+	}
+}
+
 func (p *TWXParser) processFigScanLine(line string) {
 
 	// Handle "No fighters deployed" case - reset fighter database
@@ -1995,6 +2108,32 @@ func (p *TWXParser) sectorCompleted() {
 	// Validate all collected data before saving
 	p.validateCollectedSectorData()
 
+	// Phase 2: Execute trackers for straight-sql approach
+	if p.sectorTracker != nil {
+		// Set exploration status based on context (before executing)
+		if p.probeMode {
+			p.sectorTracker.SetExplored(int(database.EtCalc)) // Mark as probe data
+			debug.Log("SECTOR: Setting exploration to EtCalc (%d) for sector %d", int(database.EtCalc), p.currentSectorIndex)
+		} else {
+			p.sectorTracker.SetExplored(int(database.EtHolo)) // Mark current sector as visited by player
+			debug.Log("SECTOR: Setting exploration to EtHolo (%d) for sector %d", int(database.EtHolo), p.currentSectorIndex)
+		}
+		
+		if p.sectorTracker.HasUpdates() {
+			err := p.sectorTracker.Execute(p.database.GetDB())
+			if err != nil {
+				debug.Log("SECTOR_PARSER: Failed to update sector fields: %v", err)
+			}
+		}
+	}
+	
+	if p.sectorCollections != nil && p.sectorCollections.HasData() {
+		err := p.sectorCollections.Execute(p.database.GetDB())
+		if err != nil {
+			debug.Log("SECTOR_PARSER: Failed to update sector collections: %v", err)
+		}
+	}
+
 	// Save sector data to database - database methods will panic on errors
 	// This prevents overwriting probe warps that were saved separately
 	p.saveSectorBasicInfo()
@@ -2021,23 +2160,21 @@ func (p *TWXParser) sectorCompleted() {
 		}
 	}
 
-	// Mark sector exploration status based on context
-	if p.probeMode {
-		// Mark as probe data (EtCalc) when discovered by probes
-		p.saveSectorProbeData(p.currentSectorIndex)
-	} else {
-		// Mark current sector as visited by player (EtHolo)
-		p.saveSectorVisited(p.currentSectorIndex)
-	}
+	// Phase 2: Exploration status now handled by tracker system above
+	// Legacy saveSectorProbeData/saveSectorVisited calls removed
 
 	// Fire TUI current sector change event (but not for probe-discovered sectors or probe mode)
 	isProbeDiscovered := p.probeDiscoveredSectors[p.currentSectorIndex]
 	shouldSuppressEvent := p.probeMode || isProbeDiscovered
 	if p.tuiAPI != nil && !shouldSuppressEvent {
-		sectorData := p.buildSectorData()
-		sectorInfo := p.buildSectorInfo(sectorData)
-		debug.Log("TWX_PARSER: Firing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", sectorInfo.Number, p.probeMode, isProbeDiscovered)
-		p.tuiAPI.OnCurrentSectorChanged(sectorInfo)
+		// Phase 2: Use fresh database read for basic API event
+		freshSectorInfo, err := p.database.GetSectorInfo(p.currentSectorIndex)
+		if err == nil {
+			debug.Log("TWX_PARSER: Firing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", freshSectorInfo.Number, p.probeMode, isProbeDiscovered)
+			p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
+		} else {
+			debug.Log("TWX_PARSER: Failed to read fresh sector info for API event: %v", err)
+		}
 	} else if p.tuiAPI != nil {
 		debug.Log("TWX_PARSER: Suppressing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", p.currentSectorIndex, p.probeMode, isProbeDiscovered)
 	}
@@ -2050,6 +2187,10 @@ func (p *TWXParser) sectorCompleted() {
 	if len(p.currentTraders) > 0 {
 		p.fireTraderDataEvent(p.currentSectorIndex, p.currentTraders)
 	}
+
+	// Phase 2: Reset trackers for next parsing session
+	p.sectorTracker = nil
+	p.sectorCollections = nil
 
 	p.sectorSaved = true
 }
@@ -2070,6 +2211,7 @@ func (p *TWXParser) buildSectorData() SectorData {
 		Products:      p.currentProducts,
 	}
 }
+
 
 // parseIntSafe is now implemented in parser_utils.go
 
@@ -2377,6 +2519,11 @@ func (p *TWXParser) parseWarpConnections(warpData string) {
 
 	// Store the warps in the current sector data
 	p.currentSectorWarps = warps
+	
+	// Phase 2: Record discovered warp fields
+	if p.sectorTracker != nil {
+		p.sectorTracker.SetWarps(warps)
+	}
 
 	// Update reverse warp connections in database for advanced pathfinding
 	p.updateReverseWarpConnections(p.currentSectorIndex, warps[:warpIndex])

@@ -252,3 +252,120 @@ func getFieldNames(updates map[string]interface{}) []string {
 	}
 	return fields
 }
+
+// SectorTracker tracks discovered sector field updates during parsing
+// Uses discovered field tracking - only updates fields that were actually parsed
+type SectorTracker struct {
+	sectorIndex int
+	updates     map[string]interface{}
+}
+
+// NewSectorTracker creates a new sector tracker for the given sector
+func NewSectorTracker(sectorIndex int) *SectorTracker {
+	return &SectorTracker{
+		sectorIndex: sectorIndex,
+		updates:     make(map[string]interface{}),
+	}
+}
+
+// SetConstellation records that constellation field was discovered during parsing
+func (s *SectorTracker) SetConstellation(constellation string) *SectorTracker {
+	s.updates[ColSectorConstellation] = constellation
+	return s
+}
+
+// SetBeacon records that beacon field was discovered during parsing
+func (s *SectorTracker) SetBeacon(beacon string) *SectorTracker {
+	s.updates[ColSectorBeacon] = beacon
+	return s
+}
+
+// SetNavHaz records that nav_haz field was discovered during parsing
+func (s *SectorTracker) SetNavHaz(navHaz int) *SectorTracker {
+	s.updates[ColSectorNavHaz] = navHaz
+	return s
+}
+
+// SetWarps records that warp fields were discovered during parsing
+func (s *SectorTracker) SetWarps(warps [6]int) *SectorTracker {
+	s.updates[ColSectorWarp1] = warps[0]
+	s.updates[ColSectorWarp2] = warps[1]
+	s.updates[ColSectorWarp3] = warps[2]
+	s.updates[ColSectorWarp4] = warps[3]
+	s.updates[ColSectorWarp5] = warps[4]
+	s.updates[ColSectorWarp6] = warps[5]
+	
+	// Count non-zero warps for the warps field
+	warpCount := 0
+	for _, warp := range warps {
+		if warp > 0 {
+			warpCount++
+		}
+	}
+	s.updates[ColSectorWarps] = warpCount
+	
+	return s
+}
+
+// SetDensity records that density field was discovered during parsing
+func (s *SectorTracker) SetDensity(density int) *SectorTracker {
+	s.updates[ColSectorDensity] = density
+	return s
+}
+
+// SetAnomaly records that anomaly field was discovered during parsing
+func (s *SectorTracker) SetAnomaly(anomaly bool) *SectorTracker {
+	s.updates[ColSectorAnomaly] = anomaly
+	return s
+}
+
+// SetExplored records that explored field was discovered during parsing
+func (s *SectorTracker) SetExplored(explored int) *SectorTracker {
+	s.updates[ColSectorExplored] = explored
+	return s
+}
+
+// HasUpdates returns true if any fields were discovered during parsing
+func (s *SectorTracker) HasUpdates() bool {
+	return len(s.updates) > 0
+}
+
+// Execute writes discovered fields to database using Squirrel query builder
+// Only fields that were actually parsed/discovered are updated
+func (s *SectorTracker) Execute(db *sql.DB) error {
+	if len(s.updates) == 0 {
+		return nil // No updates to perform
+	}
+	
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
+	
+	// Ensure sector record exists (UPSERT pattern)
+	_, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", s.sectorIndex)
+	if err != nil {
+		debug.Log("Failed to ensure sector record exists for sector %d: %v", s.sectorIndex, err)
+		return err
+	}
+	
+	// Build dynamic UPDATE query with only discovered fields
+	query := psql.Update("sectors").
+		SetMap(s.updates).
+		Set("update_time", "CURRENT_TIMESTAMP").
+		Where(squirrel.Eq{"sector_index": s.sectorIndex})
+	
+	sql, args, err := query.ToSql()
+	if err != nil {
+		debug.Log("Failed to build sector update query for sector %d: %v", s.sectorIndex, err)
+		return err
+	}
+	
+	debug.Log("Executing sector update for sector %d with %d discovered fields: %s", s.sectorIndex, len(s.updates), sql)
+	
+	_, err = db.Exec(sql, args...)
+	if err != nil {
+		debug.Log("Failed to execute sector update for sector %d: %v", s.sectorIndex, err)
+		return err
+	}
+	
+	debug.Log("Successfully updated sector %d with discovered fields: %v", s.sectorIndex, getFieldNames(s.updates))
+	return nil
+}
