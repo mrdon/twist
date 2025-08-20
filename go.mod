@@ -10,6 +10,7 @@ require (
 	github.com/mattn/go-isatty v0.0.20
 	github.com/mattn/go-sixel v0.0.5
 	github.com/rivo/tview v0.0.0-20241227133733-17b7edb88c57
+	github.com/stretchr/testify v1.10.0
 	golang.org/x/image v0.21.0
 	golang.org/x/text v0.27.0
 	modernc.org/sqlite v1.38.2
@@ -31,7 +32,6 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/soniakeys/quant v1.0.0 // indirect
-	github.com/stretchr/testify v1.10.0 // indirect
 	github.com/tetratelabs/wazero v1.8.1 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	golang.org/x/sys v0.34.0 // indirect

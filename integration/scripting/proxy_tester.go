@@ -352,10 +352,11 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	proxyInstance.Disconnect()
 	
 	// Wait for disconnection to actually complete (database closure, etc.)
+	// Increased timeout for parallel/race detector execution
 	select {
 	case <-disconnectionReady:
 		// Disconnection successful
-	case <-time.After(2 * time.Second):
+	case <-time.After(10 * time.Second):
 		t.Logf("Warning: Timeout waiting for proxy disconnection")
 	}
 
@@ -363,17 +364,30 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	var sqlDB *sql.DB
 	var dbAsserts *setup.DBAsserts
 	if connectOpts != nil && connectOpts.DatabasePath != "" {
-		sqlDB, err = sql.Open("sqlite", connectOpts.DatabasePath)
-		if err != nil {
-			t.Fatalf("Failed to open database: %v", err)
+		// Retry database connection with backoff for parallel test execution
+		var err error
+		for attempt := 1; attempt <= 5; attempt++ {
+			sqlDB, err = sql.Open("sqlite", connectOpts.DatabasePath)
+			if err != nil {
+				t.Fatalf("Failed to open database: %v", err)
+			}
+			
+			// Test database connection with retry
+			if err := sqlDB.Ping(); err != nil {
+				if attempt == 5 {
+					t.Fatalf("Database connection failed after %d attempts: %v", attempt, err)
+				}
+				t.Logf("Database connection attempt %d failed, retrying: %v", attempt, err)
+				sqlDB.Close()
+				time.Sleep(time.Duration(attempt) * 100 * time.Millisecond) // Exponential backoff
+				continue
+			}
+			break
 		}
+		
 		// Validate database was created and is accessible
 		if sqlDB == nil {
 			t.Fatal("Expected database instance to be created")
-		}
-		// Test database connection
-		if err := sqlDB.Ping(); err != nil {
-			t.Fatalf("Database connection failed: %v", err)
 		}
 		
 		// Create database assertion helper

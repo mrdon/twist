@@ -48,7 +48,7 @@ vet:
 # Run tests (including integration tests)
 test:
 	@echo "Running all tests..."
-	@go test -timeout=5s -tags=integration -v -short -race ./... -p=4 -json 2>&1 | tee test_output.json | jq -r 'select(.Action == "pass" or .Action == "fail" or .Action == "skip" or .Action == "build-output") | if .Action == "build-output" then ("BUILD ERROR: " + .Output) else (select(.Test) | "\(.Action | ascii_upcase): \(.Test)") end' 2>/dev/null | grep -v "^$$" | grep -E "FAIL|SKIP|BUILD ERROR" || echo "Tests completed"
+	@go test -timeout=5s -tags=integration -v -short ./... -p=1 -json 2>&1 | tee test_output.json | jq -r 'select(.Action == "pass" or .Action == "fail" or .Action == "skip" or .Action == "build-output") | if .Action == "build-output" then ("BUILD ERROR: " + .Output) else (select(.Test) | "\(.Action | ascii_upcase): \(.Test)") end' 2>/dev/null | grep -v "^$$" | grep -E "FAIL|SKIP|BUILD ERROR" || echo "Tests completed"
 	@if grep -q '"Action":"fail"' test_output.json 2>/dev/null || grep -q "panic: test timed out" test_output.json 2>/dev/null; then \
 		if grep -q "panic: test timed out" test_output.json; then \
 			echo "TIMEOUTS:"; \

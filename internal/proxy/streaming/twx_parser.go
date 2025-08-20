@@ -43,6 +43,12 @@ const (
 // PatternHandler is called when a pattern is matched
 type PatternHandler func(line string)
 
+// OrderedPatternHandler holds a pattern and its handler in order
+type OrderedPatternHandler struct {
+	Pattern string
+	Handler PatternHandler
+}
+
 // PlayerStats is an alias to the shared types.PlayerStats to avoid circular dependencies
 type PlayerStats = types.PlayerStats
 
@@ -238,8 +244,8 @@ type TWXParser struct {
 	currentProducts []ProductInfo
 	currentTrader   TraderInfo // Temporary storage for trader being parsed
 
-	// Pattern handlers
-	handlers map[string]PatternHandler
+	// Pattern handlers (ordered slice to ensure deterministic processing)
+	handlers []OrderedPatternHandler
 
 	// Position tracking
 	position int64
@@ -274,7 +280,7 @@ func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 		sectorSaved:            false,
 		probeDiscoveredSectors: make(map[int]bool),
 		menuKey:                '$',
-		handlers:               make(map[string]PatternHandler),
+		handlers:               make([]OrderedPatternHandler, 0),
 		position:               0,
 		lastChar:               0,
 		maxHistorySize:         1000,
@@ -326,7 +332,10 @@ func (p *TWXParser) GetScriptEventProcessor() *ScriptEventProcessor {
 
 // AddHandler adds a pattern handler
 func (p *TWXParser) AddHandler(pattern string, handler PatternHandler) {
-	p.handlers[pattern] = handler
+	p.handlers = append(p.handlers, OrderedPatternHandler{
+		Pattern: pattern,
+		Handler: handler,
+	})
 }
 
 // setupDefaultHandlers sets up the core TWX pattern handlers
@@ -578,9 +587,9 @@ func (p *TWXParser) processPrompt(line string) {
 	p.FireTextEvent(line, false)
 
 	// Check for prompt patterns
-	for pattern, handler := range p.handlers {
-		if strings.HasPrefix(line, pattern) {
-			handler(line)
+	for _, ph := range p.handlers {
+		if strings.HasPrefix(line, ph.Pattern) {
+			ph.Handler(line)
 			return
 		}
 	}
@@ -603,9 +612,9 @@ func (p *TWXParser) checkPatterns(line string) {
 		}
 	}
 
-	for pattern, handler := range p.handlers {
-		if strings.Contains(line, pattern) {
-			handler(line)
+	for _, ph := range p.handlers {
+		if strings.Contains(line, ph.Pattern) {
+			ph.Handler(line)
 			return
 		}
 	}
