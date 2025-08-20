@@ -90,14 +90,6 @@ func (p *TWXParser) resetParserState() {
 	p.rawANSILine = ""
 	p.inANSI = false
 	
-	// Clear temporary data structures
-	p.currentShips = nil
-	p.currentTraders = nil
-	p.currentPlanets = nil
-	p.currentMines = nil
-	p.currentProducts = nil
-	p.currentTrader = TraderInfo{}
-	
 	// Clear message context
 	p.currentChannel = 0
 	p.currentMessage = ""
@@ -231,40 +223,6 @@ func (p *TWXParser) validatePlanetData(planet *PlanetInfo) {
 	}
 }
 
-// validatePlayerStats ensures player statistics are within reasonable bounds
-func (p *TWXParser) validatePlayerStats(stats *PlayerStats) {
-	if stats == nil {
-		return
-	}
-	
-	// Validate counts and amounts
-	stats.Turns = p.validateNonNegative(stats.Turns, "turns")
-	stats.Credits = p.validateCredits(stats.Credits)
-	stats.Fighters = p.validateFighterCount(stats.Fighters)
-	stats.Shields = p.validateNonNegative(stats.Shields, "shields")
-	
-	// Validate holds
-	stats.TotalHolds = p.validateNonNegative(stats.TotalHolds, "total holds")
-	stats.OreHolds = p.validateNonNegative(stats.OreHolds, "ore holds")
-	stats.OrgHolds = p.validateNonNegative(stats.OrgHolds, "organics holds")
-	stats.EquHolds = p.validateNonNegative(stats.EquHolds, "equipment holds")
-	stats.ColHolds = p.validateNonNegative(stats.ColHolds, "colonist holds")
-	
-	// Validate equipment
-	stats.Photons = p.validateNonNegative(stats.Photons, "photons")
-	stats.Armids = p.validateNonNegative(stats.Armids, "armids")
-	stats.Limpets = p.validateNonNegative(stats.Limpets, "limpets")
-	stats.GenTorps = p.validateNonNegative(stats.GenTorps, "genesis torpedoes")
-	stats.Cloaks = p.validateNonNegative(stats.Cloaks, "cloaks")
-	stats.Beacons = p.validateNonNegative(stats.Beacons, "beacons")
-	stats.Atomics = p.validateNonNegative(stats.Atomics, "atomic detonators")
-	stats.Corbomite = p.validateNonNegative(stats.Corbomite, "corbomite")
-	stats.Eprobes = p.validateNonNegative(stats.Eprobes, "ether probes")
-	stats.MineDisr = p.validateNonNegative(stats.MineDisr, "mine disruptors")
-	
-	// Validate experience and alignment (can be negative)
-	stats.Experience = p.validateCredits(stats.Experience) // Use same validation as credits
-}
 
 // validateNonNegative ensures a value is non-negative
 func (p *TWXParser) validateNonNegative(value int, fieldName string) int {
@@ -336,38 +294,3 @@ func (p *TWXParser) validateMessageData(msg *MessageHistory) {
 	}
 }
 
-// validateCollectedSectorData validates all data collected for the current sector
-func (p *TWXParser) validateCollectedSectorData() {
-	defer p.recoverFromPanic("validateCollectedSectorData")
-	
-	// Validate port data
-	p.validatePortData(&p.currentSector.Port)
-	
-	// Validate all ships
-	for i := range p.currentShips {
-		p.validateShipData(&p.currentShips[i])
-	}
-	
-	// Validate all traders
-	for i := range p.currentTraders {
-		p.validateTraderData(&p.currentTraders[i])
-	}
-	
-	// Validate all planets
-	for i := range p.currentPlanets {
-		p.validatePlanetData(&p.currentPlanets[i])
-	}
-	
-	// Validate NavHaz percentage
-	p.currentSector.NavHaz = p.validatePercentage(p.currentSector.NavHaz)
-	
-	// Validate constellation and beacon names
-	if len(p.currentSector.Constellation) > 500 {
-		p.currentSector.Constellation = p.currentSector.Constellation[:500]
-	}
-	
-	if len(p.currentSector.Beacon) > 500 {
-		p.currentSector.Beacon = p.currentSector.Beacon[:500]
-	}
-	
-}

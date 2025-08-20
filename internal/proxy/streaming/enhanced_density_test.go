@@ -3,6 +3,7 @@ package streaming
 import (
 	"testing"
 	"twist/internal/proxy/database"
+	"twist/integration/setup"
 )
 
 func TestEnhancedDensityProcessing(t *testing.T) {
@@ -341,23 +342,22 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 			{1003, 800, 6, false},
 		}
 		
+		// Use database assertions instead of LoadSector
+		dbAsserts := setup.NewDBAsserts(t, db.GetDB())
+		
 		for _, expected := range testCases {
-			sector, err := db.LoadSector(expected.id)
-			if err != nil {
-				t.Fatalf("Failed to load sector %d: %v", expected.id, err)
-			}
+			// Assert sector exists
+			dbAsserts.AssertSectorExists(expected.id)
 			
-			if sector.Density != expected.density {
-				t.Errorf("Sector %d: expected density %d, got %d", expected.id, expected.density, sector.Density)
-			}
+			// Assert density and anomaly values
+			dbAsserts.AssertSectorDensity(expected.id, expected.density)
+			dbAsserts.AssertSectorAnomaly(expected.id, expected.anomaly)
+			
+			// Assert exploration status is EtDensity
+			dbAsserts.AssertSectorExplorationStatus(expected.id, int(database.EtDensity))
+			
 			// Note: Density scans report warp counts but don't provide actual warp connections
 			// We no longer validate warp counts from density scans since they're informational only
-			if sector.Anomaly != expected.anomaly {
-				t.Errorf("Sector %d: expected anomaly %t, got %t", expected.id, expected.anomaly, sector.Anomaly)
-			}
-			if sector.Explored != database.EtDensity {
-				t.Errorf("Sector %d: expected explored status EtDensity, got %d", expected.id, sector.Explored)
-			}
 		}
 		
 		t.Log("✓ Complete density scan workflow processed and stored correctly")

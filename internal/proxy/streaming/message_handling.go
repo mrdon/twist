@@ -3,6 +3,7 @@ package streaming
 import (
 	"strings"
 	"time"
+	"twist/internal/proxy/database"
 )
 
 // message_handling.go - Clean message parsing and handling logic
@@ -347,9 +348,14 @@ func (p *TWXParser) addToHistory(msgType MessageType, content, sender string, ch
 		p.messageHistory = p.messageHistory[len(p.messageHistory)-p.maxHistorySize:]
 	}
 	
-	// Save to database (required)
-	converter := NewMessageHistoryConverter()
-	dbMessage := converter.ToDatabase(message)
+	// Save to database (required) - convert inline without converter
+	dbMessage := database.TMessageHistory{
+		Type:      database.TMessageType(message.Type),
+		Timestamp: message.Timestamp,
+		Content:   message.Content,
+		Sender:    message.Sender,
+		Channel:   message.Channel,
+	}
 	if err := p.database.AddMessageToHistory(dbMessage); err != nil {
 		return err
 	}

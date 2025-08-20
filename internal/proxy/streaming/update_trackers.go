@@ -27,72 +27,123 @@ func (p *PlayerStatsTracker) SetTurns(turns int) *PlayerStatsTracker {
 
 // SetCredits records that credits field was discovered during parsing
 func (p *PlayerStatsTracker) SetCredits(credits int) *PlayerStatsTracker {
+	// Validate and cap credits at reasonable maximum
+	if credits < 0 {
+		credits = 0
+	}
+	if credits > 2000000000 { // 2 billion credit cap
+		credits = 2000000000
+	}
 	p.updates[ColPlayerCredits] = credits
 	return p
 }
 
 // SetFighters records that fighters field was discovered during parsing
 func (p *PlayerStatsTracker) SetFighters(fighters int) *PlayerStatsTracker {
+	// Validate fighters must be non-negative
+	if fighters < 0 {
+		fighters = 0
+	}
 	p.updates[ColPlayerFighters] = fighters
 	return p
 }
 
 // SetShields records that shields field was discovered during parsing
 func (p *PlayerStatsTracker) SetShields(shields int) *PlayerStatsTracker {
+	// Validate shields must be non-negative
+	if shields < 0 {
+		shields = 0
+	}
 	p.updates[ColPlayerShields] = shields
 	return p
 }
 
 // SetTotalHolds records that total_holds field was discovered during parsing
 func (p *PlayerStatsTracker) SetTotalHolds(totalHolds int) *PlayerStatsTracker {
+	// Validate total holds must be non-negative
+	if totalHolds < 0 {
+		totalHolds = 0
+	}
 	p.updates[ColPlayerTotalHolds] = totalHolds
 	return p
 }
 
 // SetOreHolds records that ore_holds field was discovered during parsing
 func (p *PlayerStatsTracker) SetOreHolds(oreHolds int) *PlayerStatsTracker {
+	// Validate ore holds must be non-negative
+	if oreHolds < 0 {
+		oreHolds = 0
+	}
 	p.updates[ColPlayerOreHolds] = oreHolds
 	return p
 }
 
 // SetOrgHolds records that org_holds field was discovered during parsing
 func (p *PlayerStatsTracker) SetOrgHolds(orgHolds int) *PlayerStatsTracker {
+	// Validate organics holds must be non-negative
+	if orgHolds < 0 {
+		orgHolds = 0
+	}
 	p.updates[ColPlayerOrgHolds] = orgHolds
 	return p
 }
 
 // SetEquHolds records that equ_holds field was discovered during parsing
 func (p *PlayerStatsTracker) SetEquHolds(equHolds int) *PlayerStatsTracker {
+	// Validate equipment holds must be non-negative
+	if equHolds < 0 {
+		equHolds = 0
+	}
 	p.updates[ColPlayerEquHolds] = equHolds
 	return p
 }
 
 // SetColHolds records that col_holds field was discovered during parsing
 func (p *PlayerStatsTracker) SetColHolds(colHolds int) *PlayerStatsTracker {
+	// Validate colonists holds must be non-negative
+	if colHolds < 0 {
+		colHolds = 0
+	}
 	p.updates[ColPlayerColHolds] = colHolds
 	return p
 }
 
 // SetPhotons records that photons field was discovered during parsing
 func (p *PlayerStatsTracker) SetPhotons(photons int) *PlayerStatsTracker {
+	// Validate photons must be non-negative
+	if photons < 0 {
+		photons = 0
+	}
 	p.updates[ColPlayerPhotons] = photons
 	return p
 }
 
 // SetArmids records that armids field was discovered during parsing
 func (p *PlayerStatsTracker) SetArmids(armids int) *PlayerStatsTracker {
+	// Validate armids must be non-negative
+	if armids < 0 {
+		armids = 0
+	}
 	p.updates[ColPlayerArmids] = armids
 	return p
 }
 
 // SetLimpets records that limpets field was discovered during parsing
 func (p *PlayerStatsTracker) SetLimpets(limpets int) *PlayerStatsTracker {
+	// Validate limpets must be non-negative
+	if limpets < 0 {
+		limpets = 0
+	}
 	p.updates[ColPlayerLimpets] = limpets
 	return p
 }
 
 // SetGenTorps records that gen_torps field was discovered during parsing
 func (p *PlayerStatsTracker) SetGenTorps(genTorps int) *PlayerStatsTracker {
+	// Validate genesis torpedoes must be non-negative
+	if genTorps < 0 {
+		genTorps = 0
+	}
 	p.updates[ColPlayerGenTorps] = genTorps
 	return p
 }
@@ -282,6 +333,13 @@ func (s *SectorTracker) SetBeacon(beacon string) *SectorTracker {
 
 // SetNavHaz records that nav_haz field was discovered during parsing
 func (s *SectorTracker) SetNavHaz(navHaz int) *SectorTracker {
+	// Validate NavHaz must be 0-100 (percentage)
+	if navHaz < 0 {
+		navHaz = 0
+	}
+	if navHaz > 100 {
+		navHaz = 100
+	}
 	s.updates[ColSectorNavHaz] = navHaz
 	return s
 }
@@ -309,6 +367,13 @@ func (s *SectorTracker) SetWarps(warps [6]int) *SectorTracker {
 
 // SetDensity records that density field was discovered during parsing
 func (s *SectorTracker) SetDensity(density int) *SectorTracker {
+	// Validate density must be non-negative (reasonable maximum ~50000)
+	if density < 0 {
+		density = 0
+	}
+	if density > 50000 {
+		density = 50000
+	}
 	s.updates[ColSectorDensity] = density
 	return s
 }
@@ -399,6 +464,10 @@ func (p *PortTracker) SetDead(dead bool) *PortTracker {
 
 // SetBuildTime records that build_time field was discovered during parsing
 func (p *PortTracker) SetBuildTime(buildTime int) *PortTracker {
+	// Validate build time must be non-negative
+	if buildTime < 0 {
+		buildTime = 0
+	}
 	p.updates[ColPortBuildTime] = buildTime
 	return p
 }
@@ -419,6 +488,25 @@ func (p *PortTracker) SetBuyProducts(buyFuelOre, buyOrganics, buyEquipment bool)
 
 // SetProductPercents records the percentages for each product
 func (p *PortTracker) SetProductPercents(percentFuelOre, percentOrganics, percentEquipment int) *PortTracker {
+	// Validate percentages must be 0-100
+	if percentFuelOre < 0 {
+		percentFuelOre = 0
+	}
+	if percentFuelOre > 100 {
+		percentFuelOre = 100
+	}
+	if percentOrganics < 0 {
+		percentOrganics = 0
+	}
+	if percentOrganics > 100 {
+		percentOrganics = 100
+	}
+	if percentEquipment < 0 {
+		percentEquipment = 0
+	}
+	if percentEquipment > 100 {
+		percentEquipment = 100
+	}
 	p.updates[ColPortPercentFuelOre] = percentFuelOre
 	p.updates[ColPortPercentOrganics] = percentOrganics
 	p.updates[ColPortPercentEquipment] = percentEquipment
@@ -427,6 +515,16 @@ func (p *PortTracker) SetProductPercents(percentFuelOre, percentOrganics, percen
 
 // SetProductAmounts records the amounts for each product
 func (p *PortTracker) SetProductAmounts(amountFuelOre, amountOrganics, amountEquipment int) *PortTracker {
+	// Validate amounts must be non-negative
+	if amountFuelOre < 0 {
+		amountFuelOre = 0
+	}
+	if amountOrganics < 0 {
+		amountOrganics = 0
+	}
+	if amountEquipment < 0 {
+		amountEquipment = 0
+	}
 	p.updates[ColPortAmountFuelOre] = amountFuelOre
 	p.updates[ColPortAmountOrganics] = amountOrganics
 	p.updates[ColPortAmountEquipment] = amountEquipment
@@ -436,6 +534,94 @@ func (p *PortTracker) SetProductAmounts(amountFuelOre, amountOrganics, amountEqu
 // HasUpdates returns true if any fields were discovered during parsing
 func (p *PortTracker) HasUpdates() bool {
 	return len(p.updates) > 0
+}
+
+// GetUpdates returns a copy of the updates map for debugging
+func (p *PortTracker) GetUpdates() map[string]interface{} {
+	result := make(map[string]interface{})
+	for k, v := range p.updates {
+		result[k] = v
+	}
+	return result
+}
+
+// Individual product field setters for precise updates
+func (p *PortTracker) SetFuelOreAmount(amount int) *PortTracker {
+	// Validate amount must be non-negative
+	if amount < 0 {
+		amount = 0
+	}
+	p.updates[ColPortAmountFuelOre] = amount
+	return p
+}
+
+func (p *PortTracker) SetFuelOrePercent(percent int) *PortTracker {
+	// Validate percent must be 0-100
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	p.updates[ColPortPercentFuelOre] = percent
+	return p
+}
+
+func (p *PortTracker) SetFuelOreBuying(buying bool) *PortTracker {
+	p.updates[ColPortBuyFuelOre] = buying
+	return p
+}
+
+func (p *PortTracker) SetOrganicsAmount(amount int) *PortTracker {
+	// Validate amount must be non-negative
+	if amount < 0 {
+		amount = 0
+	}
+	p.updates[ColPortAmountOrganics] = amount
+	return p
+}
+
+func (p *PortTracker) SetOrganicsPercent(percent int) *PortTracker {
+	// Validate percent must be 0-100
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	p.updates[ColPortPercentOrganics] = percent
+	return p
+}
+
+func (p *PortTracker) SetOrganicsBuying(buying bool) *PortTracker {
+	p.updates[ColPortBuyOrganics] = buying
+	return p
+}
+
+func (p *PortTracker) SetEquipmentAmount(amount int) *PortTracker {
+	// Validate amount must be non-negative
+	if amount < 0 {
+		amount = 0
+	}
+	p.updates[ColPortAmountEquipment] = amount
+	return p
+}
+
+func (p *PortTracker) SetEquipmentPercent(percent int) *PortTracker {
+	// Validate percent must be 0-100
+	if percent < 0 {
+		percent = 0
+	}
+	if percent > 100 {
+		percent = 100
+	}
+	p.updates[ColPortPercentEquipment] = percent
+	return p
+}
+
+func (p *PortTracker) SetEquipmentBuying(buying bool) *PortTracker {
+	p.updates[ColPortBuyEquipment] = buying
+	return p
 }
 
 // Execute writes discovered fields to database using Squirrel query builder

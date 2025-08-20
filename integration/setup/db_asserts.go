@@ -472,3 +472,27 @@ func (a *DBAsserts) AssertPlayerShipNumber(expectedShipNumber int) {
 		a.t.Errorf("Expected player ship number to be %d, got %d", expectedShipNumber, actualShipNumber)
 	}
 }
+
+// AssertSectorDensity verifies that a sector has the expected density value
+func (a *DBAsserts) AssertSectorDensity(sectorNum int, expectedDensity int) {
+	var actualDensity int
+	err := a.db.QueryRow("SELECT COALESCE(density, -1) FROM sectors WHERE sector_index = ?", sectorNum).Scan(&actualDensity)
+	if err != nil {
+		a.t.Fatalf("Failed to get density for sector %d: %v", sectorNum, err)
+	}
+	if actualDensity != expectedDensity {
+		a.t.Errorf("Expected sector %d density to be %d, got %d", sectorNum, expectedDensity, actualDensity)
+	}
+}
+
+// AssertSectorAnomaly verifies that a sector has the expected anomaly status
+func (a *DBAsserts) AssertSectorAnomaly(sectorNum int, expectedAnomaly bool) {
+	var actualAnomaly bool
+	err := a.db.QueryRow("SELECT COALESCE(anomaly, 0) FROM sectors WHERE sector_index = ?", sectorNum).Scan(&actualAnomaly)
+	if err != nil {
+		a.t.Fatalf("Failed to get anomaly status for sector %d: %v", sectorNum, err)
+	}
+	if actualAnomaly != expectedAnomaly {
+		a.t.Errorf("Expected sector %d anomaly status to be %t, got %t", sectorNum, expectedAnomaly, actualAnomaly)
+	}
+}

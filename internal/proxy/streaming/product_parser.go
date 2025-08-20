@@ -35,7 +35,7 @@ func (p *TWXParser) parseProductLine(line string) {
 		return
 	}
 	
-	p.currentProducts = append(p.currentProducts, product)
+	// Phase 3: Product data is now tracked directly in PortTracker during parsing
 }
 
 // getProductTypeFromLine determines the product type from the line
@@ -196,7 +196,7 @@ func (p *TWXParser) extractProductInfo(line string, productType ProductType) {
 	
 	// Store if we got useful information
 	if product.Quantity > 0 || product.Percent > 0 {
-		p.currentProducts = append(p.currentProducts, product)
+		// Phase 3: Product data is now tracked directly in PortTracker during parsing
 	}
 }
 
@@ -260,12 +260,3 @@ func (p *TWXParser) parsePortTradeStatus(line string) (buyOre, buyOrg, buyEquip 
 	return buyOre, buyOrg, buyEquip
 }
 
-// GetCurrentProducts returns the currently parsed product data
-func (p *TWXParser) GetCurrentProducts() []ProductInfo {
-	return p.currentProducts
-}
-
-// ClearProductData clears the current product parsing state
-func (p *TWXParser) ClearProductData() {
-	p.currentProducts = nil
-}

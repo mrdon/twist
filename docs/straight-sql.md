@@ -954,8 +954,10 @@ handlePortData       portsTracker.SetName()           UPDATE ports         GetPo
 ✅ **Phase 2 COMPLETE**: Basic sector fields (constellation, beacon, navhaz, warps) - `twx_parser.go` 
 ✅ **Phase 3 COMPLETE**: Port data parsing - `port_parser.go`
 ✅ **Phase 4 COMPLETE**: Collections (ships, traders, planets) - `sector_parser.go`
+✅ **Phase 4.5 COMPLETE**: Remove all intermediate object usage from parsers
 🔄 **Phase 5**: Remove converter layer - delete `data_converters.go` and `converter/` package
 🔄 **Phase 6**: Update/delete tests:
+🔄 **Phase 7**: Implement validation in trackers (bounds checking, non-negative values, etc.)
 
 ## Implementation Order
    - **DELETE** unit tests that only validate intermediate object creation/conversion
@@ -1108,3 +1110,43 @@ assert.Equal(t, "Sol", sectorInfo.Constellation)
 - High-frequency parsing optimization deferred until proven necessary
 
 **Implementation approach**: Prove the pattern with player info parsing, then expand systematically through all parsing domains. Delete unit tests ruthlessly, preserve integration tests, commit fully to the straight-sql approach.
+
+## Phase 7: Validation in Straight-SQL World
+
+### Problem: Removed Validation Layer
+During Phase 4.5, we removed `validatePlayerStats()` and other validation methods that ensured data integrity (non-negative values, bounds checking, etc.). The new tracker-based system needs validation.
+
+### Solution: Tracker-Level Validation
+Add validation directly in tracker setter methods:
+
+```go
+func (p *PlayerStatsTracker) SetCredits(credits int) *PlayerStatsTracker {
+    // Validate and cap credits at reasonable maximum
+    if credits < 0 {
+        credits = 0
+    }
+    if credits > 2000000000 { // 2 billion credit cap
+        credits = 2000000000
+    }
+    p.updates[ColPlayerCredits] = credits
+    return p
+}
+
+func (p *PlayerStatsTracker) SetFighters(fighters int) *PlayerStatsTracker {
+    // Ensure non-negative fighter count
+    if fighters < 0 {
+        fighters = 0
+    }
+    if fighters > 1000000 { // 1 million fighter cap
+        fighters = 1000000
+    }
+    p.updates[ColPlayerFighters] = fighters
+    return p
+}
+```
+
+### Benefits:
+- **Input Validation**: Bad data rejected at entry point
+- **Consistent Rules**: All data goes through same validation
+- **Performance**: No separate validation pass needed
+- **Atomic**: Validation happens alongside field tracking

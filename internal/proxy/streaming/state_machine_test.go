@@ -123,7 +123,9 @@ func TestComprehensiveStateMachine(t *testing.T) {
 		}
 
 		for _, step := range testCases {
+			t.Logf("Processing input: %q", step.input)
 			parser.ProcessString(step.input + "\r")
+			t.Logf("After processing, sectorPosition = %d, expected = %d", parser.sectorPosition, step.expectedPosition)
 			
 			if parser.sectorPosition != step.expectedPosition {
 				t.Errorf("Expected sector position %d, got %d for input: %s", 

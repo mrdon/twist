@@ -5,7 +5,6 @@ import (
 	"time"
 	"twist/internal/api"
 	"twist/internal/debug"
-	"twist/internal/proxy/converter"
 )
 
 
@@ -214,10 +213,10 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 		return api.SectorInfo{Number: sectorNum}, errors.New("invalid sector number")
 	}
 	
-	// Direct delegation using new GetSector wrapper method
-	dbSector, err := p.proxy.GetSector(sectorNum)
+	// Phase 5: Use direct database API method (no converter needed)
+	sectorInfo, err := p.proxy.db.GetSectorInfo(sectorNum)
 	if err != nil {
-		// Return empty sector info with error rather than potentially corrupted data
+		// Return empty sector info with error
 		return api.SectorInfo{
 			Number:        sectorNum,
 			NavHaz:        0,
@@ -227,14 +226,6 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 		}, err
 	}
 	
-	// Simple conversion using converter function
-	sectorInfo := convertDatabaseSectorToAPI(sectorNum, dbSector)
-	
-	// Phase 2: Set HasPort flag by checking if port exists in ports table
-	if portData, err := p.proxy.db.LoadPort(sectorNum); err == nil && portData.ClassIndex > 0 {
-		sectorInfo.HasPort = true
-	}
-	
 	return sectorInfo, nil
 }
 
@@ -242,9 +233,14 @@ func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
 	if p.proxy == nil {
 		return api.PlayerInfo{}, errors.New("not connected")
 	}
+	// Phase 5: Create PlayerInfo directly (no converter needed)
 	currentSector := p.proxy.GetCurrentSector()
 	playerName := p.proxy.GetPlayerName()
-	return convertDatabasePlayerToAPI(currentSector, playerName), nil
+	
+	return api.PlayerInfo{
+		Name:          playerName,
+		CurrentSector: currentSector,
+	}, nil
 }
 
 func (p *ProxyApiImpl) GetPortInfo(sectorNum int) (*api.PortInfo, error) {
@@ -257,24 +253,13 @@ func (p *ProxyApiImpl) GetPortInfo(sectorNum int) (*api.PortInfo, error) {
 		return nil, errors.New("invalid sector number")
 	}
 	
-	// Phase 2: Load port data from separate ports table
-	portData, err := p.proxy.db.LoadPort(sectorNum)
+	// Phase 5: Use direct database API method (no converter needed)
+	portInfo, err := p.proxy.db.GetPortInfo(sectorNum)
 	if err != nil {
 		return nil, err
 	}
 	
-	// Check if sector has a port
-	if portData.ClassIndex == 0 {
-		return nil, nil // No port in this sector
-	}
-	
-	// Convert port data to API format
-	portInfo, err := converter.ConvertTPortToPortInfo(sectorNum, portData)
-	if err != nil {
-		return nil, err
-	}
-	
-	// Return nil if no port exists in this sector (not an error)
+	// Return port info (nil if no port exists)
 	return portInfo, nil
 }
 
@@ -284,20 +269,17 @@ func (p *ProxyApiImpl) GetPlayerStats() (*api.PlayerStatsInfo, error) {
 		return nil, errors.New("not connected")
 	}
 	
-	// Get database from proxy - this is the single source of truth
+	// Phase 5: Use direct database API method (no converter needed)
 	database := p.proxy.GetDatabase()
 	if database == nil {
 		return nil, errors.New("database not available")
 	}
 	
-	// Load player stats from database
-	playerStats, err := database.LoadPlayerStats()
+	// Get player stats directly in API format
+	apiStats, err := database.GetPlayerStatsInfo()
 	if err != nil {
 		return nil, err
 	}
-	
-	// Convert TPlayerStats to API format using converter
-	apiStats := converter.ConvertTPlayerStatsToPlayerStatsInfo(playerStats)
 	
 	return &apiStats, nil
 }

@@ -3,6 +3,7 @@ package streaming
 import (
 	"strconv"
 	"strings"
+	"twist/internal/debug"
 )
 
 // isNumeric checks if a string represents a valid number
@@ -39,9 +40,8 @@ func (p *TWXParser) parseSectorShips(line string) {
 
 // parseShipLine parses individual ship information (mirrors Pascal logic from lines 671-690)
 func (p *TWXParser) parseShipLine(shipInfo string) {
-	// Clear previous ships if this is the first ship line
+	// Phase 4.5: Ships tracked via collection trackers
 	if p.sectorPosition != SectorPosShips {
-		p.currentShips = nil
 		p.sectorPosition = SectorPosShips
 	}
 
@@ -133,9 +133,7 @@ func (p *TWXParser) parseShipLine(shipInfo string) {
 	if ship.Owner == "" {
 	}
 
-	p.currentShips = append(p.currentShips, ship)
-	
-	// Phase 2: Add ship to collection tracker
+	// Phase 4.5: Ships tracked via collection trackers only
 	if p.sectorCollections != nil {
 		p.sectorCollections.AddShip(ship.Name, ship.Owner, ship.ShipType, ship.Fighters)
 	}
@@ -143,59 +141,29 @@ func (p *TWXParser) parseShipLine(shipInfo string) {
 
 // handleShipContinuation handles continuation lines for ship data (mirrors Pascal lines 113-117)
 func (p *TWXParser) handleShipContinuation(line string) {
-	if len(p.currentShips) == 0 {
+	// Phase 4.5: Ship continuation handling with collection trackers
+	line = strings.TrimSpace(line)
+	
+	// Handle different types of ship continuation lines:
+	// 1. New ship entries that appear in continuation lines
+	if strings.Contains(line, "[Owned by") {
+		p.parseShipLine(line)
 		return
 	}
-
-	// Pascal logic: if (Copy(Line, 12, 1) = '(') then
-	// Pascal: NewShip^.ShipType := Copy(Line, 13, Pos(')', Line) - 13);
-	// Pascal: FShipList.Add(NewShip);
-
-	// Check if position 12 (0-indexed 11) contains '('
-	if len(line) > 11 && line[11] == '(' {
-		// Find the closing parenthesis
-		closeParenPos := strings.Index(line, ")")
-		if closeParenPos > 11 {
-			// Extract ship type (between positions 13 and closing paren in Pascal 1-indexing)
-			// In 0-indexing: between position 12 and closeParenPos
-			shipType := line[12:closeParenPos]
-
-			// Get the last ship (the one we're adding type info to)
-			lastShipIndex := len(p.currentShips) - 1
-			p.currentShips[lastShipIndex].ShipType = shipType
-		} else {
-		}
-	} else {
-		// This might be additional ship data, alignment info, or a new ship
-		// Parse other potential ship data from continuation line
-		line = strings.TrimSpace(line)
-
-		// Check if this continuation line is actually a new ship
-		// New ship pattern: "ShipName [Owned by Owner], w/ fighters, ..."
-		if strings.Contains(line, "[Owned by") {
-			// Parse this continuation line as a new ship
-			p.parseShipLine(line)
-			return
-		}
-
-		// Check for alignment in continuation line
-		if strings.HasPrefix(line, "(") && strings.HasSuffix(line, ")") {
-			alignmentCandidate := line[1 : len(line)-1] // Remove parentheses
-			alignmentLower := strings.ToLower(alignmentCandidate)
-
-			// If it's an alignment, update the last ship
-			if alignmentLower == "good" || alignmentLower == "evil" || alignmentLower == "neutral" ||
-				alignmentLower == "outlaw" || alignmentLower == "criminal" {
-				lastShipIndex := len(p.currentShips) - 1
-				p.currentShips[lastShipIndex].Alignment = alignmentCandidate
-			} else {
-				// Not an alignment, treat as ship type (fallback for non-Pascal format)
-				lastShipIndex := len(p.currentShips) - 1
-				if p.currentShips[lastShipIndex].ShipType == "" {
-					p.currentShips[lastShipIndex].ShipType = alignmentCandidate
-				}
-			}
-		}
+	
+	// 2. Ship data that might be split across lines (ship types, alignments, etc.)
+	if strings.Contains(line, "(") && strings.Contains(line, ")") {
+		// This might be ship type or alignment information
+		// For collection tracker approach, we only care about complete ship entries
+		// Incomplete ship data spanning lines is handled by parseShipLine when it gets the full line
+		return
+	}
+	
+	// 3. Any other line that looks like ship data
+	if strings.Contains(line, " ftrs") || strings.Contains(line, ", w/") {
+		// This line contains fighter information, treat as ship line
+		p.parseShipLine(line)
+		return
 	}
 }
 
@@ -209,8 +177,7 @@ func (p *TWXParser) parseSectorTraders(line string) {
 		return
 	}
 
-	// Clear previous traders and set position
-	p.currentTraders = nil
+	// Phase 4.5: Traders tracked via collection trackers
 	p.sectorPosition = SectorPosTraders
 
 	// Mirror Pascal logic exactly:
@@ -279,7 +246,6 @@ func (p *TWXParser) parseSectorTraders(line string) {
 
 // parseSectorPlanets handles detailed planet parsing from sector data (mirrors Pascal logic)
 func (p *TWXParser) parseSectorPlanets(line string) {
-
 	// Parse format: "Planets : Terra [Owned by Federation], Stardock"
 	// Pascal mirrors TWX Process.pas planet parsing logic
 
@@ -287,8 +253,7 @@ func (p *TWXParser) parseSectorPlanets(line string) {
 		return
 	}
 
-	// Clear previous planets and set position
-	p.currentPlanets = nil
+	// Phase 4.5: Planets tracked via collection trackers
 	p.sectorPosition = SectorPosPlanets
 
 	planetInfo := line[10:] // Remove "Planets : "
@@ -351,8 +316,10 @@ func (p *TWXParser) parsePlanetInfo(planetInfo string) {
 		// Validate parsed planet data
 		p.validatePlanetData(&planet)
 
-		p.currentPlanets = append(p.currentPlanets, planet)
-		p.sectorCollections.AddPlanet(planet.Name, planet.Owner, planet.Fighters, planet.Citadel, planet.Stardock)
+		// Phase 4.5: Planets tracked via collection trackers only
+		if p.sectorCollections != nil {
+			p.sectorCollections.AddPlanet(planet.Name, planet.Owner, planet.Fighters, planet.Citadel, planet.Stardock)
+		}
 	}
 }
 
@@ -497,7 +464,7 @@ func (p *TWXParser) parseSectorMines(line string) {
 	}
 
 	// Clear previous mines
-	p.currentMines = nil
+	// Phase 4.5: Mines tracked via database directly (no intermediate collection)
 	p.sectorPosition = SectorPosMines
 
 	mineInfo := line[10:] // Remove "Mines   : "
@@ -536,7 +503,7 @@ func (p *TWXParser) parseSectorMines(line string) {
 			mine.Type = parts[1] // "Armid" or "Limpet"
 		}
 
-		p.currentMines = append(p.currentMines, mine)
+		// Phase 4.5: Mines tracked directly to database (no intermediate collection)
 	}
 }
 
@@ -631,7 +598,10 @@ func (p *TWXParser) parseSectorNavHaz(line string) {
 		navHazPercent = p.validatePercentage(navHazPercent)
 
 		// Store NavHaz percentage in current sector data
-		p.currentSector.NavHaz = navHazPercent
+		// Phase 2: NavHaz tracked via SectorTracker
+		if p.sectorTracker != nil {
+			p.sectorTracker.SetNavHaz(navHazPercent)
+		}
 	}
 
 	// Extract actual count from parentheses (for logging/validation)
@@ -714,10 +684,7 @@ func (p *TWXParser) handleTraderContinuation(line string) {
 			// Validate completed trader data
 			p.validateTraderData(&trader)
 
-			// Add completed trader to list
-			p.currentTraders = append(p.currentTraders, trader)
-			
-			// Phase 2: Add trader to collection tracker
+			// Phase 4.5: Traders tracked via collection trackers only
 			if p.sectorCollections != nil {
 				p.sectorCollections.AddTrader(trader.Name, trader.ShipName, trader.ShipType, trader.Fighters)
 			}
@@ -747,10 +714,7 @@ func (p *TWXParser) handleTraderContinuation(line string) {
 			// Validate completed trader data
 			p.validateTraderData(&trader)
 
-			// Add completed trader to list
-			p.currentTraders = append(p.currentTraders, trader)
-			
-			// Phase 2: Add trader to collection tracker
+			// Phase 4.5: Traders tracked via collection trackers only
 			if p.sectorCollections != nil {
 				p.sectorCollections.AddTrader(trader.Name, trader.ShipName, trader.ShipType, trader.Fighters)
 			}
@@ -817,7 +781,7 @@ func (p *TWXParser) handleTraderContinuation(line string) {
 func (p *TWXParser) finalizeCurrentTrader() {
 	if p.currentTrader.Name != "" {
 		p.validateTraderData(&p.currentTrader)
-		p.currentTraders = append(p.currentTraders, p.currentTrader)
+		// Phase 4.5: Traders tracked via collection trackers (no intermediate objects)
 		p.currentTrader = TraderInfo{} // Reset
 	}
 }
@@ -865,7 +829,7 @@ func (p *TWXParser) handleMineContinuation(line string) {
 		mine.Quantity = p.parseIntSafeWithCommas(parts[0])
 		mine.Type = parts[1] // "Armid" or "Limpet"
 
-		p.currentMines = append(p.currentMines, mine)
+		// Phase 4.5: Mines tracked directly to database (no intermediate collection)
 	}
 }
 
@@ -908,7 +872,10 @@ func (p *TWXParser) handlePortContinuation(line string) {
 
 	if buildTime >= 0 {
 		// Store build time in current sector's port data
-		p.currentSector.Port.BuildTime = buildTime
+		// Phase 3: Port build time tracked via PortTracker
+		if p.portTracker != nil {
+			p.portTracker.SetBuildTime(buildTime)
+		}
 	} else {
 	}
 }
@@ -965,4 +932,169 @@ func (p *TWXParser) storePortInfo(name string, class int, fullInfo string) {
 	// 2. Parse trade status from various indicators
 	// 3. Store build time and other metadata
 	// 4. Update sector data with port reference
+}
+
+// ============================================================================
+// SECTOR PARSING METHODS (moved from twx_parser.go for clean separation)
+// ============================================================================
+
+func (p *TWXParser) handleSectorWarps(line string) {
+	// Parse warp data from line like "Warps to Sector(s) :  (8247) - 18964"
+	if len(line) > 20 {
+		warpData := line[20:] // Remove "Warps to Sector(s) :"
+		p.parseWarpConnections(warpData)
+	}
+
+	// Don't complete sector here - warps are not always the last item!
+	// Sector display continues with other data like ports, traders, etc.
+}
+
+func (p *TWXParser) handleSectorBeacon(line string) {
+	if len(line) > 10 {
+		beacon := line[10:]
+		// Phase 2: Beacon tracked via SectorTracker
+		if p.sectorTracker != nil {
+			p.sectorTracker.SetBeacon(beacon)
+		}
+	}
+}
+
+func (p *TWXParser) handleSectorPorts(line string) {
+	p.sectorPosition = SectorPosPorts
+
+	// Parse port data (mirrors TWX Pascal logic from lines 671-703)
+	if strings.Contains(line, "<=-DANGER-=>") {
+		// Port is destroyed - set Dead flag
+		if p.portTracker != nil {
+			p.portTracker.SetDead(true)
+		}
+		return
+	}
+
+	if len(line) <= 10 {
+		return
+	}
+
+	portInfo := line[10:] // Remove "Ports   : "
+
+	// Extract port name (before ", Class")
+	classPos := strings.Index(portInfo, ", Class")
+	if classPos <= 0 {
+		return
+	}
+
+	portName := strings.TrimSpace(portInfo[:classPos])
+
+	// Extract class number (Pascal: StrToIntSafe(Copy(Line, Pos(', Class', Line) + 8, 1)))
+	classNum := 0
+	if classPos+8 < len(portInfo) {
+		classStr := string(portInfo[classPos+8])
+		classNum = p.parseIntSafe(classStr)
+	}
+
+	// Parse buy/sell indicators from end of line (Pascal logic: lines 685-698)
+	// Format: "Port Name, Class 1 Port BBS" (last 3 chars indicate buy/sell)
+	buyOre := false
+	buyOrg := false
+	buyEquip := false
+
+	if len(portInfo) >= 3 {
+		// Get last 3 characters for trade pattern
+		tradePattern := portInfo[len(portInfo)-3:]
+
+		// Pascal logic: if (Line[length(Line) - 3] = 'B')
+		if len(tradePattern) >= 3 {
+			buyOre = (tradePattern[0] == 'B')
+			buyOrg = (tradePattern[1] == 'B')
+			buyEquip = (tradePattern[2] == 'B')
+		}
+	}
+
+	// Determine port class from buy/sell pattern if not explicit (mirrors Pascal logic)
+	if classNum == 0 {
+		classNum = p.determinePortClassFromPattern(buyOre, buyOrg, buyEquip)
+	}
+
+	// Phase 3: Store port information using straight-sql tracker
+	if p.portTracker != nil {
+		p.portTracker.SetName(portName).SetClassIndex(classNum).SetBuildTime(0)
+		p.portTracker.SetBuyProducts(buyOre, buyOrg, buyEquip)
+		debug.Log("PORT: Tracker updated - name=%s, class=%d, buy_pattern=%t%t%t", portName, classNum, buyOre, buyOrg, buyEquip)
+	}
+}
+
+// determinePortClassFromPattern determines port class from buy/sell pattern (mirrors Pascal logic)
+func (p *TWXParser) determinePortClassFromPattern(buyOre, buyOrg, buyEquip bool) int {
+	// Mirror Pascal logic from ProcessPortLine (lines 1055-1062)
+	// BBS = Class 1, BSB = Class 2, SBB = Class 3, etc.
+
+	if buyOre && buyOrg && !buyEquip {
+		return 1 // BBS
+	} else if buyOre && !buyOrg && buyEquip {
+		return 2 // BSB
+	} else if !buyOre && buyOrg && buyEquip {
+		return 3 // SBB
+	} else if !buyOre && !buyOrg && buyEquip {
+		return 4 // SSB
+	} else if !buyOre && buyOrg && !buyEquip {
+		return 5 // SBS
+	} else if buyOre && !buyOrg && !buyEquip {
+		return 6 // BSS
+	} else if !buyOre && !buyOrg && !buyEquip {
+		return 7 // SSS
+	} else if buyOre && buyOrg && buyEquip {
+		return 8 // BBB
+	}
+
+	return 0 // Unknown pattern
+}
+
+func (p *TWXParser) handleSectorPlanets(line string) {
+	p.sectorPosition = SectorPosPlanets
+	// Call detailed planet parsing
+	p.parseSectorPlanets(line)
+}
+
+func (p *TWXParser) handleSectorTraders(line string) {
+	p.sectorPosition = SectorPosTraders
+	// Call detailed trader parsing
+	p.parseSectorTraders(line)
+}
+
+func (p *TWXParser) handleSectorShips(line string) {
+	p.sectorPosition = SectorPosShips
+	// Call detailed ship parsing
+	p.parseSectorShips(line)
+}
+
+func (p *TWXParser) handleSectorFighters(line string) {
+	// Call detailed fighter parsing
+	p.parseSectorFighters(line)
+}
+
+func (p *TWXParser) handleSectorNavHaz(line string) {
+	p.sectorPosition = SectorPosNormal
+	// Call detailed navhaz parsing
+	p.parseSectorNavHaz(line)
+}
+
+func (p *TWXParser) handleSectorMines(line string) {
+	p.sectorPosition = SectorPosMines
+	// Call detailed mine parsing
+	p.parseSectorMines(line)
+}
+
+func (p *TWXParser) handleSectorConstellation(parts []string) {
+	// Extract constellation (everything after "in")
+	if len(parts) >= 5 && parts[3] == "in" {
+		constellation := strings.Join(parts[4:], " ")
+		// Remove trailing period if present
+		constellation = strings.TrimSuffix(constellation, ".")
+		// Remove exploration status suffixes like "(unexplored)"
+		constellation = strings.TrimSuffix(constellation, " (unexplored)")
+		// Phase 2: Constellation tracked via SectorTracker  
+		if p.sectorTracker != nil {
+			p.sectorTracker.SetConstellation(constellation)
+		}
+	}
 }
