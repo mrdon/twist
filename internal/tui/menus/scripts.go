@@ -160,14 +160,14 @@ func (s *ScriptsMenu) buildReasonableTable(scripts []api.ScriptInfo) string {
 
 	// Simple table with reasonable fixed column widths and checkmarks
 	table.WriteString("┌────┬─────────────────┬─────────────────┬────────┐\n")
-	table.WriteString("│ ID │ Name            │ File            │ Status │\n")
+	table.WriteString("│ ID │ Name            │ File            │ Active │\n")
 	table.WriteString("├────┼─────────────────┼─────────────────┼────────┤\n")
 
 	for i, script := range scripts {
-		// Use checkmark for active, X for inactive (no colors)
-		status := "✓"
-		if !script.IsActive {
-			status = "✗"
+		// Use checkmark for active, nothing for inactive
+		status := ""
+		if script.IsActive {
+			status = "✓"
 		}
 
 		// Truncate to reasonable lengths
