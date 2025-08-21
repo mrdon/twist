@@ -1,8 +1,8 @@
 package menus
 
 import (
-	twistComponents "twist/internal/components"
 	"twist/internal/api"
+	twistComponents "twist/internal/components"
 	"twist/internal/debug"
 )
 
@@ -10,6 +10,13 @@ import (
 type MenuHandler interface {
 	HandleMenuAction(action string, app AppInterface) error
 	GetMenuItems() []twistComponents.MenuItem
+}
+
+// ModalAwareMenuHandler is an optional interface that menu handlers can implement
+// to indicate whether their actions create modals, eliminating the need for hardcoded lists
+type ModalAwareMenuHandler interface {
+	MenuHandler
+	ActionCreatesModal(action string) bool
 }
 
 // AppInterface defines the methods that menu handlers need from TwistApp
@@ -33,6 +40,9 @@ type AppInterface interface {
 	ShowModal(title, text string, buttons []string, callback func(int, string))
 	ShowInputDialog(pageName string, dialog interface{}) // For showing custom input dialogs
 	CloseModal()
+
+	// Terminal info for dynamic sizing
+	GetTerminalWidth() int
 
 	// Version information
 	GetVersion() string
@@ -94,18 +104,18 @@ func (mm *MenuManager) GetEnabledMenuItems(menuName string, app AppInterface) []
 	result := make([]EnabledMenuItem, len(config.Items))
 	for i, item := range config.Items {
 		enabled := true // Default to enabled
-		
+
 		// Check if we have an enablement checker for this item
 		if i < len(config.ItemEnabledChecks) && config.ItemEnabledChecks[i] != nil {
 			enabled = config.ItemEnabledChecks[i](app)
 		}
-		
+
 		result[i] = EnabledMenuItem{
 			MenuItem: item,
 			Enabled:  enabled,
 		}
 	}
-	
+
 	return result
 }
 
@@ -148,6 +158,22 @@ func (mm *MenuManager) GetDropdownPosition(menuName string) int {
 // GetAllShortcuts returns all keyboard shortcuts for help
 func (mm *MenuManager) GetAllShortcuts() map[string]string {
 	return mm.registry.GetAllKeyboardShortcuts()
+}
+
+// ActionCreatesModal checks if a menu action creates a modal dialog
+func (mm *MenuManager) ActionCreatesModal(menuName, action string) bool {
+	handler := mm.registry.GetMenuHandler(menuName)
+	if handler == nil {
+		return false
+	}
+
+	// Check if the handler implements ModalAwareMenuHandler
+	if modalAware, ok := handler.(ModalAwareMenuHandler); ok {
+		return modalAware.ActionCreatesModal(action)
+	}
+
+	// Fallback: assume actions don't create modals unless explicitly declared
+	return false
 }
 
 // HandleShortcut processes a keyboard shortcut

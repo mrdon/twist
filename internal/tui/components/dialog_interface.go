@@ -7,10 +7,10 @@ import "github.com/rivo/tview"
 type InputDialog interface {
 	// GetView returns the main view component for display
 	GetView() tview.Primitive
-	
+
 	// GetForm returns the underlying form component for focus management
 	GetForm() *tview.Form
-	
+
 	// SetDoneFunc sets the function to call when the dialog should be closed (ESC key, etc.)
 	SetDoneFunc(handler func()) InputDialog
 }

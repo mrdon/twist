@@ -842,7 +842,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 
 	// Get regular menu items from the centralized registry
 	items := ta.menuManager.GetMenuItems(menuName)
-	
+
 	// Get enabled states for each item
 	enabledItems := ta.menuManager.GetEnabledMenuItems(menuName, ta)
 
@@ -866,14 +866,11 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 			debug.Log("Error handling menu action %s/%s: %v", menuName, selected, err)
 		}
 
-		// Close modal for most actions (some actions like Connect handle their own modal lifecycle)
-		specialActions := map[string]bool{
-			"Connect":            true, // Connection dialog manages its own lifecycle
-			"Keyboard Shortcuts": true, // Help modal manages its own lifecycle
-			"About":              true, // About modal manages its own lifecycle
-		}
-
-		if !specialActions[selected] {
+		// Check if this action creates a modal - if so, don't close the dropdown modal
+		if ta.menuManager.ActionCreatesModal(menuName, selected) {
+			debug.Log("Menu action '%s/%s' creates a modal, preserving modal state", menuName, selected)
+		} else {
+			// Action doesn't create a modal, safe to close dropdown/modal state
 			ta.closeModal()
 		}
 	}
@@ -882,10 +879,10 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 		// Handle left/right arrow navigation between menus
 		ta.navigateMenu(menuName, direction)
 	}, ta.globalShortcuts)
-	
+
 	// Apply enabled/disabled states to the dropdown items
 	ta.applyEnabledStates(dropdown, enabledItems)
-	
+
 	ta.pages.AddPage("dropdown-menu", dropdown, true, true)
 	ta.modalVisible = true
 }
@@ -896,7 +893,7 @@ func (ta *TwistApp) applyEnabledStates(dropdownFlex *tview.Flex, enabledItems []
 	if dropdown == nil {
 		return
 	}
-	
+
 	// Apply enabled state to each item
 	for i, enabledItem := range enabledItems {
 		dropdown.SetItemEnabled(i, enabledItem.Enabled)
@@ -1025,12 +1022,33 @@ func (ta *TwistApp) ClearTerminal() {
 
 // ShowModal displays a modal dialog
 func (ta *TwistApp) ShowModal(title, text string, buttons []string, callback func(int, string)) {
+	debug.Log("ShowModal: Called with title='%s', text length=%d, buttons=%v", title, len(text), buttons)
+
+	// Check if dropdown is visible and close it first
+	if ta.menuComponent.IsDropdownVisible() {
+		debug.Log("ShowModal: Dropdown is visible, hiding it first")
+		ta.menuComponent.HideDropdown()
+		ta.pages.RemovePage("dropdown-menu")
+	}
+
 	modal := tview.NewModal().
 		SetText(text).
 		AddButtons(buttons).
 		SetDoneFunc(callback)
+	modal.SetTitle(title)
+	debug.Log("ShowModal: Adding page 'menu-modal' to pages")
 	ta.pages.AddPage("menu-modal", modal, true, true)
+	ta.pages.ShowPage("menu-modal")
+	ta.app.SetFocus(modal)
 	ta.modalVisible = true
+	debug.Log("ShowModal: Modal added and modalVisible set to true, focused and shown")
+}
+
+// GetTerminalWidth returns the current terminal width for dynamic sizing
+func (ta *TwistApp) GetTerminalWidth() int {
+	// Use a reasonable default if we can't get the actual terminal size
+	// Most terminal modals are comfortable around 60-80 characters wide
+	return 120 // Default terminal width assumption
 }
 
 // ShowInputDialog displays a custom input dialog

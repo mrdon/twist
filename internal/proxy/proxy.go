@@ -752,7 +752,7 @@ func (p *Proxy) SendBurstCommand(burstText string) error {
 	// Use the existing burst processing logic from terminal menu manager
 	// Replace * with newlines and send each command
 	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
-	
+
 	// Split into individual commands and send each one using the proxy adapter pattern
 	commands := strings.Split(expandedText, "\r\n")
 	proxyAdapter := &proxyAdapter{p}

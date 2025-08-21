@@ -36,7 +36,6 @@ func NewDropdownMenu() *DropdownMenu {
 	return dm
 }
 
-
 // Show displays the dropdown menu with MenuItem structs that can include shortcuts
 func (dm *DropdownMenu) Show(menuName string, items []MenuItem, leftOffset int, callback func(string), globalShortcuts *twistComponents.GlobalShortcutManager) *tview.Flex {
 	dm.callback = callback
@@ -140,19 +139,19 @@ func (dm *DropdownMenu) SetItemEnabled(itemIndex int, enabled bool) {
 	if dm.list == nil {
 		return
 	}
-	
+
 	// Get the current item text
 	itemCount := dm.list.GetItemCount()
 	if itemIndex < 0 || itemIndex >= itemCount {
 		return
 	}
-	
+
 	// Get the main text of the item
 	mainText, _ := dm.list.GetItemText(itemIndex)
-	
+
 	// Remove any existing color tags (simple implementation)
 	cleanText := dm.stripColorTags(mainText)
-	
+
 	// Apply enabled/disabled styling
 	var styledText string
 	if enabled {
@@ -160,7 +159,7 @@ func (dm *DropdownMenu) SetItemEnabled(itemIndex int, enabled bool) {
 	} else {
 		styledText = "[darkgray]" + cleanText + "[white]" // Grayed out text
 	}
-	
+
 	// Update the item text
 	dm.list.SetItemText(itemIndex, styledText, "")
 }
@@ -170,7 +169,7 @@ func (dm *DropdownMenu) stripColorTags(text string) string {
 	// Simple implementation to remove [color] tags
 	result := ""
 	inTag := false
-	
+
 	for _, char := range text {
 		if char == '[' {
 			inTag = true
@@ -180,7 +179,7 @@ func (dm *DropdownMenu) stripColorTags(text string) string {
 			result += string(char)
 		}
 	}
-	
+
 	return result
 }
 

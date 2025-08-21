@@ -13,6 +13,16 @@ func NewHelpMenu() *HelpMenu {
 	return &HelpMenu{}
 }
 
+// ActionCreatesModal implements ModalAwareMenuHandler
+func (h *HelpMenu) ActionCreatesModal(action string) bool {
+	switch action {
+	case "Keyboard Shortcuts", "About", "User Manual":
+		return true // These actions create modal dialogs
+	default:
+		return false
+	}
+}
+
 // GetMenuItems returns the menu items for the Help menu
 func (h *HelpMenu) GetMenuItems() []twistComponents.MenuItem {
 	return []twistComponents.MenuItem{

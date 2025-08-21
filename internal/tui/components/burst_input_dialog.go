@@ -86,9 +86,9 @@ func (bid *BurstInputDialog) GetView() tview.Primitive {
 		SetDirection(tview.FlexRow).
 		AddItem(nil, 0, 1, false). // Top spacer (proportional)
 		AddItem(tview.NewFlex().
-					AddItem(nil, 0, 1, false).               // Left spacer (proportional)
-					AddItem(bid.form, 70, 0, true).          // Fixed width for form (70 chars for longer input)
-					AddItem(nil, 0, 1, false), 12, 0, true). // Fixed height (12 rows for help text)
+						AddItem(nil, 0, 1, false).               // Left spacer (proportional)
+						AddItem(bid.form, 70, 0, true).          // Fixed width for form (70 chars for longer input)
+						AddItem(nil, 0, 1, false), 12, 0, true). // Fixed height (12 rows for help text)
 		AddItem(nil, 0, 1, false) // Bottom spacer (proportional)
 
 	// Apply theme colors for modal overlay effect

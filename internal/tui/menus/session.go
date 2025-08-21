@@ -13,6 +13,16 @@ func NewSessionMenu() *SessionMenu {
 	return &SessionMenu{}
 }
 
+// ActionCreatesModal implements ModalAwareMenuHandler
+func (s *SessionMenu) ActionCreatesModal(action string) bool {
+	switch action {
+	case "Connect", "Recent Connections", "Save Session":
+		return true // These actions create modal dialogs
+	default:
+		return false
+	}
+}
+
 // GetMenuItems returns the menu items for the Session menu
 func (s *SessionMenu) GetMenuItems() []twistComponents.MenuItem {
 	return []twistComponents.MenuItem{

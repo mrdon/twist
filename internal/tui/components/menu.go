@@ -124,7 +124,6 @@ func (mc *MenuComponent) SetDisconnectedMenu() {
 	mc.UpdateMenu(false)
 }
 
-
 // ShowDropdown displays a dropdown menu with MenuItem structs that support shortcuts
 func (mc *MenuComponent) ShowDropdown(menuName string, items []MenuItem, callback func(string), navCallback func(string), globalShortcuts *twistComponents.GlobalShortcutManager) *tview.Flex {
 	// Calculate position based on menu item using centralized auto-calculation

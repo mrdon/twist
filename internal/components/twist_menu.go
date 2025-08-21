@@ -180,7 +180,6 @@ func (tm *TwistMenu) AddMenuItem(item MenuItem, callback func()) {
 	}
 }
 
-
 // SetMenuItems replaces all menu items with automatic shortcut registration and proper display formatting
 func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 	// Clear existing items and shortcuts

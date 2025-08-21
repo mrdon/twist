@@ -24,11 +24,11 @@ type MenuItemEnabledChecker func(app AppInterface) bool
 
 // MenuConfig defines a complete menu with all its properties
 type MenuConfig struct {
-	Name              string                                // Menu name (e.g., "Session")
-	Shortcut          string                                // Alt key shortcut (e.g., "Alt+S")
-	Items             []twistComponents.MenuItem            // Menu items with their shortcuts
-	ItemEnabledChecks []MenuItemEnabledChecker              // Functions to check if each item is enabled
-	Handler           MenuHandler                           // Handler for this menu
+	Name              string                     // Menu name (e.g., "Session")
+	Shortcut          string                     // Alt key shortcut (e.g., "Alt+S")
+	Items             []twistComponents.MenuItem // Menu items with their shortcuts
+	ItemEnabledChecks []MenuItemEnabledChecker   // Functions to check if each item is enabled
+	Handler           MenuHandler                // Handler for this menu
 }
 
 // MenuRegistry provides centralized menu configuration
