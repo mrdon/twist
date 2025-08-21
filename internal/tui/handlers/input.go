@@ -16,9 +16,10 @@ const (
 
 // InputHandler manages input handling for the application
 type InputHandler struct {
-	app          *tview.Application
-	inputMode    InputMode
-	modalVisible bool
+	app               *tview.Application
+	inputMode         InputMode
+	modalVisible      bool
+	isDropdownVisible func() bool // Function to check if dropdown is visible
 
 	// Callbacks
 	onConnect              func(string)
@@ -66,6 +67,11 @@ func (ih *InputHandler) SetDropdownCallback(onShowDropdown func(string, []string
 	ih.onShowDropdown = onShowDropdown
 }
 
+// SetDropdownVisibilityChecker sets the function to check if dropdown is visible
+func (ih *InputHandler) SetDropdownVisibilityChecker(isDropdownVisible func() bool) {
+	ih.isDropdownVisible = isDropdownVisible
+}
+
 // SetInputMode sets the current input mode
 func (ih *InputHandler) SetInputMode(mode InputMode) {
 	ih.inputMode = mode
@@ -101,9 +107,6 @@ func (ih *InputHandler) handleMenuInput(event *tcell.EventKey) *tcell.EventKey {
 		switch event.Rune() {
 		case 's', 'S':
 			ih.showSessionMenu()
-			return nil
-		case 'e', 'E':
-			ih.showEditMenu()
 			return nil
 		case 'v', 'V':
 			ih.showViewMenu()
@@ -142,9 +145,6 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 		case 's', 'S':
 			ih.showSessionMenu()
 			return nil
-		case 'e', 'E':
-			ih.showEditMenu()
-			return nil
 		case 'v', 'V':
 			ih.showViewMenu()
 			return nil
@@ -178,10 +178,8 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 		ih.SetInputMode(InputModeMenu)
 		return nil
 	case tcell.KeyEnter:
-		// Send carriage return to terminal only if no modals are open
-		if !ih.modalVisible && ih.onSendCommand != nil {
-			ih.onSendCommand("\r")
-		}
+		// Don't handle Enter in the input handler - let the focused component handle it
+		// This allows menus, modals, and terminal input to handle Enter naturally
 		return event
 	case tcell.KeyBackspace, tcell.KeyBackspace2:
 		// Send backspace control character only if no modals are open
@@ -226,49 +224,27 @@ func (ih *InputHandler) handleModalInput(event *tcell.EventKey) *tcell.EventKey 
 
 // Menu display functions
 func (ih *InputHandler) showSessionMenu() {
-	// We need a special callback that doesn't auto-close when Connect is selected
-	// This will be handled by the app's navigation logic instead
-	if ih.onShowDropdown != nil {
-		options := []string{"Connect", "Disconnect", "Quit"}
-		ih.onShowDropdown("Session", options, func(selected string) {
-			// Note: The actual handling happens in app.go showDropdownMenu
-			// This callback gets overridden by the showDropdownMenu auto-close behavior
-		})
-	} else {
-	}
-}
-
-func (ih *InputHandler) showEditMenu() {
-	if ih.onShowDropdown != nil {
-		options := []string{"Cut", "Copy", "Paste", "Find", "Replace"}
-		ih.onShowDropdown("Edit", options, func(selected string) {
-		})
-	}
+	ih.showMenu("Session")
 }
 
 func (ih *InputHandler) showViewMenu() {
-	if ih.onShowDropdown != nil {
-		options := []string{"Scripts", "Zoom In", "Zoom Out", "Full Screen", "Panels"}
-		ih.onShowDropdown("View", options, func(selected string) {
-			// Handle Scripts selection - for now just log
-			if selected == "Scripts" {
-			}
-		})
-	}
+	ih.showMenu("View")
 }
 
 func (ih *InputHandler) showTerminalMenu() {
-	if ih.onShowDropdown != nil {
-		options := []string{"Clear", "Scroll Up", "Scroll Down", "Copy Selection"}
-		ih.onShowDropdown("Terminal", options, func(selected string) {
-		})
-	}
+	ih.showMenu("Terminal")
 }
 
 func (ih *InputHandler) showHelpMenu() {
+	ih.showMenu("Help")
+}
+
+// showMenu displays any menu using the centralized menu system
+func (ih *InputHandler) showMenu(menuName string) {
 	if ih.onShowDropdown != nil {
-		options := []string{"Keyboard Shortcuts", "About", "User Manual"}
-		ih.onShowDropdown("Help", options, func(selected string) {
+		// Use empty options - showDropdownMenu in app.go will get the real items from the menu manager
+		ih.onShowDropdown(menuName, []string{}, func(selected string) {
+			// This callback is not used - showDropdownMenu handles everything
 		})
 	}
 }

@@ -30,7 +30,7 @@ func NewDropdownMenu() *DropdownMenu {
 		visible: false,
 	}
 
-	// Set up arrow key navigation
+	// Set up basic input handling
 	list.SetInputCapture(dm.handleInput)
 
 	return dm
@@ -40,6 +40,10 @@ func NewDropdownMenu() *DropdownMenu {
 func (dm *DropdownMenu) Show(menuName string, items []MenuItem, leftOffset int, callback func(string), globalShortcuts *twistComponents.GlobalShortcutManager) *tview.Flex {
 	dm.callback = callback
 	dm.visible = true
+
+	// Recreate the list component to ensure fresh sizing for each menu
+	dm.list = theme.NewTwistMenu()
+	dm.list.SetInputCapture(dm.handleInput)
 
 	// Create callbacks for each item and register global shortcuts
 	callbacks := make([]func(), len(items))
@@ -92,18 +96,17 @@ func (dm *DropdownMenu) Show(menuName string, items []MenuItem, leftOffset int, 
 		dropdownWidth = 15 // Minimum width
 	}
 
-	// Create positioned wrapper - height accounts for all items without scrolling
-	// Allocate generous height to ensure all items are visible without scrolling
-	menuHeight := len(items)*2 + 2 // Generous height calculation
-	if menuHeight < 6 {
-		menuHeight = 6 // Minimum height for border
-	}
+	// Calculate proper height for dropdown menu
+	// tview.List rendering: each item takes 1 row, no separators between items
+	// Required space: top border (1) + items (N) + bottom border (1) + internal padding (1-2)
+	itemCount := len(items)
+	calculatedHeight := calculateMenuHeight(itemCount)
 
 	dm.wrapper = tview.NewFlex().
 		AddItem(nil, leftOffset, 0, false).
 		AddItem(tview.NewFlex().SetDirection(tview.FlexRow).
-			AddItem(nil, 1, 0, false).             // Top spacing (1 row below menu bar)
-			AddItem(dm.list, menuHeight, 0, true). // Height for all items + border
+			AddItem(nil, 1, 0, false).                   // Top spacing (1 row below menu bar)
+			AddItem(dm.list, calculatedHeight, 0, true). // Calculated height, weight 0
 			AddItem(nil, 0, 1, false), dropdownWidth, 0, true).
 		AddItem(nil, 0, 1, false)
 
@@ -138,7 +141,7 @@ func (dm *DropdownMenu) handleInput(event *tcell.EventKey) *tcell.EventKey {
 		return nil // Shortcut was handled
 	}
 
-	// Then handle navigation keys
+	// Handle menu navigation (left/right between different menus)
 	switch event.Key() {
 	case tcell.KeyLeft:
 		if dm.navigationCallback != nil {
@@ -150,6 +153,33 @@ func (dm *DropdownMenu) handleInput(event *tcell.EventKey) *tcell.EventKey {
 			dm.navigationCallback("right")
 		}
 		return nil
+	case tcell.KeyEnter:
+		// Handle Enter key to trigger menu item and consume it
+		currentItem := dm.list.GetCurrentItem()
+		if currentItem >= 0 && currentItem < dm.list.GetItemCount() {
+			// Get the callback from TwistMenu and call it
+			callbacks := dm.list.GetCallbacks()
+			if currentItem < len(callbacks) && callbacks[currentItem] != nil {
+				callbacks[currentItem]()
+			}
+		}
+		return nil // Consume Enter to prevent terminal input
+	default:
+		// Let tview handle all other keys (including up/down for item navigation)
+		return event
 	}
-	return event
+}
+
+// calculateMenuHeight determines the proper height for a dropdown menu
+// Formula derived from empirical data points:
+// 1 item → 4 rows, 2 items → 6 rows, 3 items → 8 rows
+// Pattern: 4, 6, 8... = 2 * itemCount + 2
+func calculateMenuHeight(itemCount int) int {
+	if itemCount <= 0 {
+		return 4
+	}
+
+	// Mathematical formula: height = 2 * items + 2
+	// This gives us: 1→4, 2→6, 3→8, 4→10, etc.
+	return 2*itemCount + 2
 }

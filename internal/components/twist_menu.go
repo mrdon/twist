@@ -129,16 +129,34 @@ type TwistMenu struct {
 	borderChars     *BorderChars
 	shortcutManager *ShortcutManager
 	menuItems       []MenuItem
+	callbacks       []func() // Store callbacks to handle Enter key properly
 }
 
 // NewTwistMenu creates a new TwistMenu with optional custom border characters
 func NewTwistMenu(borderChars *BorderChars) *TwistMenu {
-	return &TwistMenu{
+	tm := &TwistMenu{
 		List:            tview.NewList(),
 		borderChars:     borderChars,
 		shortcutManager: NewShortcutManager(),
 		menuItems:       make([]MenuItem, 0),
+		callbacks:       make([]func(), 0),
 	}
+
+	// Override input capture to consume Enter key after tview processes it
+	tm.List.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		if event.Key() == tcell.KeyEnter {
+			// Handle Enter key ourselves to consume it properly
+			currentItem := tm.List.GetCurrentItem()
+			if currentItem >= 0 && currentItem < len(tm.callbacks) && tm.callbacks[currentItem] != nil {
+				// Call the callback function
+				tm.callbacks[currentItem]()
+			}
+			return nil // Consume Enter to prevent propagation to terminal
+		}
+		return event
+	})
+
+	return tm
 }
 
 // SetBorderChars updates the border characters for this menu
@@ -150,9 +168,10 @@ func (tm *TwistMenu) SetBorderChars(borderChars *BorderChars) *TwistMenu {
 // AddMenuItem adds a menu item with automatic shortcut registration
 func (tm *TwistMenu) AddMenuItem(item MenuItem, callback func()) {
 	tm.menuItems = append(tm.menuItems, item)
+	tm.callbacks = append(tm.callbacks, callback)
 
-	// Add to the underlying tview.List
-	tm.List.AddItem(item.Label, "", 0, callback)
+	// Add to the underlying tview.List (no callback - we handle it ourselves)
+	tm.List.AddItem(item.Label, "", 0, nil)
 
 	// Register shortcut if present
 	if item.Shortcut != "" {
@@ -166,6 +185,7 @@ func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 	tm.List.Clear()
 	tm.shortcutManager = NewShortcutManager() // Reset shortcuts
 	tm.menuItems = items
+	tm.callbacks = callbacks // Store callbacks for Enter key handling
 
 	// Check if any items have shortcuts to determine layout
 	hasAnyShortcuts := false
@@ -203,8 +223,8 @@ func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {
 			displayText = item.Label + spaces + item.Shortcut
 		}
 
-		// Add to the underlying tview.List with formatted display text
-		tm.List.AddItem(displayText, "", 0, callback)
+		// Add to the underlying tview.List with formatted display text (no callback - we handle it ourselves)
+		tm.List.AddItem(displayText, "", 0, nil)
 
 		// Register shortcut if present
 		if item.Shortcut != "" {
@@ -221,6 +241,11 @@ func (tm *TwistMenu) HandleShortcut(event *tcell.EventKey) bool {
 // GetMenuItems returns the current menu items
 func (tm *TwistMenu) GetMenuItems() []MenuItem {
 	return tm.menuItems
+}
+
+// GetCallbacks returns the current menu item callbacks
+func (tm *TwistMenu) GetCallbacks() []func() {
+	return tm.callbacks
 }
 
 // Draw overrides the default tview.List Draw method to apply custom border characters

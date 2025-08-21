@@ -16,10 +16,19 @@ type MenuComponent struct {
 	activeMenu    string
 	connected     bool
 	targetWidth   int // Target width to match status bar
+
+	// Menu manager for centralized configuration
+	menuManager MenuManagerInterface
+}
+
+// MenuManagerInterface defines what the menu component needs from the menu manager
+type MenuManagerInterface interface {
+	GetMenuNames() []string
+	GetDropdownPosition(menuName string) int
 }
 
 // NewMenuComponent creates a new menu component
-func NewMenuComponent() *MenuComponent {
+func NewMenuComponent(menuManager MenuManagerInterface) *MenuComponent {
 	// Use theme factory for menu bar styling
 	menuBar := theme.NewMenuBar().
 		SetDynamicColors(true).
@@ -39,6 +48,7 @@ func NewMenuComponent() *MenuComponent {
 		activeMenu:    "",
 		connected:     false,
 		targetWidth:   0,
+		menuManager:   menuManager,
 	}
 
 	// Set initial menu text
@@ -64,8 +74,8 @@ func (mc *MenuComponent) updateMenuWithHighlight() {
 	currentTheme := theme.Current()
 	menuColors := currentTheme.MenuColors()
 
-	// Create menu items array
-	menus := []string{"Session", "Edit", "View", "Terminal", "Help"}
+	// Get menu names from the centralized registry
+	menus := mc.menuManager.GetMenuNames()
 
 	// Build menu text with highlighting using theme colors
 	menuText := " "
@@ -116,42 +126,37 @@ func (mc *MenuComponent) SetDisconnectedMenu() {
 
 // ShowDropdown displays a dropdown menu with MenuItem structs that support shortcuts
 func (mc *MenuComponent) ShowDropdown(menuName string, items []MenuItem, callback func(string), navCallback func(string), globalShortcuts *twistComponents.GlobalShortcutManager) *tview.Flex {
-	// Calculate position based on menu item
-	var leftOffset int
-	switch menuName {
-	case "Session":
-		leftOffset = 1
-	case "Edit":
-		leftOffset = 10
-	case "View":
-		leftOffset = 16
-	case "Terminal":
-		leftOffset = 22
-	case "Help":
-		leftOffset = 32
-	default:
-		leftOffset = 1
-	}
+	// Calculate position based on menu item using centralized auto-calculation
+	leftOffset := mc.menuManager.GetDropdownPosition(menuName)
 
-	// Set navigation callback for arrow keys
-	mc.dropdown.SetNavigationCallback(navCallback)
+	// Create a fresh dropdown for each menu to ensure proper sizing
+	dropdown := NewDropdownMenu()
+	dropdown.SetNavigationCallback(navCallback)
 
-	return mc.dropdown.Show(menuName, items, leftOffset, callback, globalShortcuts)
+	return dropdown.Show(menuName, items, leftOffset, callback, globalShortcuts)
 }
 
 // HideDropdown hides the current dropdown menu
 func (mc *MenuComponent) HideDropdown() {
-	mc.dropdown.Hide()
+	if mc.dropdown != nil {
+		mc.dropdown.Hide()
+	}
 }
 
 // IsDropdownVisible returns whether a dropdown is currently visible
 func (mc *MenuComponent) IsDropdownVisible() bool {
-	return mc.dropdown.IsVisible()
+	if mc.dropdown != nil {
+		return mc.dropdown.IsVisible()
+	}
+	return false
 }
 
 // GetDropdownList returns the dropdown list for focus management
 func (mc *MenuComponent) GetDropdownList() *twistComponents.TwistMenu {
-	return mc.dropdown.GetList()
+	if mc.dropdown != nil {
+		return mc.dropdown.GetList()
+	}
+	return nil
 }
 
 // SetTargetWidth sets the target width to match status bar

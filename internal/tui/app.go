@@ -11,6 +11,7 @@ import (
 	"twist/internal/tui/api"
 	"twist/internal/tui/components"
 	"twist/internal/tui/handlers"
+	"twist/internal/tui/menus"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -39,6 +40,9 @@ type TwistApp struct {
 	inputHandler    *handlers.InputHandler
 	globalShortcuts *twistComponents.GlobalShortcutManager
 
+	// Menu system
+	menuManager *menus.MenuManager
+
 	// Sixel rendering layer
 	sixelLayer *components.SixelLayer
 
@@ -49,7 +53,7 @@ type TwistApp struct {
 	panelsVisible bool
 	animating     bool
 
-	// Update channel
+	// Update channels
 	terminalUpdateChan chan struct{}
 
 	// Initial script to load on connection
@@ -70,8 +74,11 @@ func NewApplication() *TwistApp {
 	// Create sixel layer first
 	sixelLayer := components.NewSixelLayer()
 
+	// Create menu manager first
+	menuManager := menus.NewMenuManager()
+
 	// Create UI components
-	menuComp := components.NewMenuComponent()
+	menuComp := components.NewMenuComponent(menuManager)
 	terminalComp := components.NewTerminalComponent(app)
 	panelComp := components.NewPanelComponent(sixelLayer)
 	statusComp := components.NewStatusComponent()
@@ -94,6 +101,7 @@ func NewApplication() *TwistApp {
 		statusComponent:    statusComp,
 		inputHandler:       inputHandler,
 		globalShortcuts:    twistComponents.NewGlobalShortcutManager(),
+		menuManager:        menuManager,
 		sixelLayer:         sixelLayer,
 		panelsVisible:      false, // Start with panels hidden
 		animating:          false,
@@ -339,6 +347,9 @@ func (ta *TwistApp) setupInputHandling() {
 
 	// Set up dropdown callback
 	ta.inputHandler.SetDropdownCallback(ta.showDropdownMenu)
+
+	// Set up dropdown visibility checker
+	ta.inputHandler.SetDropdownVisibilityChecker(ta.menuComponent.IsDropdownVisible)
 
 	// Set up connection dialog callback
 	ta.inputHandler.SetConnectionDialogCallback(ta.showConnectionDialog)
@@ -734,6 +745,7 @@ func (ta *TwistApp) closeModal() {
 	ta.pages.RemovePage("script-modal")
 	ta.pages.RemovePage("message-modal")
 	ta.pages.RemovePage("help-modal")
+	ta.pages.RemovePage("menu-modal")
 	ta.pages.RemovePage("dropdown-menu")
 	ta.pages.RemovePage("connection-dialog")
 }
@@ -803,7 +815,6 @@ func (ta *TwistApp) showHelpModal() {
 	helpText := "TWIST Terminal Interface\n\n" +
 		"Menu Navigation:\n" +
 		"Alt+S = Session menu\n" +
-		"Alt+E = Edit menu\n" +
 		"Alt+V = View menu\n" +
 		"Alt+T = Terminal menu\n" +
 		"Alt+H = Help menu\n" +
@@ -828,44 +839,25 @@ func (ta *TwistApp) showHelpModal() {
 // showDropdownMenu displays a dropdown menu below the menu bar
 func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback func(string)) {
 
-	// Convert string options to MenuItems with shortcuts for specific menus
-	items := make([]twistComponents.MenuItem, len(options))
-	for i, option := range options {
-		var shortcut string
-		// Add shortcuts for Session menu
-		if menuName == "Session" {
-			switch option {
-			case "Quit":
-				shortcut = "Alt+Q"
-				// All other Session menu items have no shortcuts
-			}
-		}
-		items[i] = twistComponents.MenuItem{Label: option, Shortcut: shortcut}
-	}
+	// Always get menu items from the centralized registry (ignore passed options)
+	items := ta.menuManager.GetMenuItems(menuName)
 
-	// Special handling for Session menu
-	var dropdownCallback func(string)
-	if menuName == "Session" {
-		dropdownCallback = func(selected string) {
-			switch selected {
-			case "Connect":
-				ta.showConnectionDialog()
-				// Don't call ta.closeModal() here - let the dialog manage its own lifecycle
-			case "Disconnect":
-				ta.disconnect()
-				ta.closeModal()
-			case "Quit":
-				ta.exit()
-				// No need to close modal as app is exiting
-			default:
-				callback(selected)
-				ta.closeModal()
-			}
+	// Use menu manager for handling menu actions
+	dropdownCallback := func(selected string) {
+		// Handle the menu action through the menu manager
+		err := ta.menuManager.HandleMenuAction(menuName, selected, ta)
+		if err != nil {
+			debug.Log("Error handling menu action %s/%s: %v", menuName, selected, err)
 		}
-	} else {
-		// Standard dropdown behavior for other menus
-		dropdownCallback = func(selected string) {
-			callback(selected)
+
+		// Close modal for most actions (some actions like Connect handle their own modal lifecycle)
+		specialActions := map[string]bool{
+			"Connect":            true, // Connection dialog manages its own lifecycle
+			"Keyboard Shortcuts": true, // Help modal manages its own lifecycle
+			"About":              true, // About modal manages its own lifecycle
+		}
+
+		if !specialActions[selected] {
 			ta.closeModal()
 		}
 	}
@@ -880,7 +872,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 
 // navigateMenu handles navigation between menu categories
 func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
-	menus := []string{"Session", "Edit", "View", "Terminal", "Help"}
+	menus := ta.menuManager.GetMenuNames()
 	currentIndex := -1
 
 	// Find current menu index
@@ -908,52 +900,11 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	// Close current dropdown and open next one
 	ta.closeModal()
 
-	// Show the appropriate menu based on next menu
-	switch nextMenu {
-	case "Session":
-		items := []twistComponents.MenuItem{
-			{Label: "Connect", Shortcut: ""},
-			{Label: "Recent Connections", Shortcut: ""},
-			{Label: "Disconnect", Shortcut: ""},
-			{Label: "Save Session", Shortcut: ""},
-			{Label: "Quit", Shortcut: "Alt+Q"},
-		}
-		// Custom dropdown handler for Session menu that doesn't auto-close on Connect
-		dropdown := ta.menuComponent.ShowDropdown("Session", items, func(selected string) {
-			switch selected {
-			case "Connect":
-				ta.showConnectionDialog()
-				// Don't call ta.closeModal() here - let the dialog manage its own lifecycle
-			case "Disconnect":
-				ta.disconnect()
-				ta.closeModal()
-			case "Quit":
-				ta.exit()
-				// No need to close modal as app is exiting
-			}
-		}, func(direction string) {
-			// Handle left/right arrow navigation between menus
-			ta.navigateMenu("Session", direction)
-		}, ta.globalShortcuts)
-		ta.pages.AddPage("dropdown-menu", dropdown, true, true)
-		ta.modalVisible = true
-	case "Edit":
-		options := []string{"Cut", "Copy", "Paste", "Find", "Replace"}
-		ta.showDropdownMenu("Edit", options, func(selected string) {
-		})
-	case "View":
-		options := []string{"Scripts", "Zoom In", "Zoom Out", "Full Screen", "Panels"}
-		ta.showDropdownMenu("View", options, func(selected string) {
-		})
-	case "Terminal":
-		options := []string{"Clear", "Scroll Up", "Scroll Down", "Copy Selection"}
-		ta.showDropdownMenu("Terminal", options, func(selected string) {
-		})
-	case "Help":
-		options := []string{"Keyboard Shortcuts", "About", "User Manual"}
-		ta.showDropdownMenu("Help", options, func(selected string) {
-		})
-	}
+	// Show the appropriate menu based on next menu using the menu manager
+	options := ta.menuManager.GetMenuOptions(nextMenu)
+	ta.showDropdownMenu(nextMenu, options, func(selected string) {
+		// This callback is handled by showDropdownMenu through the menu manager
+	})
 }
 
 // showMessage displays a temporary message modal
@@ -1008,4 +959,78 @@ func (ta *TwistApp) updatePanels() {
 
 	// Update status bar
 	ta.statusComponent.UpdateStatus()
+}
+
+// AppInterface implementation methods for menu system
+
+// Connect establishes connection to the game server
+func (ta *TwistApp) Connect(address string) {
+	ta.connect(address)
+}
+
+// Disconnect closes the connection to the game server
+func (ta *TwistApp) Disconnect() {
+	ta.disconnect()
+}
+
+// Exit shuts down the application
+func (ta *TwistApp) Exit() {
+	ta.exit()
+}
+
+// ShowConnectionDialog displays the connection dialog
+func (ta *TwistApp) ShowConnectionDialog() {
+	ta.showConnectionDialog()
+}
+
+// ShowPanels makes the side panels visible
+func (ta *TwistApp) ShowPanels() {
+	ta.showPanels()
+}
+
+// HidePanels hides the side panels
+func (ta *TwistApp) HidePanels() {
+	ta.hidePanels()
+}
+
+// GetPanelsVisible returns whether panels are currently visible
+func (ta *TwistApp) GetPanelsVisible() bool {
+	return ta.panelsVisible
+}
+
+// ClearTerminal clears the terminal content
+func (ta *TwistApp) ClearTerminal() {
+	if ta.terminalComponent != nil {
+		ta.terminalComponent.Clear()
+	}
+}
+
+// ShowModal displays a modal dialog
+func (ta *TwistApp) ShowModal(title, text string, buttons []string, callback func(int, string)) {
+	modal := tview.NewModal().
+		SetText(text).
+		AddButtons(buttons).
+		SetDoneFunc(callback)
+	ta.pages.AddPage("menu-modal", modal, true, true)
+	ta.modalVisible = true
+}
+
+// CloseModal closes the currently displayed modal
+func (ta *TwistApp) CloseModal() {
+	ta.closeModal()
+}
+
+// GetVersion returns the application version
+func (ta *TwistApp) GetVersion() string {
+	return ta.version
+}
+
+// GetCommit returns the git commit hash
+func (ta *TwistApp) GetCommit() string {
+	return ta.commit
+}
+
+// GetDate returns the build date
+func (ta *TwistApp) GetDate() string {
+	return ta.date
 }

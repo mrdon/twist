@@ -4,6 +4,8 @@ twist
 twx-src
 twx-scripts
 *.db
+*.db-shm
+*.db-wal
 *.log
 
 # Added by goreleaser init:
