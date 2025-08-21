@@ -9,6 +9,7 @@ import (
 type MenuItem struct {
 	Label    string
 	Shortcut string
+	// Note: Enablement is handled by the menu system at display time
 }
 
 // MenuBorderStyle defines predefined border character sets for menus
@@ -178,6 +179,7 @@ func (tm *TwistMenu) AddMenuItem(item MenuItem, callback func()) {
 		tm.shortcutManager.RegisterShortcut(item.Shortcut, callback)
 	}
 }
+
 
 // SetMenuItems replaces all menu items with automatic shortcut registration and proper display formatting
 func (tm *TwistMenu) SetMenuItems(items []MenuItem, callbacks []func()) {

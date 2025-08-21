@@ -4,12 +4,31 @@ import (
 	twistComponents "twist/internal/components"
 )
 
+// Helper functions for menu item enablement checks
+func isConnectedCheck(app AppInterface) bool {
+	proxyAPI := app.GetProxyAPI()
+	return proxyAPI != nil && proxyAPI.IsConnected()
+}
+
+func isNotConnectedCheck(app AppInterface) bool {
+	proxyAPI := app.GetProxyAPI()
+	return proxyAPI == nil || !proxyAPI.IsConnected()
+}
+
+func alwaysEnabled(app AppInterface) bool {
+	return true
+}
+
+// MenuItemEnabledChecker is a function type for checking if a menu item should be enabled
+type MenuItemEnabledChecker func(app AppInterface) bool
+
 // MenuConfig defines a complete menu with all its properties
 type MenuConfig struct {
-	Name     string                     // Menu name (e.g., "Session")
-	Shortcut string                     // Alt key shortcut (e.g., "Alt+S")
-	Items    []twistComponents.MenuItem // Menu items with their shortcuts
-	Handler  MenuHandler                // Handler for this menu
+	Name              string                                // Menu name (e.g., "Session")
+	Shortcut          string                                // Alt key shortcut (e.g., "Alt+S")
+	Items             []twistComponents.MenuItem            // Menu items with their shortcuts
+	ItemEnabledChecks []MenuItemEnabledChecker              // Functions to check if each item is enabled
+	Handler           MenuHandler                           // Handler for this menu
 }
 
 // MenuRegistry provides centralized menu configuration
@@ -35,6 +54,11 @@ func (mr *MenuRegistry) initializeMenus() {
 				{Label: "Disconnect", Shortcut: "Alt+D"},
 				{Label: "Quit", Shortcut: "Alt+Q"},
 			},
+			ItemEnabledChecks: []MenuItemEnabledChecker{
+				isNotConnectedCheck, // Connect enabled when not connected
+				isConnectedCheck,    // Disconnect enabled when connected
+				alwaysEnabled,       // Quit always enabled
+			},
 			Handler: NewSessionMenu(),
 		},
 		{
@@ -43,13 +67,32 @@ func (mr *MenuRegistry) initializeMenus() {
 			Items: []twistComponents.MenuItem{
 				{Label: "Panels", Shortcut: ""},
 			},
+			ItemEnabledChecks: []MenuItemEnabledChecker{
+				isConnectedCheck, // Panels only make sense when connected
+			},
 			Handler: NewViewMenu(),
+		},
+		{
+			Name:     "Scripts",
+			Shortcut: "Alt+R",
+			Items: []twistComponents.MenuItem{
+				{Label: "List", Shortcut: ""},
+				{Label: "Burst", Shortcut: ""},
+			},
+			ItemEnabledChecks: []MenuItemEnabledChecker{
+				isConnectedCheck, // Script list only makes sense when connected
+				isConnectedCheck, // Burst commands only work when connected
+			},
+			Handler: NewScriptsMenu(),
 		},
 		{
 			Name:     "Terminal",
 			Shortcut: "Alt+T",
 			Items: []twistComponents.MenuItem{
 				{Label: "Clear", Shortcut: ""},
+			},
+			ItemEnabledChecks: []MenuItemEnabledChecker{
+				alwaysEnabled, // Terminal clear always works
 			},
 			Handler: NewTerminalMenu(),
 		},
@@ -59,6 +102,10 @@ func (mr *MenuRegistry) initializeMenus() {
 			Items: []twistComponents.MenuItem{
 				{Label: "Keyboard Shortcuts", Shortcut: "F1"},
 				{Label: "About", Shortcut: ""},
+			},
+			ItemEnabledChecks: []MenuItemEnabledChecker{
+				alwaysEnabled, // Help always available
+				alwaysEnabled, // About always available
 			},
 			Handler: NewHelpMenu(),
 		},

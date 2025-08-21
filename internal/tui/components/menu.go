@@ -124,16 +124,17 @@ func (mc *MenuComponent) SetDisconnectedMenu() {
 	mc.UpdateMenu(false)
 }
 
+
 // ShowDropdown displays a dropdown menu with MenuItem structs that support shortcuts
 func (mc *MenuComponent) ShowDropdown(menuName string, items []MenuItem, callback func(string), navCallback func(string), globalShortcuts *twistComponents.GlobalShortcutManager) *tview.Flex {
 	// Calculate position based on menu item using centralized auto-calculation
 	leftOffset := mc.menuManager.GetDropdownPosition(menuName)
 
 	// Create a fresh dropdown for each menu to ensure proper sizing
-	dropdown := NewDropdownMenu()
-	dropdown.SetNavigationCallback(navCallback)
+	mc.dropdown = NewDropdownMenu()
+	mc.dropdown.SetNavigationCallback(navCallback)
 
-	return dropdown.Show(menuName, items, leftOffset, callback, globalShortcuts)
+	return mc.dropdown.Show(menuName, items, leftOffset, callback, globalShortcuts)
 }
 
 // HideDropdown hides the current dropdown menu
@@ -157,6 +158,11 @@ func (mc *MenuComponent) GetDropdownList() *twistComponents.TwistMenu {
 		return mc.dropdown.GetList()
 	}
 	return nil
+}
+
+// GetCurrentDropdown returns the current dropdown menu
+func (mc *MenuComponent) GetCurrentDropdown() *DropdownMenu {
+	return mc.dropdown
 }
 
 // SetTargetWidth sets the target width to match status bar

@@ -98,6 +98,7 @@ func (cd *ConnectionDialog) GetForm() *tview.Form {
 }
 
 // SetDoneFunc sets the function to call when ESC is pressed
-func (cd *ConnectionDialog) SetDoneFunc(handler func()) {
+func (cd *ConnectionDialog) SetDoneFunc(handler func()) InputDialog {
 	cd.form.SetCancelFunc(handler)
+	return cd
 }

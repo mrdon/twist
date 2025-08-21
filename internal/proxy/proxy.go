@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
@@ -736,6 +737,33 @@ func (p *Proxy) injectInboundData(data []byte) {
 // GetScriptManager returns the script manager for external access
 func (p *Proxy) GetScriptManager() *scripting.ScriptManager {
 	return p.scriptManager
+}
+
+// SendBurstCommand sends a burst command using the existing terminal menu burst logic
+func (p *Proxy) SendBurstCommand(burstText string) error {
+	if burstText == "" {
+		return errors.New("empty burst command")
+	}
+
+	if p.terminalMenuManager == nil {
+		return errors.New("terminal menu manager not available")
+	}
+
+	// Use the existing burst processing logic from terminal menu manager
+	// Replace * with newlines and send each command
+	expandedText := strings.ReplaceAll(burstText, "*", "\r\n")
+	
+	// Split into individual commands and send each one using the proxy adapter pattern
+	commands := strings.Split(expandedText, "\r\n")
+	proxyAdapter := &proxyAdapter{p}
+	for _, cmd := range commands {
+		if strings.TrimSpace(cmd) != "" {
+			// Use the same method that the terminal menu manager uses
+			proxyAdapter.SendDirectToServer(strings.TrimSpace(cmd) + "\r\n")
+		}
+	}
+
+	return nil
 }
 
 // LoadScript loads a script from file

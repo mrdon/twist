@@ -2,6 +2,7 @@ package menus
 
 import (
 	twistComponents "twist/internal/components"
+	"twist/internal/api"
 	"twist/internal/debug"
 )
 
@@ -30,12 +31,17 @@ type AppInterface interface {
 
 	// Modal management
 	ShowModal(title, text string, buttons []string, callback func(int, string))
+	ShowInputDialog(pageName string, dialog interface{}) // For showing custom input dialogs
 	CloseModal()
 
 	// Version information
 	GetVersion() string
 	GetCommit() string
 	GetDate() string
+
+	// Proxy API access
+	GetProxyAPI() api.ProxyAPI
+	IsConnected() bool // Returns true if connected to a game server
 }
 
 // MenuManager coordinates all menu handlers
@@ -58,12 +64,65 @@ func (mm *MenuManager) HandleMenuAction(menuName, action string, app AppInterfac
 		return nil // Don't error, just ignore unhandled menus
 	}
 
+	// Check if the action corresponds to an enabled menu item
+	enabledItems := mm.GetEnabledMenuItems(menuName, app)
+	for _, enabledItem := range enabledItems {
+		if enabledItem.MenuItem.Label == action {
+			if !enabledItem.Enabled {
+				debug.Log("MenuManager: Action '%s' is disabled for menu '%s'", action, menuName)
+				return nil // Don't execute disabled actions
+			}
+			break
+		}
+	}
+
 	return handler.HandleMenuAction(action, app)
 }
 
 // GetMenuItems returns menu items for a specific menu
 func (mm *MenuManager) GetMenuItems(menuName string) []twistComponents.MenuItem {
 	return mm.registry.GetMenuItems(menuName)
+}
+
+// GetEnabledMenuItems returns menu items with enablement status evaluated
+func (mm *MenuManager) GetEnabledMenuItems(menuName string, app AppInterface) []EnabledMenuItem {
+	config := mm.registry.GetMenuConfig(menuName)
+	if config == nil {
+		return []EnabledMenuItem{}
+	}
+
+	result := make([]EnabledMenuItem, len(config.Items))
+	for i, item := range config.Items {
+		enabled := true // Default to enabled
+		
+		// Check if we have an enablement checker for this item
+		if i < len(config.ItemEnabledChecks) && config.ItemEnabledChecks[i] != nil {
+			enabled = config.ItemEnabledChecks[i](app)
+		}
+		
+		result[i] = EnabledMenuItem{
+			MenuItem: item,
+			Enabled:  enabled,
+		}
+	}
+	
+	return result
+}
+
+// EnabledMenuItem wraps a MenuItem with its enabled status
+type EnabledMenuItem struct {
+	MenuItem twistComponents.MenuItem
+	Enabled  bool
+}
+
+// GetMenuItem returns the wrapped MenuItem (implements EnabledMenuItemInterface)
+func (e EnabledMenuItem) GetMenuItem() twistComponents.MenuItem {
+	return e.MenuItem
+}
+
+// IsEnabled returns whether this menu item is enabled (implements EnabledMenuItemInterface)
+func (e EnabledMenuItem) IsEnabled() bool {
+	return e.Enabled
 }
 
 // GetMenuOptions returns string options for backward compatibility

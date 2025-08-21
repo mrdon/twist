@@ -748,6 +748,7 @@ func (ta *TwistApp) closeModal() {
 	ta.pages.RemovePage("menu-modal")
 	ta.pages.RemovePage("dropdown-menu")
 	ta.pages.RemovePage("connection-dialog")
+	ta.pages.RemovePage("burst-input-dialog")
 }
 
 // startUpdateWorker starts the background update worker
@@ -839,11 +840,26 @@ func (ta *TwistApp) showHelpModal() {
 // showDropdownMenu displays a dropdown menu below the menu bar
 func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback func(string)) {
 
-	// Always get menu items from the centralized registry (ignore passed options)
+	// Get regular menu items from the centralized registry
 	items := ta.menuManager.GetMenuItems(menuName)
+	
+	// Get enabled states for each item
+	enabledItems := ta.menuManager.GetEnabledMenuItems(menuName, ta)
 
 	// Use menu manager for handling menu actions
 	dropdownCallback := func(selected string) {
+		// Check if the selected item is enabled
+		for _, enabledItem := range enabledItems {
+			if enabledItem.MenuItem.Label == selected {
+				if !enabledItem.Enabled {
+					// Item is disabled, don't execute action or close menu
+					debug.Log("Ignoring selection of disabled menu item: %s", selected)
+					return
+				}
+				break
+			}
+		}
+
 		// Handle the menu action through the menu manager
 		err := ta.menuManager.HandleMenuAction(menuName, selected, ta)
 		if err != nil {
@@ -866,8 +882,25 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 		// Handle left/right arrow navigation between menus
 		ta.navigateMenu(menuName, direction)
 	}, ta.globalShortcuts)
+	
+	// Apply enabled/disabled states to the dropdown items
+	ta.applyEnabledStates(dropdown, enabledItems)
+	
 	ta.pages.AddPage("dropdown-menu", dropdown, true, true)
 	ta.modalVisible = true
+}
+
+// applyEnabledStates applies enabled/disabled styling to dropdown menu items
+func (ta *TwistApp) applyEnabledStates(dropdownFlex *tview.Flex, enabledItems []menus.EnabledMenuItem) {
+	dropdown := ta.menuComponent.GetCurrentDropdown()
+	if dropdown == nil {
+		return
+	}
+	
+	// Apply enabled state to each item
+	for i, enabledItem := range enabledItems {
+		dropdown.SetItemEnabled(i, enabledItem.Enabled)
+	}
 }
 
 // navigateMenu handles navigation between menu categories
@@ -921,16 +954,6 @@ func (ta *TwistApp) showMessage(message string) {
 
 // showConnectionDialog displays the connection dialog
 func (ta *TwistApp) showConnectionDialog() {
-	ta.modalVisible = true
-	ta.inputHandler.SetModalVisible(true)
-
-	// Remove dropdown menu page first
-	ta.pages.RemovePage("dropdown-menu")
-	// Hide dropdown if visible
-	if ta.menuComponent.IsDropdownVisible() {
-		ta.menuComponent.HideDropdown()
-	}
-
 	// Create connection dialog
 	connectionDialog := components.NewConnectionDialog(
 		func(address string) {
@@ -942,13 +965,8 @@ func (ta *TwistApp) showConnectionDialog() {
 		},
 	)
 
-	// Set up ESC key handling to close dialog
-	connectionDialog.SetDoneFunc(func() {
-		ta.closeModal()
-	})
-
-	ta.pages.AddPage("connection-dialog", connectionDialog.GetView(), true, true)
-	ta.app.SetFocus(connectionDialog.GetForm())
+	// Use the unified ShowInputDialog method
+	ta.ShowInputDialog("connection-dialog", connectionDialog)
 }
 
 // updatePanels updates the information panels
@@ -1015,6 +1033,43 @@ func (ta *TwistApp) ShowModal(title, text string, buttons []string, callback fun
 	ta.modalVisible = true
 }
 
+// ShowInputDialog displays a custom input dialog
+func (ta *TwistApp) ShowInputDialog(pageName string, dialog interface{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in ShowInputDialog: %v", r)
+		}
+	}()
+
+	// Set modal state
+	ta.modalVisible = true
+	ta.inputHandler.SetModalVisible(true)
+
+	// Remove any existing dropdown menu page
+	ta.pages.RemovePage("dropdown-menu")
+	// Hide dropdown if visible
+	if ta.menuComponent.IsDropdownVisible() {
+		ta.menuComponent.HideDropdown()
+	}
+
+	// Use the new InputDialog interface for type safety
+	if d, ok := dialog.(components.InputDialog); ok {
+		// Set up ESC key handling to close dialog
+		d.SetDoneFunc(func() {
+			ta.closeModal()
+		})
+
+		ta.pages.AddPage(pageName, d.GetView(), true, true)
+		ta.app.SetFocus(d.GetForm())
+		debug.Log("ShowInputDialog: Successfully displayed dialog page '%s'", pageName)
+	} else {
+		debug.Log("ShowInputDialog: Dialog does not implement InputDialog interface for page '%s'", pageName)
+		// Fallback: close modal state since we couldn't show the dialog
+		ta.modalVisible = false
+		ta.inputHandler.SetModalVisible(false)
+	}
+}
+
 // CloseModal closes the currently displayed modal
 func (ta *TwistApp) CloseModal() {
 	ta.closeModal()
@@ -1033,4 +1088,20 @@ func (ta *TwistApp) GetCommit() string {
 // GetDate returns the build date
 func (ta *TwistApp) GetDate() string {
 	return ta.date
+}
+
+// GetProxyAPI returns the current proxy API instance
+func (ta *TwistApp) GetProxyAPI() coreapi.ProxyAPI {
+	if ta.proxyClient == nil {
+		return nil
+	}
+	return ta.proxyClient.GetCurrentAPI()
+}
+
+// IsConnected returns true if connected to a game server
+func (ta *TwistApp) IsConnected() bool {
+	if ta.proxyClient == nil {
+		return false
+	}
+	return ta.proxyClient.IsConnected()
 }

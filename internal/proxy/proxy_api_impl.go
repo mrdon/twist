@@ -280,3 +280,54 @@ func (p *ProxyApiImpl) GetPlayerStats() (*api.PlayerStatsInfo, error) {
 
 	return &apiStats, nil
 }
+
+// Script Menu Operations - Direct delegation to proxy script manager
+
+func (p *ProxyApiImpl) GetScriptList() ([]api.ScriptInfo, error) {
+	if p.proxy == nil {
+		return nil, errors.New("not connected")
+	}
+
+	scriptManager := p.proxy.GetScriptManager()
+	if scriptManager == nil {
+		return []api.ScriptInfo{}, nil // Return empty list if no script manager
+	}
+
+	engine := scriptManager.GetEngine()
+	if engine == nil {
+		return []api.ScriptInfo{}, nil // Return empty list if no engine
+	}
+
+	// Get all scripts from the engine
+	allScripts := engine.GetAllScripts()
+	runningScripts := engine.GetRunningScripts()
+
+	// Create a map of running script IDs for quick lookup
+	runningMap := make(map[string]bool)
+	for _, runningScript := range runningScripts {
+		runningMap[runningScript.GetID()] = true
+	}
+
+	// Convert to API format
+	apiScripts := make([]api.ScriptInfo, len(allScripts))
+	for i, script := range allScripts {
+		apiScripts[i] = api.ScriptInfo{
+			ID:       script.GetID(),
+			Name:     script.GetName(),
+			Filename: script.GetFilename(),
+			IsActive: runningMap[script.GetID()],
+		}
+	}
+
+	return apiScripts, nil
+}
+
+func (p *ProxyApiImpl) SendBurstCommand(burstText string) error {
+	if p.proxy == nil {
+		return errors.New("not connected")
+	}
+
+	// Delegate to the proxy's burst command implementation
+	// This reuses the exact same logic as the terminal menu system
+	return p.proxy.SendBurstCommand(burstText)
+}

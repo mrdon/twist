@@ -126,6 +126,10 @@ type ProxyAPI interface {
 
 	// Player Statistics
 	GetPlayerStats() (*PlayerStatsInfo, error)
+
+	// Script Menu Operations
+	GetScriptList() ([]ScriptInfo, error)        // Lists all loaded scripts with status
+	SendBurstCommand(burstText string) error     // Sends burst command to server
 }
 
 // TuiAPI defines notifications from Proxy to TUI
@@ -259,4 +263,12 @@ type PlayerStatsInfo struct {
 	ScanType      int    `json:"scan_type"`      // Long range scanner type
 	CurrentSector int    `json:"current_sector"` // Current sector number
 	PlayerName    string `json:"player_name"`    // Player name
+}
+
+// ScriptInfo represents information about a script for TUI API
+type ScriptInfo struct {
+	ID       string `json:"id"`       // Unique script identifier
+	Name     string `json:"name"`     // Script name/title
+	Filename string `json:"filename"` // Script filename
+	IsActive bool   `json:"is_active"` // True if script is currently running
 }
