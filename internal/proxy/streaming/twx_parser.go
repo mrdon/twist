@@ -529,14 +529,20 @@ func (p *TWXParser) processLine(line string) {
 		return
 	}
 
-	// Pascal: Check for density scanner first (Copy(Line, 27, 16) = 'Relative Density')
-	// This must be checked before pattern handlers to match Pascal behavior
-	if strings.Contains(line, "Relative Density") {
-		p.currentDisplay = DisplayDensity
-		// Return early - don't process this line further, just set the mode
-		return
+	// Pascal TWX pattern matching - check independent patterns that can coexist
+	// Based on Process.pas lines 317 and 1338
+
+	// Check command prompt first (Pascal: Copy(Line, 1, 12) = 'Command [TL=')
+	if strings.HasPrefix(line, "Command [TL=") {
+		p.handleCommandPrompt(line)
 	}
 
+	// Check density scanner independently (Pascal: Copy(Line, 27, 16) = 'Relative Density')
+	if strings.Contains(line, "Relative Density") {
+		p.currentDisplay = DisplayDensity
+		// Pascal TWX returns early after setting mode, so we do the same
+		return
+	}
 	// Handle continuation based on current display state
 	switch p.currentDisplay {
 	case DisplaySector:
@@ -556,7 +562,6 @@ func (p *TWXParser) processLine(line string) {
 		// Check for pattern matches to change state
 		p.checkPatterns(line)
 	}
-
 	// Check for info display end and quick stats end before other processing
 	p.checkInfoDisplayEnd(line)
 	p.checkQuickStatsEnd(line)
