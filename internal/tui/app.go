@@ -121,6 +121,41 @@ func NewApplication() *TwistApp {
 		})
 	})
 
+	// Set up terminal key handler to send keys directly to server
+	terminalComp.SetKeyHandler(func(event *tcell.EventKey) *tcell.EventKey {
+		// Only handle when connected and not in a modal
+		if !twistApp.connected || twistApp.modalVisible {
+			return event // Let other handlers deal with it
+		}
+
+		switch event.Key() {
+		case tcell.KeyEnter:
+			// Send Enter as carriage return + line feed to the server
+			twistApp.sendCommand("\r\n")
+			return nil // Consume the event
+		case tcell.KeyBackspace, tcell.KeyBackspace2:
+			// Send backspace control character
+			twistApp.sendCommand("\b")
+			return nil // Consume the event
+		case tcell.KeyDelete:
+			// Send delete escape sequence
+			twistApp.sendCommand("\x1b[3~")
+			return nil // Consume the event
+		case tcell.KeyTab:
+			// Send tab character
+			twistApp.sendCommand("\t")
+			return nil // Consume the event
+		case tcell.KeyRune:
+			// Send regular characters
+			char := string(event.Rune())
+			twistApp.sendCommand(char)
+			return nil // Consume the event
+		default:
+			// Don't handle other keys (arrows, function keys, etc.)
+			return event
+		}
+	})
+
 	// Script manager will be set via API after connection established
 	// Script manager setup removed - will be handled in Phase 3
 
@@ -454,6 +489,29 @@ func (ta *TwistApp) sendCommand(command string) {
 	// When disconnected, we don't send commands to server, but local UI operations still work
 }
 
+// stopAllScripts stops all running scripts
+func (ta *TwistApp) stopAllScripts() {
+	if !ta.proxyClient.IsConnected() {
+		return
+	}
+
+	proxyAPI := ta.proxyClient.GetCurrentAPI()
+	if proxyAPI == nil {
+		return
+	}
+
+	// Stop all scripts - this is async and will call OnScriptStatusChanged
+	err := proxyAPI.StopAllScripts()
+	if err != nil {
+		// Show error message modal - no QueueUpdateDraw needed, already in UI thread
+		ta.showMessage(fmt.Sprintf("Error stopping scripts: %v", err), "Stop All Scripts")
+	} else {
+		// StopAllScripts returns immediately and does work async
+		// Show a brief "stopping" message - callbacks will handle final result
+		ta.showMessage("Stopping all scripts...", "Stop All Scripts")
+	}
+}
+
 // updateTerminalView updates the terminal display
 func (ta *TwistApp) updateTerminalView() {
 	if ta.terminalComponent == nil {
@@ -560,11 +618,19 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 
 // Script event handlers
 func (ta *TwistApp) HandleScriptStatusChanged(status coreapi.ScriptStatusInfo) {
-	// Status component will be updated automatically via SetProxyAPI
-	// For now, just output to terminal for visibility
-	msg := fmt.Sprintf("Script status: %d active, %d total\n",
-		status.ActiveCount, status.TotalCount)
-	ta.terminalComponent.Write([]byte(msg))
+	// Update status component to reflect new script status
+	// This is already called from within a QueueUpdateDraw context, so don't nest another one
+	if ta.statusComponent != nil {
+		ta.statusComponent.UpdateStatus()
+	}
+
+	// If all scripts are stopped and a modal is currently showing "Stopping...",
+	// update it to show success
+	if status.ActiveCount == 0 && ta.modalVisible {
+		// Close the "stopping" modal and show success
+		ta.closeModal()
+		ta.showMessage("All scripts have been stopped.", "Stop All Scripts")
+	}
 }
 
 func (ta *TwistApp) HandleScriptError(scriptName string, err error) {
@@ -789,10 +855,17 @@ func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
 		return nil
 	}
 
-	// ESC key to close modal if visible
-	if event.Key() == tcell.KeyEscape && ta.modalVisible {
-		ta.closeModal()
-		return nil
+	// ESC key handling
+	if event.Key() == tcell.KeyEscape {
+		if ta.modalVisible {
+			// Close modal if visible
+			ta.closeModal()
+			return nil
+		} else if ta.connected {
+			// Stop all scripts if connected and no modal is visible
+			ta.stopAllScripts()
+			return nil
+		}
 	}
 
 	// F1 key for help
@@ -824,7 +897,7 @@ func (ta *TwistApp) showHelpModal() {
 		"Alt+Q = Quit\n\n" +
 		"Function Keys:\n" +
 		"F1 = Help (this screen)\n" +
-		"ESC = Close dialogs\n\n" +
+		"ESC = Close dialogs or stop all scripts\n\n" +
 		"Script management is available in the View menu."
 
 	modal := tview.NewModal().
@@ -868,7 +941,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 
 		// Check if this action creates a modal - if so, don't close the dropdown modal
 		if ta.menuManager.ActionCreatesModal(menuName, selected) {
-			debug.Log("Menu action '%s/%s' creates a modal, preserving modal state", menuName, selected)
+			// Action creates a modal, preserve modal state
 		} else {
 			// Action doesn't create a modal, safe to close dropdown/modal state
 			ta.closeModal()
@@ -937,14 +1010,20 @@ func (ta *TwistApp) navigateMenu(currentMenu, direction string) {
 	})
 }
 
-// showMessage displays a temporary message modal
-func (ta *TwistApp) showMessage(message string) {
+// showMessage displays a temporary message modal with optional title
+func (ta *TwistApp) showMessage(message string, title ...string) {
 	modal := tview.NewModal().
 		SetText(message).
 		AddButtons([]string{"OK"}).
 		SetDoneFunc(func(buttonIndex int, buttonLabel string) {
 			ta.closeModal()
 		})
+
+	// Set title if provided
+	if len(title) > 0 && title[0] != "" {
+		modal.SetTitle(title[0])
+	}
+
 	ta.pages.AddPage("message-modal", modal, true, true)
 	ta.modalVisible = true
 }
@@ -1022,11 +1101,8 @@ func (ta *TwistApp) ClearTerminal() {
 
 // ShowModal displays a modal dialog
 func (ta *TwistApp) ShowModal(title, text string, buttons []string, callback func(int, string)) {
-	debug.Log("ShowModal: Called with title='%s', text length=%d, buttons=%v", title, len(text), buttons)
-
 	// Check if dropdown is visible and close it first
 	if ta.menuComponent.IsDropdownVisible() {
-		debug.Log("ShowModal: Dropdown is visible, hiding it first")
 		ta.menuComponent.HideDropdown()
 		ta.pages.RemovePage("dropdown-menu")
 	}
@@ -1036,12 +1112,10 @@ func (ta *TwistApp) ShowModal(title, text string, buttons []string, callback fun
 		AddButtons(buttons).
 		SetDoneFunc(callback)
 	modal.SetTitle(title)
-	debug.Log("ShowModal: Adding page 'menu-modal' to pages")
 	ta.pages.AddPage("menu-modal", modal, true, true)
 	ta.pages.ShowPage("menu-modal")
 	ta.app.SetFocus(modal)
 	ta.modalVisible = true
-	debug.Log("ShowModal: Modal added and modalVisible set to true, focused and shown")
 }
 
 // GetTerminalWidth returns the current terminal width for dynamic sizing

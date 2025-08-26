@@ -76,12 +76,14 @@ func (mr *MenuRegistry) initializeMenus() {
 			Name:     "Scripts",
 			Shortcut: "Alt+R",
 			Items: []twistComponents.MenuItem{
-				{Label: "List", Shortcut: ""},
-				{Label: "Burst", Shortcut: ""},
+				{Label: "List", Shortcut: "", CreatesModal: true},
+				{Label: "Burst", Shortcut: "", CreatesModal: true},
+				{Label: "Stop All Scripts", Shortcut: "Esc", CreatesModal: true},
 			},
 			ItemEnabledChecks: []MenuItemEnabledChecker{
 				isConnectedCheck, // Script list only makes sense when connected
 				isConnectedCheck, // Burst commands only work when connected
+				isConnectedCheck, // Stop scripts only works when connected
 			},
 			Handler: NewScriptsMenu(),
 		},

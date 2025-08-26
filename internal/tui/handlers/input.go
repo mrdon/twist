@@ -181,29 +181,17 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 		// Don't handle Enter in the input handler - let the focused component handle it
 		// This allows menus, modals, and terminal input to handle Enter naturally
 		return event
-	case tcell.KeyBackspace, tcell.KeyBackspace2:
-		// Send backspace control character only if no modals are open
-		if !ih.modalVisible && ih.onSendCommand != nil {
-			ih.onSendCommand("\b")
-		}
-		return event
-	case tcell.KeyDelete:
-		// Send delete escape sequence only if no modals are open
-		if !ih.modalVisible && ih.onSendCommand != nil {
-			ih.onSendCommand("\x1b[3~")
-		}
+	case tcell.KeyBackspace, tcell.KeyBackspace2, tcell.KeyDelete:
+		// Let the terminal component handle these keys directly
 		return event
 	case tcell.KeyUp, tcell.KeyDown, tcell.KeyRight, tcell.KeyLeft, tcell.KeyHome, tcell.KeyEnd, tcell.KeyPgUp, tcell.KeyPgDn:
 		// Don't send navigation keys to terminal - let tview handle them for UI navigation
 		return event
 	}
 
-	// Pass other keys to terminal for input handling only if no modals are open
+	// Let the terminal component handle character keys directly
 	if event.Key() == tcell.KeyRune {
-		if !ih.modalVisible && ih.onSendCommand != nil {
-			char := string(event.Rune())
-			ih.onSendCommand(char)
-		}
+		return event
 	}
 
 	return event

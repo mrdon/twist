@@ -7,8 +7,9 @@ import (
 
 // MenuItem represents a menu item with optional shortcut
 type MenuItem struct {
-	Label    string
-	Shortcut string
+	Label        string
+	Shortcut     string
+	CreatesModal bool // Whether this menu action creates a modal dialog
 	// Note: Enablement is handled by the menu system at display time
 }
 

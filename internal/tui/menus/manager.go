@@ -162,17 +162,33 @@ func (mm *MenuManager) GetAllShortcuts() map[string]string {
 
 // ActionCreatesModal checks if a menu action creates a modal dialog
 func (mm *MenuManager) ActionCreatesModal(menuName, action string) bool {
+	// First check if the menu item has CreatesModal set to true
+	items := mm.GetMenuItems(menuName)
+	debug.Log("ActionCreatesModal: Checking %s/%s against %d items", menuName, action, len(items))
+	for _, item := range items {
+		debug.Log("ActionCreatesModal: Item '%s' CreatesModal=%v", item.Label, item.CreatesModal)
+		if item.Label == action {
+			debug.Log("ActionCreatesModal: Found matching item, CreatesModal=%v", item.CreatesModal)
+			return item.CreatesModal
+		}
+	}
+	debug.Log("ActionCreatesModal: No matching item found, checking legacy handler")
+
+	// Fallback: check legacy ModalAwareMenuHandler interface for compatibility
 	handler := mm.registry.GetMenuHandler(menuName)
 	if handler == nil {
+		debug.Log("ActionCreatesModal: No handler found")
 		return false
 	}
 
-	// Check if the handler implements ModalAwareMenuHandler
 	if modalAware, ok := handler.(ModalAwareMenuHandler); ok {
-		return modalAware.ActionCreatesModal(action)
+		result := modalAware.ActionCreatesModal(action)
+		debug.Log("ActionCreatesModal: Legacy handler returned %v", result)
+		return result
 	}
 
-	// Fallback: assume actions don't create modals unless explicitly declared
+	debug.Log("ActionCreatesModal: No legacy handler, returning false")
+	// Default: assume actions don't create modals unless explicitly declared
 	return false
 }
 

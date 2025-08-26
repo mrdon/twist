@@ -1113,7 +1113,7 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 	var buyFuelOre, buyOrganics, buyEquipment sql.NullBool
 	var percentFuelOre, percentOrganics, percentEquipment sql.NullInt64
 	var amountFuelOre, amountOrganics, amountEquipment sql.NullInt64
-	var updateTime sql.NullTime
+	var updateTime sql.NullString
 
 	err := row.Scan(&name, &dead, &buildTime, &classIndex,
 		&buyFuelOre, &buyOrganics, &buyEquipment,
@@ -1145,9 +1145,10 @@ func (d *SQLiteDatabase) GetPortInfo(sectorIndex int) (*api.PortInfo, error) {
 		info.Class = int(classIndex.Int64)
 		info.ClassType = api.PortClass(classIndex.Int64)
 	}
-	if updateTime.Valid {
-		info.LastUpdate = updateTime.Time
-	}
+	// Note: updateTime is stored as string, skipping LastUpdate field for now
+	// if updateTime.Valid {
+	//	info.LastUpdate = updateTime.Time
+	// }
 
 	// Build products array with discovered data
 	products := make([]api.ProductInfo, 0, 3)

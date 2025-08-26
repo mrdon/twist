@@ -17,21 +17,12 @@ func NewScriptsMenu() *ScriptsMenu {
 	return &ScriptsMenu{}
 }
 
-// ActionCreatesModal implements ModalAwareMenuHandler
-func (s *ScriptsMenu) ActionCreatesModal(action string) bool {
-	switch action {
-	case "List", "Burst":
-		return true // These actions create modal dialogs
-	default:
-		return false
-	}
-}
-
 // GetMenuItems returns the menu items for the Scripts menu
 func (s *ScriptsMenu) GetMenuItems() []twistComponents.MenuItem {
 	return []twistComponents.MenuItem{
-		{Label: "List", Shortcut: ""},
-		{Label: "Burst", Shortcut: ""},
+		{Label: "List", Shortcut: "", CreatesModal: true},
+		{Label: "Burst", Shortcut: "", CreatesModal: true},
+		{Label: "Stop All Scripts", Shortcut: "Esc", CreatesModal: true},
 	}
 }
 
@@ -50,6 +41,8 @@ func (s *ScriptsMenu) HandleMenuAction(action string, app AppInterface) error {
 		return s.handleList(app)
 	case "Burst":
 		return s.handleBurst(app)
+	case "Stop All Scripts":
+		return s.handleStopAllScripts(app)
 	default:
 		debug.Log("ScriptsMenu: Unknown action '%s'", action)
 		return nil
@@ -192,6 +185,54 @@ func (s *ScriptsMenu) buildReasonableTable(scripts []api.ScriptInfo) string {
 
 	table.WriteString("└────┴─────────────────┴─────────────────┴────────┘\n")
 	return table.String()
+}
+
+// handleStopAllScripts stops all running scripts
+func (s *ScriptsMenu) handleStopAllScripts(app AppInterface) error {
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in handleStopAllScripts: %v", r)
+		}
+	}()
+
+	debug.Log("ScriptsMenu.handleStopAllScripts: Starting")
+
+	proxyAPI := app.GetProxyAPI()
+	if proxyAPI == nil {
+		debug.Log("ScriptsMenu.handleStopAllScripts: ProxyAPI is nil, showing not connected modal")
+		app.ShowModal("Stop All Scripts",
+			"Not connected to proxy. Please connect first.",
+			[]string{"OK"},
+			func(buttonIndex int, buttonLabel string) {
+				app.CloseModal()
+			})
+		return nil
+	}
+
+	// Stop all scripts via proxy API
+	debug.Log("ScriptsMenu.handleStopAllScripts: ProxyAPI available, stopping all scripts")
+	err := proxyAPI.StopAllScripts()
+	if err != nil {
+		debug.Log("ScriptsMenu.handleStopAllScripts: Error stopping scripts: %v", err)
+		app.ShowModal("Stop All Scripts",
+			fmt.Sprintf("Error stopping scripts: %v", err),
+			[]string{"OK"},
+			func(buttonIndex int, buttonLabel string) {
+				app.CloseModal()
+			})
+		return nil
+	}
+
+	// StopAllScripts returns immediately and does work async
+	debug.Log("ScriptsMenu.handleStopAllScripts: API call successful, showing stopping message")
+	app.ShowModal("Stop All Scripts",
+		"Stopping all scripts...",
+		[]string{"OK"},
+		func(buttonIndex int, buttonLabel string) {
+			app.CloseModal()
+		})
+
+	return nil
 }
 
 // showInputDialog displays an input dialog (similar to connection dialog pattern)

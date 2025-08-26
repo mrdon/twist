@@ -98,6 +98,12 @@ func (tc *TerminalComponent) SetChangedFunc(handler func()) *TerminalComponent {
 	return tc
 }
 
+// SetKeyHandler sets the callback for handling key events
+func (tc *TerminalComponent) SetKeyHandler(handler func(*tcell.EventKey) *tcell.EventKey) *TerminalComponent {
+	tc.terminalView.SetKeyHandler(handler)
+	return tc
+}
+
 // GetCursor returns current cursor position
 func (tc *TerminalComponent) GetCursor() (int, int) {
 	return tc.terminalView.GetCursor()

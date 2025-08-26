@@ -44,6 +44,7 @@ type TerminalView struct {
 
 	// Callbacks
 	changedFunc func()
+	keyHandler  func(*tcell.EventKey) *tcell.EventKey
 
 	// UI wrapper
 	wrapper *tview.Flex
@@ -361,6 +362,12 @@ func (tv *TerminalView) newline() {
 // SetChangedFunc sets the callback for when content changes
 func (tv *TerminalView) SetChangedFunc(handler func()) *TerminalView {
 	tv.changedFunc = handler
+	return tv
+}
+
+// SetKeyHandler sets the callback for handling key events
+func (tv *TerminalView) SetKeyHandler(handler func(*tcell.EventKey) *tcell.EventKey) *TerminalView {
+	tv.keyHandler = handler
 	return tv
 }
 
@@ -789,6 +796,14 @@ func (tv *TerminalView) InputHandler() func(event *tcell.EventKey, setFocus func
 			tv.scrollOffsetRow = newRow
 
 		default:
+			// Give parent key handler a chance to handle the key first
+			if tv.keyHandler != nil {
+				if result := tv.keyHandler(event); result == nil {
+					// Parent handler consumed the key
+					return
+				}
+			}
+
 			// Pass other keys to parent handler
 			if tv.Box.InputHandler() != nil {
 				tv.Box.InputHandler()(event, setFocus)
