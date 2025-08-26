@@ -272,8 +272,8 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 	// Initialize terminal menu manager
 	p.terminalMenuManager = menu.NewTerminalMenuManager()
 
-	// Set up menu data injection function
-	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	// Set up menu data injection function - use direct TUI injection for client-side messages
+	p.terminalMenuManager.SetInjectDataFunc(p.injectTUIData)
 
 	// Set up proxy interface for menu system
 	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
@@ -320,8 +320,8 @@ func NewWithDatabase(tuiAPI api.TuiAPI, db database.Database) *Proxy {
 	// Initialize terminal menu manager
 	p.terminalMenuManager = menu.NewTerminalMenuManager()
 
-	// Set up menu data injection function
-	p.terminalMenuManager.SetInjectDataFunc(p.injectInboundData)
+	// Set up menu data injection function - use direct TUI injection for client-side messages
+	p.terminalMenuManager.SetInjectDataFunc(p.injectTUIData)
 
 	// Set up proxy interface for menu system
 	p.terminalMenuManager.SetProxyInterface(&proxyAdapter{p})
@@ -735,6 +735,22 @@ func (p *Proxy) handleOutput() {
 // This is used by the terminal menu system to display menu output
 func (p *Proxy) injectInboundData(data []byte) {
 	p.getState().processServerData(data)
+}
+
+// injectTUIData sends client-side data directly to TUI without server processing
+func (p *Proxy) injectTUIData(data []byte) {
+	debug.Log("injectTUIData called with data: %q", string(data))
+	currentState := p.getState()
+	if connectedState, ok := currentState.(*ConnectedState); ok {
+		if connectedState.pipeline != nil {
+			debug.Log("injectTUIData: calling pipeline.InjectTUIData")
+			connectedState.pipeline.InjectTUIData(data)
+		} else {
+			debug.Log("injectTUIData: no pipeline available")
+		}
+	} else {
+		debug.Log("injectTUIData: not in connected state")
+	}
 }
 
 // GetScriptManager returns the script manager for external access

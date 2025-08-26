@@ -217,7 +217,7 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Log("VM.GotoAndExecuteSync [%s]: synchronously executing trigger handler '%s'", scriptName, label)
+	debug.Log("VM.GotoAndExecuteSync [%s]: STARTING synchronous execution of trigger handler '%s'", scriptName, label)
 	
 	// Save current execution state
 	savedPosition := vm.state.Position
@@ -259,6 +259,7 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 		}
 	}
 	
+	debug.Log("VM.GotoAndExecuteSync [%s]: COMPLETED synchronous execution of trigger handler '%s'", scriptName, label)
 	return nil
 }
 

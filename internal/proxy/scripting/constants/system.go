@@ -33,6 +33,16 @@ func (sc *SystemConstants) GetConstant(name string) (*types.Value, bool) {
 	sc.updateDynamicConstant(name)
 
 	value, exists := sc.constants[name]
+	
+	// Log CURRENTLINE access for debugging
+	if name == "CURRENTLINE" {
+		if exists {
+			debug.Log("CURRENTLINE ACCESSED: returning value=%q", value.String)
+		} else {
+			debug.Log("CURRENTLINE ACCESSED: not found in constants")
+		}
+	}
+	
 	if exists {
 		return value.Clone(), true
 	}
@@ -217,9 +227,9 @@ func (sc *SystemConstants) updateDynamicConstant(name string) {
 			currentSector := sc.gameInterface.GetCurrentSector()
 			sc.constants["CURRENTSECTOR"] = types.NewNumberValue(float64(currentSector))
 		}
-	// CURRENTLINE and CURRENTANSILINE removed from dynamic updates
-	// These are now only updated via explicit UpdateCurrentLine() calls
-	// to avoid overwriting values set by the TWX parser
+	// CURRENTLINE and CURRENTANSILINE are NOT dynamically updated
+	// They are only updated via explicit UpdateCurrentLine() calls from the TWXParser
+	// This ensures triggers see the correct line that was being processed when they fired
 	case "SECTOR.WARPS", "SECTOR.WARPCOUNT", "SECTOR.DENSITY", "SECTOR.NAVHAZ",
 		"SECTOR.EXPLORED", "SECTOR.ANOMALY", "SECTOR.BEACON", "SECTOR.CONSTELLATION":
 		sc.updateSectorConstants()
@@ -320,7 +330,7 @@ func (sc *SystemConstants) UpdateCurrentLine(text string) {
 	strippedText := ansi.StripString(text)
 	sc.constants["CURRENTLINE"] = types.NewStringValue(strippedText)
 	
-	debug.Log("CURRENTLINE UPDATED: original=%q, stripped=%q", text, strippedText)
+	debug.Log("CURRENTLINE UPDATED: systemConstants=%p, original=%q, stripped=%q", sc, text, strippedText)
 
 	// Update raw packet if needed
 	sc.constants["RAWPACKET"] = types.NewStringValue(text)
