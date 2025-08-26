@@ -23,6 +23,9 @@ func RegisterGameCommands(vm CommandRegistry) {
 	vm.RegisterCommand("GETINPUT", 2, 3, []types.ParameterType{types.ParamVar, types.ParamValue, types.ParamValue}, cmdGetInput)
 	vm.RegisterCommand("GETCONSOLEINPUT", 2, 2, []types.ParameterType{types.ParamVar, types.ParamValue}, cmdGetConsoleInput)
 
+	// Debug command for troubleshooting
+	vm.RegisterCommand("DEBUGLOG", 1, -1, []types.ParameterType{types.ParamValue}, cmdDebugLog)
+
 	// Text processing commands
 	vm.RegisterCommand("MERGETEXT", 3, 3, []types.ParameterType{types.ParamValue, types.ParamValue, types.ParamVar}, cmdMergeText)
 
@@ -176,6 +179,28 @@ func cmdGetConsoleInput(vm types.VMInterface, params []*types.CommandParam) erro
 	return nil
 }
 
+func cmdDebugLog(vm types.VMInterface, params []*types.CommandParam) error {
+	// Concatenate all parameters like ECHO
+	message := ""
+	for _, param := range params {
+		if param.Type == types.ParamVar {
+			// Get variable value
+			value := vm.GetVariable(param.VarName)
+			message += value.ToString()
+		} else {
+			// Use literal value
+			message += param.Value.ToString()
+		}
+	}
+
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Log("SCRIPT DEBUG [%s] (line %d): %s", scriptName, vm.GetCurrentLine(), message)
+	return nil
+}
+
 func cmdMergeText(vm types.VMInterface, params []*types.CommandParam) error {
 	// Merge two text strings
 	text1 := GetParamString(vm, params[0])
@@ -324,13 +349,23 @@ func cmdGetType(vm types.VMInterface, params []*types.CommandParam) error {
 // Syntax: getSector <index> <var>
 // Example: getSector 123 $s
 func cmdGetSector(vm types.VMInterface, params []*types.CommandParam) error {
+	// Add panic recovery for debugging
+	defer func() {
+		if r := recover(); r != nil {
+			debug.Log("PANIC in cmdGetSector: %v", r)
+			panic(r) // Re-panic after logging
+		}
+	}()
+	
 	if len(params) != 2 {
 		return vm.Error("GETSECTOR requires exactly 2 parameters: sector_index, result_var")
 	}
 
 	// Get sector index from first parameter
 	indexValue := GetParamValue(vm, params[0])
+	debug.Log("cmdGetSector: indexValue=%v", indexValue)
 	sectorIndex := int(indexValue.ToNumber())
+	debug.Log("cmdGetSector: sectorIndex=%d", sectorIndex)
 
 	// Ignore invalid call with index of zero (Pascal TWX behavior)
 	if sectorIndex == 0 {
@@ -339,15 +374,25 @@ func cmdGetSector(vm types.VMInterface, params []*types.CommandParam) error {
 
 	// Get variable name for result
 	varName := params[1].VarName
+	debug.Log("cmdGetSector: varName=%s", varName)
 
 	// Get sector data from game interface
 	gameInterface := vm.GetGameInterface()
+	debug.Log("cmdGetSector: gameInterface=%v", gameInterface)
+	if gameInterface == nil {
+		debug.Log("cmdGetSector: ERROR - gameInterface is nil!")
+		return vm.Error("Game interface not available")
+	}
 	sector, err := gameInterface.GetSector(sectorIndex)
+	debug.Log("cmdGetSector: after GetSector call, err=%v", err)
 	if err != nil {
+		debug.Log("GETSECTOR: sector %d not found in database, setting default values. Error: %v", sectorIndex, err)
 		// If sector not found, set default empty values
 		setSectorVariables(vm, varName, sectorIndex, nil)
 		return nil
 	}
+
+	debug.Log("GETSECTOR: sector %d found - PortName=%q, PortClass=%d, HasPort=%v", sectorIndex, sector.PortName, sector.PortClass, sector.HasPort)
 
 	// Set all sector variables matching Pascal TWX exactly
 	setSectorVariables(vm, varName, sectorIndex, &sector)
@@ -429,12 +474,14 @@ func setPortVariables(vm types.VMInterface, varName string, sector *types.Sector
 	}
 	vm.SetVariable(varName+".PORT.NAME", &types.Value{Type: types.StringType, String: portName})
 
-	if portName == "" || !sector.HasPort {
+	if !sector.HasPort {
 		// No port exists
+		debug.Log("SETPORTVARS: %s - No port (portName=%q, hasPort=%v) - setting PORT.CLASS=0", varName, portName, sector != nil && sector.HasPort)
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: 0})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 0})
 	} else {
 		// Port exists - set all port variables using actual sector data
+		debug.Log("SETPORTVARS: %s - Port exists (portName=%q, portClass=%d) - setting PORT.CLASS=%d", varName, portName, sector.PortClass, sector.PortClass)
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: float64(sector.PortClass)})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 1})
 		vm.SetVariable(varName+".PORT.BUILDTIME", &types.Value{Type: types.NumberType, Number: 0})

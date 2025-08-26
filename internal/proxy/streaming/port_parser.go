@@ -363,7 +363,7 @@ func (p *TWXParser) savePortData() {
 	// Phase 3: Port data is tracked using PortTracker (no intermediate objects needed)
 	if p.portTracker != nil {
 		p.portTracker.SetName(p.currentPortName)
-		debug.Log("PORT: Tracker updated with port name")
+		// debug.Log("PORT: Tracker updated with port name")
 
 		// Execute the port tracker to save data to database
 		if p.portTracker.HasUpdates() {

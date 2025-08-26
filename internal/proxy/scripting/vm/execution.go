@@ -530,6 +530,11 @@ func (ee *ExecutionEngine) findLabel(label string) int {
 	return -1
 }
 
+// FindLabel finds the position of a label in the AST (public interface)
+func (ee *ExecutionEngine) FindLabel(label string) int {
+	return ee.findLabel(label)
+}
+
 // parseCommandParams parses command parameters from AST nodes
 func (ee *ExecutionEngine) parseCommandParams(nodes []*parser.ASTNode) ([]*types.CommandParam, error) {
 	params := make([]*types.CommandParam, len(nodes))

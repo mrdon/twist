@@ -43,6 +43,11 @@ func (m *MockScriptEngine) ProcessAutoText(text string) error {
 	return nil
 }
 
+func (m *MockScriptEngine) UpdateCurrentLine(text string) error {
+	// Mock implementation - could track currentLine updates if needed for testing
+	return nil
+}
+
 func TestScriptEventProcessor_Creation(t *testing.T) {
 	mockEngine := NewMockScriptEngine()
 	processor := NewScriptEventProcessor(mockEngine)

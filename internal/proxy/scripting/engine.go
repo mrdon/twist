@@ -599,6 +599,17 @@ func (e *Engine) ProcessAutoText(text string) error {
 	return e.ProcessText(text)
 }
 
+// UpdateCurrentLine updates the CURRENTLINE system constant (TWX compatibility)
+func (e *Engine) UpdateCurrentLine(text string) error {
+	// Update CURRENTLINE through the system constants
+	if e.gameInterface != nil {
+		if systemConstants := e.gameInterface.GetSystemConstants(); systemConstants != nil {
+			systemConstants.UpdateCurrentLine(text)
+		}
+	}
+	return nil
+}
+
 // GetTriggerManager returns the trigger manager
 func (e *Engine) GetTriggerManager() *triggers.Manager {
 	return e.triggerManager

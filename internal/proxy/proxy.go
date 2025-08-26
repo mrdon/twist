@@ -100,7 +100,7 @@ func NewConnectedState(conn net.Conn, reader *bufio.Reader, writer *bufio.Writer
 }
 
 func (s *ConnectedState) SendToTUI(output string) error {
-	data := []byte(output + "\r\n")
+	data := []byte(output)
 	if s.pipeline != nil {
 		s.pipeline.InjectTUIData(data)
 	}
@@ -286,8 +286,8 @@ func New(tuiAPI api.TuiAPI) *Proxy {
 		}
 	})
 
-	// Create script manager that can request database dynamically
-	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
+	// Create script manager with direct database access
+	p.scriptManager = scripting.NewScriptManager(p.db)
 
 	// Setup script manager connections immediately so sendHandler is available
 	adapter := &proxyAdapter{p}
@@ -333,8 +333,8 @@ func NewWithDatabase(tuiAPI api.TuiAPI, db database.Database) *Proxy {
 		}
 	})
 
-	// Create script manager that can request database dynamically
-	p.scriptManager = scripting.NewScriptManagerWithProvider(p)
+	// Create script manager with direct database access
+	p.scriptManager = scripting.NewScriptManager(p.db)
 
 	// Setup script manager connections immediately
 	adapter := &proxyAdapter{p}
@@ -416,7 +416,9 @@ func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
 	p.gameDetector = NewGameDetector(connInfo)
 
 	// If database path is provided, force load that database instead of auto-detection
+	debug.Log("Initializing database: DatabasePath=%q", opts.DatabasePath)
 	if opts.DatabasePath != "" {
+		debug.Log("Using forced database path: %s", opts.DatabasePath)
 		db := database.NewDatabase()
 		if err := db.CreateDatabase(opts.DatabasePath); err != nil {
 			if err := db.OpenDatabase(opts.DatabasePath); err != nil {
@@ -431,6 +433,7 @@ func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
 		// Skip game detector's database loading by not setting callbacks
 	} else {
 		// Setup database loaded callback for normal auto-detection
+		debug.Log("Setting up database loaded callback for auto-detection")
 		p.gameDetector.SetDatabaseLoadedCallback(p.onDatabaseLoaded)
 	}
 
@@ -852,12 +855,14 @@ func (p *Proxy) SetPlayerName(name string) {
 
 // onDatabaseLoaded is called when the game detector loads a database
 func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.ScriptManager) error {
+	debug.Log("onDatabaseLoaded: callback triggered with db=%v", db)
 	// Update proxy state with new database
 	p.db = db
 
 	// Update existing script manager with new database instead of replacing it
 	if p.scriptManager != nil {
-		p.scriptManager.UpdateDatabase()
+		// Update the script manager's database reference directly
+		p.scriptManager.SetDatabase(db)
 		adapter := &proxyAdapter{p}
 		p.scriptManager.SetupConnections(adapter, nil)
 	}

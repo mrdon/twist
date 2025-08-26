@@ -112,6 +112,7 @@ type GraphvizSectorMap struct {
 	sixelLayer   *SixelLayer
 	regionID     string
 	isGenerating bool // Track when image generation is in progress
+	app          *tview.Application // Reference for async UI updates
 
 	// Debouncing for rapid sector updates (e.g., during probe processing)
 	lastUpdateTime time.Time
@@ -121,7 +122,7 @@ type GraphvizSectorMap struct {
 }
 
 // NewGraphvizSectorMap creates a new graphviz-based sector map component
-func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
+func NewGraphvizSectorMap(sixelLayer *SixelLayer, app *tview.Application) *GraphvizSectorMap {
 	// Get theme colors - use default colors for proper background
 	currentTheme := theme.Current()
 	defaultColors := currentTheme.DefaultColors()
@@ -148,6 +149,7 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer) *GraphvizSectorMap {
 		sixelLayer:    sixelLayer,
 		regionID:      "sector_map",           // Unique ID for this component
 		debounceDelay: 200 * time.Millisecond, // 200ms debounce delay for rapid updates
+		app:           app,                     // Store app reference for async updates
 	}
 	gsm.SetBorder(false).SetTitle("")
 	return gsm
@@ -181,9 +183,9 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, pendingRedraw=%t), isGenerating=%t",
 		needsGeneration, gsm.needsRedraw, gsm.pendingRedraw, gsm.isGenerating)
 
-	if needsGeneration {
-		if gsm.currentSector > 0 && gsm.proxyAPI != nil {
-			debug.Log("GraphvizSectorMap.Draw: Generating new sector map for sector %d", gsm.currentSector)
+	if needsGeneration && !gsm.isGenerating {
+		if gsm.currentSector > 0 && gsm.proxyAPI != nil && gsm.app != nil {
+			debug.Log("GraphvizSectorMap.Draw: Starting async generation for sector %d", gsm.currentSector)
 			gsm.isGenerating = true // Mark that we're generating
 
 			// Clear the region before generating new content to prevent artifacts
@@ -192,28 +194,38 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 				gsm.sixelLayer.SetRegionVisible(gsm.regionID, false)
 			}
 
-			// Generate new graphviz image
-			g, err := gsm.buildSectorGraph()
-			if err == nil {
-				debug.Log("GraphvizSectorMap.Draw: Graph built successfully, generating image")
-				_, err := gsm.generateGraphvizImage(g, width, height)
+			// Move expensive generation to background goroutine
+			go func() {
+				// Generate new graphviz image
+				g, err := gsm.buildSectorGraph()
 				if err == nil {
-					debug.Log("GraphvizSectorMap.Draw: Image generated successfully")
-					// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
-					gsm.needsRedraw = false
-					gsm.pendingRedraw = false
-					gsm.isGenerating = false // Mark generation complete
+					debug.Log("GraphvizSectorMap.AsyncGen: Graph built successfully, generating image")
+					_, err := gsm.generateGraphvizImage(g, width, height)
+					if err == nil {
+						debug.Log("GraphvizSectorMap.AsyncGen: Image generated successfully")
+						// Update UI on main thread
+						gsm.app.QueueUpdateDraw(func() {
+							// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
+							gsm.needsRedraw = false
+							gsm.pendingRedraw = false
+							gsm.isGenerating = false // Mark generation complete
+						})
+					} else {
+						debug.Log("GraphvizSectorMap.AsyncGen: Error generating image: %v", err)
+						gsm.app.QueueUpdateDraw(func() {
+							gsm.isGenerating = false
+						})
+					}
 				} else {
-					debug.Log("GraphvizSectorMap.Draw: Error generating image: %v", err)
-					gsm.isGenerating = false
+					debug.Log("GraphvizSectorMap.AsyncGen: Error building graph: %v", err)
+					gsm.app.QueueUpdateDraw(func() {
+						gsm.isGenerating = false
+					})
 				}
-			} else {
-				debug.Log("GraphvizSectorMap.Draw: Error building graph: %v", err)
-				gsm.isGenerating = false
-			}
+			}()
 		} else {
-			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t",
-				gsm.currentSector, gsm.proxyAPI != nil)
+			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t, app!=nil=%t",
+				gsm.currentSector, gsm.proxyAPI != nil, gsm.app != nil)
 		}
 	}
 
@@ -231,7 +243,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		}
 	}
 
-	debug.Log("GraphvizSectorMap.Draw: Draw complete")
+	// debug.Log("GraphvizSectorMap.Draw: Draw complete")
 }
 
 // registerSixelRegion registers this component's sixel region with the layer

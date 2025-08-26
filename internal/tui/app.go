@@ -80,7 +80,7 @@ func NewApplication() *TwistApp {
 	// Create UI components
 	menuComp := components.NewMenuComponent(menuManager)
 	terminalComp := components.NewTerminalComponent(app)
-	panelComp := components.NewPanelComponent(sixelLayer)
+	panelComp := components.NewPanelComponent(sixelLayer, app)
 	statusComp := components.NewStatusComponent()
 
 	// Set up width coordination between menu and status bar
@@ -601,19 +601,16 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 }
 
 func (ta *TwistApp) HandleTerminalData(data []byte) {
-	// Terminal data should be handled asynchronously to avoid blocking
-	go func() {
-		// Add error recovery to catch any panics in terminal processing
-		defer func() {
-			if r := recover(); r != nil {
-			}
-		}()
-
-		// Write directly to the TerminalComponent
-		ta.terminalComponent.Write(data)
-
-		// UI refresh is handled by the TerminalView's change callback
+	// Add error recovery to catch any panics in terminal processing
+	defer func() {
+		if r := recover(); r != nil {
+		}
 	}()
+
+	// Write directly to the TerminalComponent
+	ta.terminalComponent.Write(data)
+
+	// UI refresh is handled by the TerminalView's change callback
 }
 
 // Script event handlers

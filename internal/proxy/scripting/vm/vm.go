@@ -45,6 +45,9 @@ type VirtualMachine struct {
 	pendingInputPrompt string
 	pendingInputResult string
 	justResumed        bool
+	
+	// Trigger processing state (for TWX compatibility)
+	processingTrigger  bool
 }
 
 // NewVirtualMachine creates a new virtual machine
@@ -207,6 +210,58 @@ func (vm *VirtualMachine) Return() error {
 	return nil
 }
 
+// GotoAndExecuteSync jumps to a label and executes it synchronously (for triggers)
+// This is needed for TWX compatibility where triggers execute immediately
+func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	debug.Log("VM.GotoAndExecuteSync [%s]: synchronously executing trigger handler '%s'", scriptName, label)
+	
+	// Save current execution state
+	savedPosition := vm.state.Position
+	savedRunning := vm.state.IsRunning()
+	
+	// Jump to the label immediately (no delayed jump)
+	newPos := vm.execution.FindLabel(label)
+	if newPos == -1 {
+		return fmt.Errorf("label not found: %s", label)
+	}
+	vm.state.Position = newPos
+	
+	// Execute until we hit a pause, halt, or return
+	for vm.state.IsRunning() && !vm.state.IsWaiting() && !vm.state.IsPaused() {
+		if err := vm.execution.ExecuteStep(); err != nil {
+			debug.Log("VM.GotoAndExecuteSync [%s]: ExecuteStep returned error: %v", scriptName, err)
+			// Restore state on error
+			vm.state.Position = savedPosition
+			if savedRunning {
+				vm.state.SetRunning()
+			}
+			return err
+		}
+		
+		// If we hit a pause or getinput, break and let the caller handle it
+		if vm.state.IsPaused() || vm.waitingForInput {
+			debug.Log("VM.GotoAndExecuteSync [%s]: trigger handler paused or waiting for input", scriptName)
+			break
+		}
+	}
+	
+	// If the handler didn't end naturally, restore execution state
+	// (In TWX, trigger handlers typically end with a return or implicit return)
+	if vm.state.IsRunning() && !vm.state.IsPaused() && !vm.waitingForInput {
+		debug.Log("VM.GotoAndExecuteSync [%s]: restoring execution position to %d", scriptName, savedPosition)
+		vm.state.Position = savedPosition
+		if savedRunning {
+			vm.state.SetRunning()
+		}
+	}
+	
+	return nil
+}
+
 // State control
 func (vm *VirtualMachine) Halt() error {
 	vm.state.SetHalted()
@@ -260,8 +315,8 @@ func (vm *VirtualMachine) GetInput(prompt string) (string, error) {
 	}
 	debug.Log("VM.GetInput [%s]: initiating input for prompt %q", scriptName, prompt)
 
-	// Display the prompt (matching TWX behavior)
-	if err := vm.Echo("\r\n" + prompt + "\r\n"); err != nil {
+	// Display the prompt (matching TWX behavior - prompt on its own line, cursor stays at end)
+	if err := vm.Echo("\r\n" + prompt + " "); err != nil {
 		return "", err
 	}
 

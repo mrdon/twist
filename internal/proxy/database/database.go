@@ -260,6 +260,14 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 		// Sector doesn't exist, return blank sector (like TWX)
 		return NULLSector(), nil
 	} else if err != nil {
+		// Log all database errors for debugging
+		debug.Log("DATABASE ERROR in LoadSector(%d): %v", index, err)
+		
+		// Only panic on scanning errors (schema mismatches), not other DB issues
+		if strings.Contains(err.Error(), "Scan error") || strings.Contains(err.Error(), "unsupported Scan") {
+			debug.Log("PANIC TRIGGERED: SQL scan error detected in LoadSector(%d): %v", index, err)
+			panic(fmt.Sprintf("FATAL SQL SCAN ERROR in LoadSector(%d): %v - This indicates a database schema/type mismatch that must be fixed immediately", index, err))
+		}
 		return NULLSector(), fmt.Errorf("failed to load sector %d: %w", index, err)
 	}
 
@@ -361,7 +369,7 @@ func (d *SQLiteDatabase) SaveSector(sector TSector, index int) error {
 		sector.Warp[3], sector.Warp[4], sector.Warp[5],
 		sector.Constellation, sector.Beacon, sector.NavHaz,
 		sector.Density, sector.Anomaly, sector.Warps, int(sector.Explored),
-		sector.UpDate,
+		sector.UpDate, // Let Go's SQL driver handle the conversion
 		sector.Figs.Quantity, sector.Figs.Owner, int(sector.Figs.FigType),
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
@@ -444,7 +452,7 @@ func (d *SQLiteDatabase) SaveSectorWithCollections(sector TSector, index int, sh
 		sector.Warp[3], sector.Warp[4], sector.Warp[5],
 		sector.Constellation, sector.Beacon, sector.NavHaz,
 		sector.Density, sector.Anomaly, sector.Warps, int(sector.Explored),
-		sector.UpDate,
+		sector.UpDate, // Let Go's SQL driver handle the conversion
 		sector.Figs.Quantity, sector.Figs.Owner, int(sector.Figs.FigType),
 		sector.MinesArmid.Quantity, sector.MinesArmid.Owner,
 		sector.MinesLimpet.Quantity, sector.MinesLimpet.Owner,
@@ -608,8 +616,6 @@ func (d *SQLiteDatabase) LoadScriptVariable(name string) (interface{}, error) {
 
 // SavePlayerStats saves current player statistics to database
 func (d *SQLiteDatabase) SavePlayerStats(stats TPlayerStats) error {
-	debug.Log("SavePlayerStats: saving stats - credits: %d, turns: %d, sector: %d",
-		stats.Credits, stats.Turns, stats.CurrentSector)
 	if !d.dbOpen {
 		return fmt.Errorf("database not open")
 	}

@@ -5,6 +5,8 @@ import (
 	"strconv"
 	"time"
 
+	"twist/internal/ansi"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -215,21 +217,9 @@ func (sc *SystemConstants) updateDynamicConstant(name string) {
 			currentSector := sc.gameInterface.GetCurrentSector()
 			sc.constants["CURRENTSECTOR"] = types.NewNumberValue(float64(currentSector))
 		}
-	case "CURRENTLINE", "CURRENTANSILINE":
-		// Update CURRENTLINE from game interface
-		if sc.gameInterface != nil {
-			// First try to get the last output
-			lastOutput := sc.gameInterface.GetLastOutput()
-			if lastOutput != "" {
-				sc.constants["CURRENTLINE"] = types.NewStringValue(lastOutput)
-				sc.constants["CURRENTANSILINE"] = types.NewStringValue(lastOutput)
-			} else {
-				// Fall back to current prompt if no output available
-				currentPrompt := sc.gameInterface.GetCurrentPrompt()
-				sc.constants["CURRENTLINE"] = types.NewStringValue(currentPrompt)
-				sc.constants["CURRENTANSILINE"] = types.NewStringValue(currentPrompt)
-			}
-		}
+	// CURRENTLINE and CURRENTANSILINE removed from dynamic updates
+	// These are now only updated via explicit UpdateCurrentLine() calls
+	// to avoid overwriting values set by the TWX parser
 	case "SECTOR.WARPS", "SECTOR.WARPCOUNT", "SECTOR.DENSITY", "SECTOR.NAVHAZ",
 		"SECTOR.EXPLORED", "SECTOR.ANOMALY", "SECTOR.BEACON", "SECTOR.CONSTELLATION":
 		sc.updateSectorConstants()
@@ -323,11 +313,14 @@ func (sc *SystemConstants) GetConstantCount() int {
 
 // UpdateCurrentLine updates the current line constants
 func (sc *SystemConstants) UpdateCurrentLine(text string) {
-	sc.constants["CURRENTLINE"] = types.NewStringValue(text)
+	// CURRENTANSILINE contains the original text with ANSI codes
+	sc.constants["CURRENTANSILINE"] = types.NewStringValue(text)
 
-	// Strip ANSI codes for CURRENTANSILINE (simple implementation)
-	ansiText := text // TODO: Implement proper ANSI stripping
-	sc.constants["CURRENTANSILINE"] = types.NewStringValue(ansiText)
+	// CURRENTLINE contains text with ANSI codes stripped
+	strippedText := ansi.StripString(text)
+	sc.constants["CURRENTLINE"] = types.NewStringValue(strippedText)
+	
+	debug.Log("CURRENTLINE UPDATED: original=%q, stripped=%q", text, strippedText)
 
 	// Update raw packet if needed
 	sc.constants["RAWPACKET"] = types.NewStringValue(text)

@@ -27,7 +27,7 @@ type PanelComponent struct {
 }
 
 // NewPanelComponent creates new panel components
-func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
+func NewPanelComponent(sixelLayer *SixelLayer, app *tview.Application) *PanelComponent {
 	// Get theme colors for consistent styling
 	currentTheme := theme.Current()
 	panelColors := currentTheme.PanelColors()
@@ -47,7 +47,7 @@ func NewPanelComponent(sixelLayer *SixelLayer) *PanelComponent {
 	// Create all sector map components for right panel
 	sectorMap := NewSectorMapComponent()
 	sixelMap := NewProperSixelSectorMapComponent()
-	graphvizMap := NewGraphvizSectorMap(sixelLayer) // Use graphviz as default
+	graphvizMap := NewGraphvizSectorMap(sixelLayer, app) // Use graphviz as default
 
 	// Use graphviz map as default
 	useGraphviz := true

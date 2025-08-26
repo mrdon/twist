@@ -3,6 +3,7 @@ package types
 import (
 	"strings"
 	"time"
+	"twist/internal/debug"
 )
 
 // TriggerType represents the type of trigger
@@ -107,8 +108,13 @@ func (t *TextTrigger) Matches(input string) bool {
 		(input == t.Value || strings.Contains(input, t.Value))
 }
 
-// Execute executes the trigger action
+// Execute executes the trigger action  
 func (t *TextTrigger) Execute(vm VMInterface) error {
+	// DEBUG: Log the CURRENTLINE at the exact moment the trigger fires
+	currentLine := vm.GetVariable("CURRENTLINE")
+	if currentLine != nil {
+		debug.Log("TRIGGER FIRED: pattern=%q, CURRENTLINE=%q", t.Value, currentLine.String)
+	}
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
 			return err
@@ -133,7 +139,9 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 			// For other commands, we'd need to parse and execute them
 			// For now, fall back to goto behavior
 		}
-		return vm.Goto(t.Label)
+		// Execute trigger handlers synchronously like TWX does
+		// TWX creates nested execution context for triggers
+		return vm.GotoAndExecuteSync(t.Label)
 	}
 
 	return nil
@@ -175,7 +183,9 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 				return vm.Echo(message)
 			}
 		}
-		return vm.Goto(t.Label)
+		// Execute trigger handlers synchronously like TWX does
+		// TWX creates nested execution context for triggers
+		return vm.GotoAndExecuteSync(t.Label)
 	}
 
 	return nil
@@ -198,7 +208,9 @@ func (t *TextOutTrigger) Matches(input string) bool {
 // Execute executes the trigger action
 func (t *TextOutTrigger) Execute(vm VMInterface) error {
 	if t.Label != "" {
-		return vm.Goto(t.Label)
+		// Execute trigger handlers synchronously like TWX does
+		// TWX creates nested execution context for triggers
+		return vm.GotoAndExecuteSync(t.Label)
 	}
 	return nil
 }
@@ -219,7 +231,9 @@ func (t *DelayTrigger) Matches(input string) bool {
 // Execute executes the trigger action
 func (t *DelayTrigger) Execute(vm VMInterface) error {
 	if t.Label != "" {
-		return vm.Goto(t.Label)
+		// Execute trigger handlers synchronously like TWX does
+		// TWX creates nested execution context for triggers
+		return vm.GotoAndExecuteSync(t.Label)
 	}
 	return nil
 }
@@ -244,7 +258,9 @@ func (t *EventTrigger) Execute(vm VMInterface) error {
 	}
 
 	if t.Label != "" {
-		return vm.Goto(t.Label)
+		// Execute trigger handlers synchronously like TWX does
+		// TWX creates nested execution context for triggers
+		return vm.GotoAndExecuteSync(t.Label)
 	}
 
 	return nil

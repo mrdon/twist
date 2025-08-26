@@ -47,6 +47,7 @@ type VMInterface interface {
 
 	// Script control
 	Goto(label string) error
+	GotoAndExecuteSync(label string) error // Synchronous execution for triggers (TWX compatibility)
 	Gosub(label string) error
 	Return() error
 	Halt() error

@@ -467,6 +467,10 @@ func (p *TWXParser) ProcessInBound(data string) {
 	// Fire AutoTextEvent for prompts only if there's remaining data (Pascal TWX behavior)
 	// Pascal: only fires AutoTextEvent at end of ProcessInBound for partial/prompt data
 	if p.currentLine != "" {
+		// NOTE: Pascal TWX does NOT update CURRENTLINE system constant for prompts
+		// It only sets internal parser state (CurrentLine := Line at line 1499)
+		// The system constant should only be updated in processLine() for complete lines
+		
 		p.FireAutoTextEvent(p.currentLine, false)
 
 		// Process partial line for prompts (key TWX feature!)
@@ -565,6 +569,9 @@ func (p *TWXParser) processLine(line string) {
 	// Check for info display end and quick stats end before other processing
 	p.checkInfoDisplayEnd(line)
 	p.checkQuickStatsEnd(line)
+
+	// Update CURRENTLINE system constant before firing script events (matches TWX Pascal ProcessInBound sequence)
+	p.UpdateCurrentLine(line)
 
 	// Fire TextLineEvent as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.TextLineEvent)
 	p.FireTextLineEvent(line, false)
@@ -2508,6 +2515,14 @@ func (p *TWXParser) FireAutoTextEvent(line string, outbound bool) {
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
 		p.scriptEventProcessor.FireAutoTextEvent(line, outbound)
+	}
+}
+
+// UpdateCurrentLine updates the CURRENTLINE system constant (mirrors TWX ProcessInBound behavior)
+func (p *TWXParser) UpdateCurrentLine(line string) {
+	// Update CURRENTLINE through the ScriptEventProcessor
+	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
+		p.scriptEventProcessor.UpdateCurrentLine(line)
 	}
 }
 

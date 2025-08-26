@@ -15,6 +15,9 @@ type ScriptEngine interface {
 
 	// AutoTextEvent processes auto text events (mirrors Pascal TWXInterpreter.AutoTextEvent)
 	ProcessAutoText(text string) error
+
+	// UpdateCurrentLine updates the CURRENTLINE system constant (TWX compatibility)
+	UpdateCurrentLine(text string) error
 }
 
 // ScriptEventProcessor implements script event firing functionality
@@ -119,6 +122,19 @@ func (sep *ScriptEventProcessor) ProcessLineWithScriptEvents(line string) error 
 
 	// Activate triggers (mirrors Pascal ProcessLine end)
 	if err := sep.FireActivateTriggers(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// UpdateCurrentLine updates the CURRENTLINE system constant
+func (sep *ScriptEventProcessor) UpdateCurrentLine(text string) error {
+	if !sep.IsEnabled() {
+		return nil
+	}
+
+	if err := sep.scriptEngine.UpdateCurrentLine(text); err != nil {
 		return err
 	}
 

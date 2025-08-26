@@ -274,7 +274,7 @@ func (p *PlayerStatsTracker) Execute(db *sql.DB) error {
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("player_stats").
 		SetMap(p.updates).
-		Set("updated_at", "CURRENT_TIMESTAMP").
+		Set("updated_at", squirrel.Expr("CURRENT_TIMESTAMP")).
 		Where(squirrel.Eq{"id": 1})
 
 	sql, args, err := query.ToSql()
@@ -283,7 +283,7 @@ func (p *PlayerStatsTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Log("Executing player stats update with %d discovered fields: %s", len(p.updates), sql)
+	// debug.Log("Executing player stats update with %d discovered fields: %s", len(p.updates), sql)
 
 	_, err = db.Exec(sql, args...)
 	if err != nil {
@@ -414,7 +414,7 @@ func (s *SectorTracker) Execute(db *sql.DB) error {
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("sectors").
 		SetMap(s.updates).
-		Set("update_time", "CURRENT_TIMESTAMP").
+		Set("update_time", squirrel.Expr("CURRENT_TIMESTAMP")).
 		Where(squirrel.Eq{"sector_index": s.sectorIndex})
 
 	sql, args, err := query.ToSql()
@@ -643,7 +643,7 @@ func (p *PortTracker) Execute(db *sql.DB) error {
 	// Build dynamic UPDATE query with only discovered fields
 	query := psql.Update("ports").
 		SetMap(p.updates).
-		Set("updated_at", "CURRENT_TIMESTAMP").
+		Set("updated_at", squirrel.Expr("CURRENT_TIMESTAMP")).
 		Where(squirrel.Eq{"sector_index": p.sectorIndex})
 
 	sql, args, err := query.ToSql()

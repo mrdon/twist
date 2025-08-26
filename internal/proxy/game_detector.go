@@ -260,6 +260,7 @@ func (l *GameDetector) ProcessLine(text string) {
 
 	// Update activity timestamp
 	l.lastActivity = time.Now()
+	debug.Log("GameDetector.ProcessLine: received text %q", text)
 
 	// Strip ANSI codes before processing using streaming stripper
 	cleanText := l.ansiStripper.StripChunk(text)
@@ -716,9 +717,16 @@ func (l *GameDetector) handleToken(token Token) {
 		})
 		// Load database after state update
 		currentState := l.state.Load()
+		debug.Log("GameDetector: state after update is %s, checking if should load database", currentState.currentState)
 		if currentState.currentState == StateGameActive {
+			debug.Log("GameDetector: state is StateGameActive, calling loadGameDatabase()")
 			if err := l.loadGameDatabase(); err != nil {
+				debug.Log("GameDetector: loadGameDatabase() failed: %v", err)
+			} else {
+				debug.Log("GameDetector: loadGameDatabase() completed successfully")
 			}
+		} else {
+			debug.Log("GameDetector: state is %s, not loading database", currentState.currentState)
 		}
 
 	case TokenGameExit:
@@ -917,10 +925,16 @@ func (l *GameDetector) loadGameDatabase() error {
 	}
 
 	if l.onDatabaseLoaded != nil {
+		debug.Log("GameDetector: triggering onDatabaseLoaded callback with db=%v", db)
 		go func() {
 			if err := l.onDatabaseLoaded(db, scriptManager); err != nil {
+				debug.Log("GameDetector: onDatabaseLoaded callback error: %v", err)
+			} else {
+				debug.Log("GameDetector: onDatabaseLoaded callback completed successfully")
 			}
 		}()
+	} else {
+		debug.Log("GameDetector: no onDatabaseLoaded callback set")
 	}
 
 	return nil

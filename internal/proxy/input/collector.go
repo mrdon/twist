@@ -1,10 +1,30 @@
 package input
 
 import (
+	"runtime"
 	"strings"
 
 	"twist/internal/debug"
 )
+
+// debugSendOutput logs output with stack trace for debugging
+func debugSendOutput(output string, sendFunc func(string)) {
+	// Get stack trace
+	pc := make([]uintptr, 10)
+	n := runtime.Callers(2, pc) // Skip runtime.Callers and this function
+	frames := runtime.CallersFrames(pc[:n])
+	
+	debug.Log("INPUT_COLLECTOR sendOutput: %q", output)
+	for {
+		frame, more := frames.Next()
+		debug.Log("  at %s:%d in %s", frame.File, frame.Line, frame.Function)
+		if !more {
+			break
+		}
+	}
+	
+	sendFunc(output)
+}
 
 // InputCollector handles two-stage input collection for menu operations
 type InputCollector struct {
@@ -55,7 +75,6 @@ func (ic *InputCollector) StartCollection(menuName, prompt string) {
 		}
 	}()
 
-	debug.Log("Starting input collection for menu: %s, prompt: %s", menuName, prompt)
 	ic.isCollecting = true
 	ic.menuName = menuName
 	ic.prompt = prompt
@@ -63,11 +82,13 @@ func (ic *InputCollector) StartCollection(menuName, prompt string) {
 
 	// Display the input prompt (scripts handle their own prompting)
 	if prompt != "" && !strings.HasPrefix(menuName, "SCRIPT_INPUT_") {
-		ic.sendOutput("\r\n" + prompt + "\r\n")
+		debugSendOutput("\r\n" + prompt + "\r\n", ic.sendOutput)
 	}
 
-	// Show help for input collection
-	ic.sendOutput("(Enter value, or '\\' to cancel)\r\n")
+	// Show help for input collection (but not for script inputs - TWX doesn't show this)
+	if !strings.HasPrefix(menuName, "SCRIPT_INPUT_") {
+		debugSendOutput("(Enter value, or '\\' to cancel)\r\n", ic.sendOutput)
+	}
 }
 
 // IsCollecting returns whether input collection is active
@@ -91,8 +112,6 @@ func (ic *InputCollector) HandleInput(input string) error {
 	if !ic.isCollecting {
 		return nil
 	}
-
-	debug.Log("HandleInput received: %q (len=%d)", input, len(input))
 
 	// Check if input ends with Enter key and extract the value
 	var actualValue string
@@ -119,7 +138,6 @@ func (ic *InputCollector) HandleInput(input string) error {
 		// Complete collection with the value (add to existing buffer first)
 		result := ic.buffer + actualValue
 		ic.buffer = ""
-		debug.Log("Enter pressed, completing input collection with: '%s'", result)
 		return ic.completeCollection(result)
 	}
 
@@ -127,9 +145,8 @@ func (ic *InputCollector) HandleInput(input string) error {
 	if input == "\b" || input == "\x7f" || input == "\x08" {
 		if len(ic.buffer) > 0 {
 			ic.buffer = ic.buffer[:len(ic.buffer)-1]
-			debug.Log("Backspace pressed, buffer now: '%s'", ic.buffer)
 			// Send backspace sequence to terminal to visually remove character
-			ic.sendOutput("\b \b")
+			debugSendOutput("\b \b", ic.sendOutput)
 		}
 		return nil
 	}
@@ -138,7 +155,7 @@ func (ic *InputCollector) HandleInput(input string) error {
 	trimmedInput := strings.TrimSpace(input)
 	if trimmedInput == "\\" || trimmedInput == "\\quit" {
 		// Escape input collection
-		ic.sendOutput("Input cancelled.\r\n")
+		debugSendOutput("Input cancelled.\r\n", ic.sendOutput)
 		ic.buffer = ""
 		ic.cancelCollection()
 		return nil
@@ -153,9 +170,8 @@ func (ic *InputCollector) HandleInput(input string) error {
 	// Only process printable characters (ignore empty input and control chars)
 	if len(input) > 0 && input[0] >= 32 && input[0] < 127 {
 		ic.buffer += input
-		debug.Log("Added '%s' to buffer, buffer now: '%s'", input, ic.buffer)
 		// Echo the character back for visual feedback
-		ic.sendOutput(input)
+		debugSendOutput(input, ic.sendOutput)
 	}
 
 	return nil
@@ -163,11 +179,11 @@ func (ic *InputCollector) HandleInput(input string) error {
 
 // showCollectionHelp displays help for input collection mode
 func (ic *InputCollector) showCollectionHelp() {
-	ic.sendOutput("\r\nInput Collection Help:\r\n")
-	ic.sendOutput("- Type your value and press Enter to submit\r\n")
-	ic.sendOutput("- Press Enter alone to submit empty value\r\n")
-	ic.sendOutput("- Press '\\' to cancel input collection\r\n")
-	ic.sendOutput("Current input: " + ic.buffer + "\r\n")
+	debugSendOutput("\r\nInput Collection Help:\r\n", ic.sendOutput)
+	debugSendOutput("- Type your value and press Enter to submit\r\n", ic.sendOutput)
+	debugSendOutput("- Press Enter alone to submit empty value\r\n", ic.sendOutput)
+	debugSendOutput("- Press '\\' to cancel input collection\r\n", ic.sendOutput)
+	debugSendOutput("Current input: " + ic.buffer + "\r\n", ic.sendOutput)
 }
 
 // completeCollection completes the input collection and calls the appropriate handler
@@ -179,17 +195,18 @@ func (ic *InputCollector) completeCollection(value string) error {
 	}()
 
 	menuName := ic.menuName
-	debug.Log("completeCollection: menuName=%s, value=%q", menuName, value)
 	ic.exitCollection()
 
 	if handler, exists := ic.completionHandlers[menuName]; exists {
 		return handler(menuName, value)
 	}
-	// Default behavior - show success message
-	if value != "" {
-		ic.sendOutput("Value set: " + value + "\r\n")
-	} else {
-		ic.sendOutput("Value cleared\r\n")
+	// Default behavior - show success message (but not for script inputs - TWX doesn't show this)
+	if !strings.HasPrefix(menuName, "SCRIPT_INPUT") {
+		if value != "" {
+			debugSendOutput("Value set: " + value + "\r\n", ic.sendOutput)
+		} else {
+			debugSendOutput("Value cleared\r\n", ic.sendOutput)
+		}
 	}
 
 	return nil
@@ -208,7 +225,6 @@ func (ic *InputCollector) exitCollection() {
 		}
 	}()
 
-	debug.Log("Exiting input collection mode")
 	ic.isCollecting = false
 	ic.menuName = ""
 	ic.prompt = ""

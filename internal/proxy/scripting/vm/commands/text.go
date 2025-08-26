@@ -2,6 +2,7 @@ package commands
 
 import (
 	"strings"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 	"unicode/utf8"
 )
@@ -422,9 +423,12 @@ func cmdGetWord(vm types.VMInterface, params []*types.CommandParam) error {
 
 	words := SplitWords(text)
 
+	debug.Log("GETWORD: text=%q, wordNum=%d, words=%v", text, wordNum, words)
+
 	var result string
 	if wordNum >= 1 && wordNum <= len(words) {
 		result = words[wordNum-1] // TWX uses 1-based indexing
+		debug.Log("GETWORD: found word %d = %q", wordNum, result)
 	} else {
 		// Handle empty result like Pascal implementation
 		if len(params) > 3 {
@@ -432,6 +436,7 @@ func cmdGetWord(vm types.VMInterface, params []*types.CommandParam) error {
 		} else {
 			result = "0" // Pascal default when no default provided
 		}
+		debug.Log("GETWORD: word %d not found, using default = %q", wordNum, result)
 	}
 
 	vm.SetVariable(params[1].VarName, &types.Value{
