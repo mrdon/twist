@@ -214,14 +214,8 @@ func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
 	// Phase 5: Use direct database API method (no converter needed)
 	sectorInfo, err := p.proxy.db.GetSectorInfo(sectorNum)
 	if err != nil {
-		// Return empty sector info with error
-		return api.SectorInfo{
-			Number:        sectorNum,
-			NavHaz:        0,
-			HasTraders:    0,
-			Constellation: "",
-			Beacon:        "",
-		}, err
+		// Never return empty sector data - return zero value and let caller handle error
+		return api.SectorInfo{}, err
 	}
 
 	return sectorInfo, nil

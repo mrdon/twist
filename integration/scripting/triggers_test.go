@@ -10,8 +10,13 @@ func TestSetTextTrigger_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "echo 'Text trigger fired'" "health"
+		setTextTrigger 1 :health_trigger "health"
 		echo "Trigger set"
+		halt
+		
+		:health_trigger
+		echo "Text trigger fired"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -45,9 +50,18 @@ func TestSetTextTrigger_PatternMatching_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "echo 'Enemy found'" "orc"
-		setTextTrigger 2 "echo 'Treasure found'" "gold"
+		setTextTrigger 1 :orc_handler "orc"
+		setTextTrigger 2 :gold_handler "gold"
 		echo "Triggers configured"
+		halt
+		
+		:orc_handler
+		echo "Enemy found"
+		return
+		
+		:gold_handler
+		echo "Treasure found"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -226,10 +240,23 @@ func TestTriggers_MultiplePatterns_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "echo 'Combat trigger'" "attack"
-		setTextTrigger 2 "echo 'Movement trigger'" "arrive"  
-		setTextTrigger 3 "echo 'Chat trigger'" "says"
+		setTextTrigger 1 :combat_handler "attack"
+		setTextTrigger 2 :movement_handler "arrive"  
+		setTextTrigger 3 :chat_handler "says"
 		echo "Multiple triggers configured"
+		halt
+		
+		:combat_handler
+		echo "Combat trigger"
+		return
+		
+		:movement_handler
+		echo "Movement trigger"
+		return
+		
+		:chat_handler
+		echo "Chat trigger"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -264,8 +291,13 @@ func TestTriggers_VariableInterpolation_RealIntegration(t *testing.T) {
 		saveVar $player_name
 		saveVar $health
 		
-		setTextTrigger 1 "echo $player_name ' health: ' $health" "status"
+		setTextTrigger 1 :status_trigger "status"
 		echo "Variable-based trigger set"
+		halt
+		
+		:status_trigger
+		echo $player_name " health: " $health
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -289,8 +321,16 @@ func TestTriggers_ConditionalLogic_RealIntegration(t *testing.T) {
 	script := `
 		setVar $auto_fight 1
 		
-		setTextTrigger 1 "if $auto_fight = 1 then\nsend 'attack'\necho 'Auto-attacking'\nend if" "enemy"
+		setTextTrigger 1 :auto_fight_handler "enemy"
 		echo "Conditional trigger configured"
+		halt
+		
+		:auto_fight_handler
+		if $auto_fight = 1 then
+			send "attack"
+			echo "Auto-attacking"
+		end
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -312,8 +352,18 @@ func TestTriggers_ChainedTriggers_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "setTextTrigger 2 'echo Chain completed' 'complete'\necho 'First trigger fired, second trigger set'" "start"
+		setTextTrigger 1 :first_trigger_handler "start"
 		echo "Chained trigger system configured"
+		halt
+		
+		:first_trigger_handler
+		setTextTrigger 2 :second_trigger_handler "complete"
+		echo "First trigger fired, second trigger set"
+		return
+		
+		:second_trigger_handler
+		echo "Chain completed"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -343,10 +393,23 @@ func TestTriggers_EmptyAndSpecialPatterns_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "echo 'Empty pattern triggered'" ""
-		setTextTrigger 2 "echo 'Special chars triggered'" "test\ntab"
-		setTextTrigger 3 "echo 'Unicode triggered'" "café"
+		setTextTrigger 1 :empty_trigger ""
+		setTextTrigger 2 :special_trigger "test\ntab"
+		setTextTrigger 3 :unicode_trigger "café"
 		echo "Special pattern triggers configured"
+		halt
+		
+		:empty_trigger
+		echo "Empty pattern triggered"
+		return
+		
+		:special_trigger
+		echo "Special chars triggered"
+		return
+		
+		:unicode_trigger
+		echo "Unicode triggered"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -375,11 +438,21 @@ func TestTriggers_LifecycleManagement_RealIntegration(t *testing.T) {
 	tester := NewIntegrationScriptTester(t)
 
 	script := `
-		setTextTrigger 1 "echo 'Lifecycle trigger fired'" "test"
+		setTextTrigger 1 :test_trigger "test"
 		echo "Trigger 1 set"
 		
-		setTextTrigger 2 "killTrigger 1\necho 'Trigger 1 killed by trigger 2'" "kill"
+		setTextTrigger 2 :kill_trigger "kill"
 		echo "Trigger 2 set to kill trigger 1"
+		halt
+		
+		:test_trigger
+		echo "Lifecycle trigger fired"
+		return
+		
+		:kill_trigger
+		killTrigger 1
+		echo "Trigger 1 killed by trigger 2"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -470,17 +543,58 @@ func TestTriggers_PerformanceWithManyTriggers_RealIntegration(t *testing.T) {
 
 	// Set up multiple triggers
 	script := `
-		setTextTrigger 1 "echo 'T1'" "pattern1"
-		setTextTrigger 2 "echo 'T2'" "pattern2"
-		setTextTrigger 3 "echo 'T3'" "pattern3"
-		setTextTrigger 4 "echo 'T4'" "pattern4"
-		setTextTrigger 5 "echo 'T5'" "pattern5"
-		setTextTrigger 6 "echo 'T6'" "pattern6"
-		setTextTrigger 7 "echo 'T7'" "pattern7"
-		setTextTrigger 8 "echo 'T8'" "pattern8"
-		setTextTrigger 9 "echo 'T9'" "pattern9"
-		setTextTrigger 10 "echo 'T10'" "pattern10"
+		setTextTrigger 1 :t1_handler "pattern1"
+		setTextTrigger 2 :t2_handler "pattern2"
+		setTextTrigger 3 :t3_handler "pattern3"
+		setTextTrigger 4 :t4_handler "pattern4"
+		setTextTrigger 5 :t5_handler "pattern5"
+		setTextTrigger 6 :t6_handler "pattern6"
+		setTextTrigger 7 :t7_handler "pattern7"
+		setTextTrigger 8 :t8_handler "pattern8"
+		setTextTrigger 9 :t9_handler "pattern9"
+		setTextTrigger 10 :t10_handler "pattern10"
 		echo "10 triggers configured"
+		halt
+		
+		:t1_handler
+		echo "T1"
+		return
+		
+		:t2_handler
+		echo "T2"
+		return
+		
+		:t3_handler
+		echo "T3"
+		return
+		
+		:t4_handler
+		echo "T4"
+		return
+		
+		:t5_handler
+		echo "T5"
+		return
+		
+		:t6_handler
+		echo "T6"
+		return
+		
+		:t7_handler
+		echo "T7"
+		return
+		
+		:t8_handler
+		echo "T8"
+		return
+		
+		:t9_handler
+		echo "T9"
+		return
+		
+		:t10_handler
+		echo "T10"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -524,6 +638,15 @@ func TestPhase3_PascalTWXTriggerCompatibility_RealIntegration(t *testing.T) {
 		setTextLineTrigger 1 :getWarp "Sector "
 		setTextTrigger 2 :gotWarps "Command [TL="
 		echo "Phase 3 triggers configured"
+		halt
+		
+		:getWarp
+		echo "Warp data found"
+		return
+		
+		:gotWarps
+		echo "Got warps"
+		return
 	`
 
 	result := tester.ExecuteScript(script)
@@ -699,6 +822,23 @@ func TestPhase3_ComplexTriggerPatterns_RealIntegration(t *testing.T) {
 		setTextLineTrigger 3 :exactLine "Health: 100%"
 		setTextTrigger 4 :contains "gold"
 		echo "Pattern matching triggers configured"
+		halt
+		
+		:lineStart
+		echo "Line start matched"
+		return
+		
+		:anywhere
+		echo "Anywhere matched"
+		return
+		
+		:exactLine
+		echo "Exact line matched"
+		return
+		
+		:contains
+		echo "Contains matched"
+		return
 	`
 
 	result := tester.ExecuteScript(script)

@@ -472,7 +472,7 @@ func (p *TWXParser) ProcessInBound(data string) {
 		if strings.TrimSpace(p.currentLine) != "" {
 			p.UpdateCurrentLine(p.currentLine)
 		}
-		
+
 		p.FireAutoTextEvent(p.currentLine, false)
 
 		// Process partial line for prompts (key TWX feature!)
@@ -490,7 +490,7 @@ func (p *TWXParser) Finalize() {
 
 	// Complete any pending info display
 	if p.infoDisplay.Active {
-		debug.Log("INFO_PARSER: Finalize() completing active info display")
+		debug.Info("INFO_PARSER: Finalize() completing active info display")
 		p.completeInfoDisplay()
 	}
 
@@ -638,7 +638,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 	if p.probeMode || len(p.probeDiscoveredSectors) > 0 {
 		p.probeMode = false
 		p.probeDiscoveredSectors = make(map[int]bool) // Clear all probe-discovered sectors
-		debug.Log("PROBE: Cleared all probe state (command prompt) - back to normal player mode")
+		debug.Info("PROBE: Cleared all probe state (command prompt) - back to normal player mode")
 	}
 
 	// Save current sector if not done already
@@ -677,6 +677,16 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
 					return p.playerStatsTracker.Execute(p.database.GetDB())
 				})
+
+				// Fire OnCurrentSectorChanged event for the player's actual current sector
+				// This ensures the TUI is notified when the player returns to their actual location
+				if p.tuiAPI != nil {
+					freshSectorInfo, err := p.database.GetSectorInfo(sectorNum)
+					if err == nil {
+						debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
+						p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
+					}
+				}
 			}
 		}
 	} else {
@@ -697,6 +707,16 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 					return sectorTracker.Execute(p.database.GetDB())
 				})
 
+				// Fire OnCurrentSectorChanged event for the player's actual current sector
+				// This ensures the TUI is notified when the player returns to their actual location
+				if p.tuiAPI != nil {
+					freshSectorInfo, err := p.database.GetSectorInfo(sectorNum)
+					if err == nil {
+						debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
+						p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
+					}
+				}
+
 				// Update current sector using straight-sql tracker
 				if p.playerStatsTracker == nil {
 					p.playerStatsTracker = NewPlayerStatsTracker()
@@ -713,7 +733,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 }
 
 func (p *TWXParser) handleComputerPrompt(line string) {
-	debug.Log("COMPUTER: handleComputerPrompt called, resetting lastWarp from %d to 0", p.lastWarp)
+	debug.Info("COMPUTER: handleComputerPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayNone
 	p.lastWarp = 0
 
@@ -730,13 +750,13 @@ func (p *TWXParser) handleComputerPrompt(line string) {
 }
 
 func (p *TWXParser) handleProbePrompt(line string) {
-	debug.Log("PROBE: handleProbePrompt called with line: %q", line)
+	debug.Info("PROBE: handleProbePrompt called", "line", line)
 
 	// Check if this is "Probe entering sector :" to extract target sector
 	if strings.Contains(line, "Probe entering sector :") {
 		// Set probe mode to prevent TUI sector change events for probe-discovered sectors
 		p.probeMode = true
-		debug.Log("PROBE: Set probe mode to true")
+		debug.Info("PROBE: Set probe mode to true")
 		// Handle concatenated lines - extract just the probe part
 		probeStart := strings.Index(line, "Probe entering sector :")
 		if probeStart >= 0 {
@@ -744,32 +764,32 @@ func (p *TWXParser) handleProbePrompt(line string) {
 
 			// Extract sector number from "Probe entering sector : 510"
 			parts := strings.Fields(probeLine)
-			debug.Log("PROBE: parts=%v, len=%d", parts, len(parts))
+			debug.Info("PROBE: parsed parts", "parts", parts, "length", len(parts))
 			if len(parts) >= 5 {
 				targetSectorStr := parts[4]
-				debug.Log("PROBE: targetSectorStr=%q", targetSectorStr)
+				debug.Info("PROBE: extracted target sector string", "target_sector_str", targetSectorStr)
 				if targetSector := p.parseIntSafe(targetSectorStr); targetSector > 0 {
-					debug.Log("PROBE: targetSector=%d, lastWarp=%d", targetSector, p.lastWarp)
+					debug.Info("PROBE: parsed target sector", "target_sector", targetSector, "last_warp", p.lastWarp)
 
 					// Mark this sector as discovered by probe to suppress TUI events
 					p.probeDiscoveredSectors[targetSector] = true
-					debug.Log("PROBE: Marked sector %d as probe-discovered", targetSector)
+					debug.Info("PROBE: Marked sector as probe-discovered", "sector", targetSector)
 
 					// If we have a previous sector (lastWarp), create a one-way warp connection
 					if p.lastWarp > 0 && p.lastWarp != targetSector {
-						debug.Log("PROBE: Creating warp from %d to %d", p.lastWarp, targetSector)
+						debug.Info("PROBE: Creating warp", "from_sector", p.lastWarp, "to_sector", targetSector)
 						p.addProbeWarp(p.lastWarp, targetSector)
 					} else {
-						debug.Log("PROBE: Not creating warp - lastWarp=%d, targetSector=%d", p.lastWarp, targetSector)
+						debug.Info("PROBE: Not creating warp", "last_warp", p.lastWarp, "target_sector", targetSector)
 					}
 					// Update lastWarp to current target sector for next probe movement
 					p.lastWarp = targetSector
-					debug.Log("PROBE: Updated lastWarp to %d", p.lastWarp)
+					debug.Info("PROBE: Updated lastWarp", "new_last_warp", p.lastWarp)
 				} else {
-					debug.Log("PROBE: Failed to parse targetSectorStr=%q as int", targetSectorStr)
+					debug.Info("PROBE: Failed to parse targetSectorStr as int", "target_sector_str", targetSectorStr)
 				}
 			} else {
-				debug.Log("PROBE: Not enough parts in probeLine=%q", probeLine)
+				debug.Info("PROBE: Not enough parts in probeLine", "probe_line", probeLine)
 			}
 		}
 	}
@@ -780,7 +800,7 @@ func (p *TWXParser) handleProbePrompt(line string) {
 		p.probeMode = false
 		// Don't clear probeDiscoveredSectors here - we want to continue suppressing TUI events
 		// for those sectors until the player actually visits them
-		debug.Log("PROBE: Set probe mode to false (probe self-destructed)")
+		debug.Info("PROBE: Set probe mode to false (probe self-destructed)")
 	}
 
 	if !p.sectorSaved {
@@ -805,23 +825,23 @@ func (p *TWXParser) handleCIMPrompt(line string) {
 
 	// Pascal: // begin CIM download
 	// Pascal: FCurrentDisplay := dCIM;
-	debug.Log("CIM: handleCIMPrompt called, resetting lastWarp from %d to 0", p.lastWarp)
+	debug.Info("CIM: handleCIMPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayCIM
 	p.lastWarp = 0
 }
 
 func (p *TWXParser) handleSectorStart(line string) {
-	debug.Log("SECTOR: handleSectorStart called with line: %q, lastWarp=%d", line, p.lastWarp)
+	debug.Info("SECTOR: handleSectorStart called", "line", line, "last_warp", p.lastWarp)
 
 	// Extract sector number first to determine if this is a new sector
 	// Format: "Sector  : 1234 in The Sphere"
 	parts := strings.Fields(line)
 	if len(parts) >= 3 {
 		if sectorNum := p.parseIntSafe(parts[2]); sectorNum > 0 {
-			debug.Log("SECTOR: Parsing sector %d, current sector %d, lastWarp=%d", sectorNum, p.currentSectorIndex, p.lastWarp)
+			debug.Info("SECTOR: Parsing sector", "sector", sectorNum, "current_sector", p.currentSectorIndex, "last_warp", p.lastWarp)
 			// Only complete previous sector if this is a different sector
 			if p.currentSectorIndex != sectorNum && !p.sectorSaved {
-				debug.Log("SECTOR: Completing previous sector %d", p.currentSectorIndex)
+				debug.Info("SECTOR: Completing previous sector", "previous_sector", p.currentSectorIndex)
 				p.sectorCompleted()
 			}
 
@@ -829,17 +849,17 @@ func (p *TWXParser) handleSectorStart(line string) {
 			// This ensures that data from previous visits doesn't carry over
 			// (including port data that might persist from previous visits)
 			p.sectorSaved = false // Reset for any sector visit
-			debug.Log("SECTOR: About to reset current sector, lastWarp=%d", p.lastWarp)
+			debug.Info("SECTOR: About to reset current sector", "last_warp", p.lastWarp)
 			p.resetCurrentSector()
-			debug.Log("SECTOR: After reset current sector, lastWarp=%d", p.lastWarp)
+			debug.Info("SECTOR: After reset current sector", "last_warp", p.lastWarp)
 			p.currentSectorIndex = sectorNum
 
 			// Phase 2: Initialize straight-sql trackers for new sector
 			if p.sectorTracker != nil && p.sectorTracker.HasUpdates() {
-				debug.Log("SECTOR: Discarding incomplete sector tracker - new sector detected")
+				debug.Info("SECTOR: Discarding incomplete sector tracker - new sector detected")
 			}
 			if p.sectorCollections != nil && p.sectorCollections.HasData() {
-				debug.Log("SECTOR: Discarding incomplete sector collections - new sector detected")
+				debug.Info("SECTOR: Discarding incomplete sector collections - new sector detected")
 			}
 
 			// Start new discovered field session
@@ -864,7 +884,7 @@ func (p *TWXParser) handlePortDocking(line string) {
 }
 
 func (p *TWXParser) handlePortReport(line string) {
-	debug.Log("PORT: handlePortReport called with line: %s", line)
+	debug.Info("PORT: handlePortReport called", "line", line)
 
 	// Set display mode to Port Commerce Report
 	p.currentDisplay = DisplayPortCR
@@ -873,14 +893,14 @@ func (p *TWXParser) handlePortReport(line string) {
 	// Create or recreate portTracker for this port trading session
 	if p.portTracker == nil {
 		p.portTracker = NewPortTracker(p.currentSectorIndex)
-		debug.Log("PORT: Created new portTracker for port trading session in sector %d", p.currentSectorIndex)
+		debug.Info("PORT: Created new portTracker for port trading session", "sector", p.currentSectorIndex)
 	}
 
 	// Extract port name from "Commerce report for PORT_NAME:"
 	colonPos := strings.Index(line, ":")
 	if colonPos > 20 {
 		portName := strings.TrimSpace(line[20:colonPos])
-		debug.Log("PORT: Extracted port name: %s", portName)
+		debug.Info("PORT: Extracted port name", "port_name", portName)
 
 		// Initialize port data for current sector
 		p.initializePortData(portName)
@@ -913,7 +933,7 @@ func (p *TWXParser) handleDensityStart(line string) {
 }
 
 func (p *TWXParser) handleWarpLaneStart(line string) {
-	debug.Log("WARP: handleWarpLaneStart called, resetting lastWarp from %d to 0", p.lastWarp)
+	debug.Info("WARP: handleWarpLaneStart called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayWarpLane
 	p.lastWarp = 0
 }
@@ -1387,14 +1407,14 @@ func (p *TWXParser) ensureSectorExistsAndSavePort(port database.TPort, sectorNum
 		return fmt.Errorf("database not available")
 	}
 
-	debug.Log("PORT: ensureSectorExistsAndSavePort called for sector %d with port '%s' (Class %d)", sectorNum, port.Name, port.ClassIndex)
+	debug.Info("PORT: ensureSectorExistsAndSavePort called", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
 
 	// Save port data
 	if err := p.database.SavePort(port, sectorNum); err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
 	}
 
-	debug.Log("PORT: Successfully saved port data for sector %d: '%s' (Class %d)", sectorNum, port.Name, port.ClassIndex)
+	debug.Info("PORT: Successfully saved port data", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
 
 	// Fire any necessary events (consistent with other database operations)
 	// This ensures proper notification flow like other database saves
@@ -1651,16 +1671,15 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 		}
 	}
 
-	debug.Log("DENSITY: Parsed density scan for sector %d - density=%s, navhaz=%s, anomaly=%s",
-		sectorNum, densityStr, navhazStr, anomalyParam)
+	debug.Info("DENSITY: Parsed density scan", "sector", sectorNum, "density", densityStr, "navhaz", navhazStr, "anomaly", anomalyParam)
 
 	// Execute density tracker immediately (standalone updates)
 	if densityTracker != nil && densityTracker.HasUpdates() {
 		err := densityTracker.Execute(p.database.GetDB())
 		if err != nil {
-			debug.Log("DENSITY: Failed to update sector fields: %v", err)
+			debug.Info("DENSITY: Failed to update sector fields", "error", err)
 		} else {
-			debug.Log("DENSITY: Successfully updated sector %d with density scan data", sectorNum)
+			debug.Info("DENSITY: Successfully updated sector with density scan data", "sector", sectorNum)
 		}
 	}
 }
@@ -2008,11 +2027,11 @@ func (p *TWXParser) getStardockSector() int {
 // This prevents data overwrites and improves performance with targeted SQL updates.
 func (p *TWXParser) sectorCompleted() {
 	defer p.recoverFromPanic("sectorCompleted")
-	debug.Log("PROBE: sectorCompleted called for sector %d (probeMode=%t, sectorSaved=%t)", p.currentSectorIndex, p.probeMode, p.sectorSaved)
+	debug.Info("PROBE: sectorCompleted called", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "sector_saved", p.sectorSaved)
 
 	// Skip if already completed to avoid duplicate TUI API calls
 	if p.sectorSaved {
-		debug.Log("PROBE: Skipping sectorCompleted for sector %d - already saved", p.currentSectorIndex)
+		debug.Info("PROBE: Skipping sectorCompleted - already saved", "sector", p.currentSectorIndex)
 		return
 	}
 
@@ -2036,16 +2055,16 @@ func (p *TWXParser) sectorCompleted() {
 		// Set exploration status based on context (before executing)
 		if p.probeMode {
 			p.sectorTracker.SetExplored(int(database.EtCalc)) // Mark as probe data
-			debug.Log("SECTOR: Setting exploration to EtCalc (%d) for sector %d", int(database.EtCalc), p.currentSectorIndex)
+			debug.Info("SECTOR: Setting exploration to EtCalc", "exploration_type", int(database.EtCalc), "sector", p.currentSectorIndex)
 		} else {
 			p.sectorTracker.SetExplored(int(database.EtHolo)) // Mark current sector as visited by player
-			debug.Log("SECTOR: Setting exploration to EtHolo (%d) for sector %d", int(database.EtHolo), p.currentSectorIndex)
+			debug.Info("SECTOR: Setting exploration to EtHolo", "exploration_type", int(database.EtHolo), "sector", p.currentSectorIndex)
 		}
 
 		if p.sectorTracker.HasUpdates() {
 			err := p.sectorTracker.Execute(p.database.GetDB())
 			if err != nil {
-				debug.Log("SECTOR_PARSER: Failed to update sector fields: %v", err)
+				debug.Info("SECTOR_PARSER: Failed to update sector fields", "error", err)
 			}
 		}
 	}
@@ -2053,7 +2072,7 @@ func (p *TWXParser) sectorCompleted() {
 	if p.sectorCollections != nil && p.sectorCollections.HasData() {
 		err := p.sectorCollections.Execute(p.database.GetDB())
 		if err != nil {
-			debug.Log("SECTOR_PARSER: Failed to update sector collections: %v", err)
+			debug.Info("SECTOR_PARSER: Failed to update sector collections", "error", err)
 		}
 	}
 
@@ -2061,16 +2080,16 @@ func (p *TWXParser) sectorCompleted() {
 	if p.portTracker != nil && p.portTracker.HasUpdates() {
 		err := p.portTracker.Execute(p.database.GetDB())
 		if err != nil {
-			debug.Log("PORT_PARSER: Failed to update port fields: %v", err)
+			debug.Info("PORT_PARSER: Failed to update port fields", "error", err)
 		} else {
 			// Phase 3: Fire OnPortUpdated API event with fresh database read
 			if p.tuiAPI != nil {
 				portInfo, err := p.database.GetPortInfo(p.currentSectorIndex)
 				if err == nil && portInfo != nil {
-					debug.Log("PORT_PARSER: Firing OnPortUpdated for sector %d: %s (Class %d)", p.currentSectorIndex, portInfo.Name, portInfo.Class)
+					debug.Info("PORT_PARSER: Firing OnPortUpdated", "sector", p.currentSectorIndex, "port_name", portInfo.Name, "class", portInfo.Class)
 					p.tuiAPI.OnPortUpdated(*portInfo)
 				} else {
-					debug.Log("PORT_PARSER: Failed to read fresh port info for API event: %v", err)
+					debug.Info("PORT_PARSER: Failed to read fresh port info for API event", "error", err)
 				}
 			}
 		}
@@ -2090,13 +2109,13 @@ func (p *TWXParser) sectorCompleted() {
 		// Phase 2: Use fresh database read for basic API event
 		freshSectorInfo, err := p.database.GetSectorInfo(p.currentSectorIndex)
 		if err == nil {
-			debug.Log("TWX_PARSER: Firing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", freshSectorInfo.Number, p.probeMode, isProbeDiscovered)
+			debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", freshSectorInfo.Number, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
 			p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
 		} else {
-			debug.Log("TWX_PARSER: Failed to read fresh sector info for API event: %v", err)
+			debug.Info("TWX_PARSER: Failed to read fresh sector info for API event", "error", err)
 		}
 	} else if p.tuiAPI != nil {
-		debug.Log("TWX_PARSER: Suppressing OnCurrentSectorChanged for sector %d (probeMode=%t, probe-discovered=%t) [SOURCE: sectorCompleted]", p.currentSectorIndex, p.probeMode, isProbeDiscovered)
+		debug.Info("TWX_PARSER: Suppressing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
 	}
 
 	// Phase 4.5: Fire sector events to event bus with fresh data from database
@@ -2109,7 +2128,7 @@ func (p *TWXParser) sectorCompleted() {
 			Source: "TWXParser",
 		}
 		p.eventBus.Fire(event)
-		debug.Log("TWX_PARSER: Fired EventSectorComplete to event bus for sector %d", p.currentSectorIndex)
+		debug.Info("TWX_PARSER: Fired EventSectorComplete to event bus", "sector", p.currentSectorIndex)
 	}
 
 	// Phase 4.5: Fire sector events to observers
@@ -2122,7 +2141,7 @@ func (p *TWXParser) sectorCompleted() {
 			Source: "TWXParser",
 		}
 		p.Notify(event)
-		debug.Log("TWX_PARSER: Fired EventSectorComplete to observers for sector %d", p.currentSectorIndex)
+		debug.Info("TWX_PARSER: Fired EventSectorComplete to observers", "sector", p.currentSectorIndex)
 	}
 
 	// Phase 2: Reset trackers for next parsing session
@@ -2137,7 +2156,7 @@ func (p *TWXParser) sectorCompleted() {
 
 // Reset resets the parser state
 func (p *TWXParser) Reset() {
-	debug.Log("RESET: Full parser reset called, lastWarp was %d", p.lastWarp)
+	debug.Info("RESET: Full parser reset called", "previous_lastWarp", p.lastWarp)
 	p.currentLine = ""
 	p.currentANSILine = ""
 	p.rawANSILine = ""
@@ -2152,7 +2171,7 @@ func (p *TWXParser) Reset() {
 	p.position = 0
 	p.lastChar = 0
 	p.currentTrader = TraderInfo{} // Reset current trader
-	debug.Log("RESET: Full parser reset completed, lastWarp now %d", p.lastWarp)
+	debug.Info("RESET: Full parser reset completed", "current_lastWarp", p.lastWarp)
 }
 
 // GetCurrentSector returns the current sector index
@@ -2359,7 +2378,7 @@ func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
 
 // addProbeWarp adds a one-way warp connection discovered by probe movement
 func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
-	debug.Log("PROBE WARP: addProbeWarp called from %d to %d", fromSector, toSector)
+	debug.Info("PROBE WARP: addProbeWarp called", "from_sector", fromSector, "to_sector", toSector)
 
 	// Phase 4.5: Probe warps saved via sector tracker
 	// Create a sector tracker for the fromSector and add the warp
@@ -2377,7 +2396,7 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 				break
 			} else if existingWarps[i] == toSector {
 				// Warp already exists, no need to add it again
-				debug.Log("PROBE WARP: Warp %d -> %d already exists", fromSector, toSector)
+				debug.Info("PROBE WARP: Warp already exists", "from_sector", fromSector, "to_sector", toSector)
 				return
 			}
 		}
@@ -2392,10 +2411,10 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 	// Execute the tracker to save the warp
 	err := fromTracker.Execute(p.database.GetDB())
 	if err != nil {
-		debug.Log("PROBE WARP: Failed to save probe warp %d -> %d: %v", fromSector, toSector, err)
+		debug.Info("PROBE WARP: Failed to save probe warp", "from_sector", fromSector, "to_sector", toSector, "error", err)
 		return
 	}
-	debug.Log("PROBE WARP: Successfully saved probe warp %d -> %d", fromSector, toSector)
+	debug.Info("PROBE WARP: Successfully saved probe warp", "from_sector", fromSector, "to_sector", toSector)
 }
 
 // addReverseWarp adds a reverse warp connection (mirrors Pascal AddWarp method)
@@ -2591,6 +2610,7 @@ func (p *TWXParser) Notify(event Event) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
+					debug.Error("PANIC recovered in observer update", "function", "notifyObservers", "error", r)
 				}
 			}()
 			observer.Update(p, event)

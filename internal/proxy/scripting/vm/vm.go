@@ -45,9 +45,9 @@ type VirtualMachine struct {
 	pendingInputPrompt string
 	pendingInputResult string
 	justResumed        bool
-	
+
 	// Trigger processing state (for TWX compatibility)
-	processingTrigger  bool
+	processingTrigger bool
 }
 
 // NewVirtualMachine creates a new virtual machine
@@ -108,35 +108,36 @@ func (vm *VirtualMachine) Execute() error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Log("VM.Execute [%s]: starting execution loop", scriptName)
+	debug.Info("VM.Execute: starting execution loop", "script", scriptName)
 
 	for vm.state.IsRunning() && !vm.state.IsWaiting() {
-		debug.Log("VM.Execute [%s]: executing step at position %d", scriptName, vm.state.Position)
+		debug.Info("VM.Execute: executing step", "script", scriptName, "position", vm.state.Position)
 
 		if err := vm.execution.ExecuteStep(); err != nil {
-			debug.Log("VM.Execute [%s]: ExecuteStep returned error: %v", scriptName, err)
+			debug.Info("VM.Execute: ExecuteStep returned error", "script", scriptName, "error", err)
 			vm.lastError = err
 			return err
 		}
 
 		// Handle pause state
 		if vm.state.IsPaused() {
-			debug.Log("VM.Execute [%s]: detected PAUSED state, waitingForInput=%v", scriptName, vm.waitingForInput)
+			debug.Info("VM.Execute: detected PAUSED state", "script", scriptName, "waitingForInput", vm.waitingForInput)
 			// If paused waiting for input, return control to caller
 			// The script manager will handle input collection and resume
 			if vm.waitingForInput {
-				debug.Log("VM.Execute [%s]: RETURNING from Execute() - waiting for input", scriptName)
+				debug.Info("VM.Execute: RETURNING from Execute() - waiting for input", "script", scriptName)
 				return nil
 			}
 
-			debug.Log("VM.Execute [%s]: continuing execution after pause (not waiting for input)", scriptName)
+			debug.Info("VM.Execute: continuing execution after pause (not waiting for input)", "script", scriptName)
 			// For other pause types (like regular pause command), continue automatically
 			// This maintains backwards compatibility with existing test behavior
 			vm.state.SetRunning()
+			vm.state.Position++ // Advance past the pause command
 		}
 
 	}
-	debug.Log("VM.Execute [%s]: execution loop finished", scriptName)
+	debug.Info("VM.Execute: execution loop finished", "script", scriptName)
 	return nil
 }
 
@@ -217,23 +218,23 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Log("VM.GotoAndExecuteSync [%s]: STARTING synchronous execution of trigger handler '%s'", scriptName, label)
-	
+	debug.Info("VM.GotoAndExecuteSync: STARTING synchronous execution of trigger handler", "script", scriptName, "label", label)
+
 	// Save current execution state
 	savedPosition := vm.state.Position
 	savedRunning := vm.state.IsRunning()
-	
+
 	// Jump to the label immediately (no delayed jump)
 	newPos := vm.execution.FindLabel(label)
 	if newPos == -1 {
 		return fmt.Errorf("label not found: %s", label)
 	}
 	vm.state.Position = newPos
-	
+
 	// Execute until we hit a pause, halt, or return
 	for vm.state.IsRunning() && !vm.state.IsWaiting() && !vm.state.IsPaused() {
 		if err := vm.execution.ExecuteStep(); err != nil {
-			debug.Log("VM.GotoAndExecuteSync [%s]: ExecuteStep returned error: %v", scriptName, err)
+			debug.Info("VM.GotoAndExecuteSync: ExecuteStep returned error", "script", scriptName, "error", err)
 			// Restore state on error
 			vm.state.Position = savedPosition
 			if savedRunning {
@@ -241,25 +242,25 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 			}
 			return err
 		}
-		
+
 		// If we hit a pause or getinput, break and let the caller handle it
 		if vm.state.IsPaused() || vm.waitingForInput {
-			debug.Log("VM.GotoAndExecuteSync [%s]: trigger handler paused or waiting for input", scriptName)
+			debug.Info("VM.GotoAndExecuteSync: trigger handler paused or waiting for input", "script", scriptName)
 			break
 		}
 	}
-	
+
 	// If the handler didn't end naturally, restore execution state
 	// (In TWX, trigger handlers typically end with a return or implicit return)
 	if vm.state.IsRunning() && !vm.state.IsPaused() && !vm.waitingForInput {
-		debug.Log("VM.GotoAndExecuteSync [%s]: restoring execution position to %d", scriptName, savedPosition)
+		debug.Info("VM.GotoAndExecuteSync: restoring execution position", "script", scriptName, "position", savedPosition)
 		vm.state.Position = savedPosition
 		if savedRunning {
 			vm.state.SetRunning()
 		}
 	}
-	
-	debug.Log("VM.GotoAndExecuteSync [%s]: COMPLETED synchronous execution of trigger handler '%s'", scriptName, label)
+
+	debug.Info("VM.GotoAndExecuteSync: COMPLETED synchronous execution of trigger handler", "script", scriptName, "label", label)
 	return nil
 }
 
@@ -271,7 +272,7 @@ func (vm *VirtualMachine) Halt() error {
 
 func (vm *VirtualMachine) Pause() error {
 	vm.state.SetPaused()
-	return nil
+	return types.ErrScriptPaused
 }
 
 // Communication
@@ -290,7 +291,6 @@ func (vm *VirtualMachine) ClientMessage(message string) error {
 }
 
 func (vm *VirtualMachine) Send(data string) error {
-	debug.Log("VM.Send: sending data %q", data)
 	if vm.sendHandler != nil {
 		return vm.sendHandler(data)
 	} else {
@@ -303,7 +303,7 @@ func (vm *VirtualMachine) WaitFor(text string) error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Log("VM.WaitFor [%s]: waiting for trigger %q", scriptName, text)
+	debug.Info("VM.WaitFor: waiting for trigger", "script", scriptName, "trigger", text)
 	vm.state.SetWaiting(text)
 	return nil
 }
@@ -314,7 +314,7 @@ func (vm *VirtualMachine) GetInput(prompt string) (string, error) {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Log("VM.GetInput [%s]: initiating input for prompt %q", scriptName, prompt)
+	debug.Info("VM.GetInput: initiating input", "script", scriptName, "prompt", prompt)
 
 	// Display the prompt (matching TWX behavior - prompt on its own line, cursor stays at end)
 	if err := vm.Echo("\r\n" + prompt + " "); err != nil {
@@ -326,13 +326,13 @@ func (vm *VirtualMachine) GetInput(prompt string) (string, error) {
 	vm.pendingInputResult = ""
 	vm.waitingForInput = true
 
-	debug.Log("VM.GetInput [%s]: set waitingForInput=true, pendingInputPrompt=%q", scriptName, prompt)
+	debug.Info("VM.GetInput: set waitingForInput=true", "script", scriptName, "pendingInputPrompt", prompt)
 
 	// Pause script execution - this will cause the Run loop to exit
 	// and return control to the caller (matching TWX caPause behavior)
 	vm.state.SetPaused()
 
-	debug.Log("VM.GetInput [%s]: set state to PAUSED", scriptName)
+	debug.Info("VM.GetInput: set state to PAUSED", "script", scriptName)
 
 	// The script manager should detect this paused state and initiate
 	// input collection via the menu system's InputCollector
@@ -371,11 +371,11 @@ func (vm *VirtualMachine) ResumeWithInput(input string) error {
 	}
 
 	if !vm.waitingForInput {
-		debug.Log("VM.ResumeWithInput [%s]: ERROR - not waiting for input!", scriptName)
+		debug.Info("VM.ResumeWithInput: ERROR - not waiting for input!", "script", scriptName)
 		return fmt.Errorf("VM is not waiting for input")
 	}
 
-	debug.Log("VM.ResumeWithInput [%s]: resuming with input %q", scriptName, input)
+	debug.Info("VM.ResumeWithInput: resuming with input", "script", scriptName, "input", input)
 
 	vm.pendingInputResult = input
 	vm.waitingForInput = false
@@ -385,7 +385,7 @@ func (vm *VirtualMachine) ResumeWithInput(input string) error {
 	// Resume script execution
 	vm.state.SetRunning()
 
-	debug.Log("VM.ResumeWithInput [%s]: set state to RUNNING", scriptName)
+	debug.Info("VM.ResumeWithInput: set state to RUNNING", "script", scriptName)
 
 	return nil
 }
@@ -506,15 +506,15 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 		if vm.script != nil {
 			scriptName = vm.script.GetName()
 		}
-		debug.Log("VM.ProcessIncomingText [%s]: checking if text %q contains waitfor trigger %q", scriptName, text, vm.state.WaitText)
+		debug.Info("VM.ProcessIncomingText: checking if text contains waitfor trigger", "script", scriptName, "text", text, "waitforTrigger", vm.state.WaitText)
 		// Use substring matching like TWX does with Pos(FWaitText, Text) > 0
 		if strings.Contains(text, vm.state.WaitText) {
-			debug.Log("VM.ProcessIncomingText [%s]: TRIGGER MATCHED! Continuing script execution", scriptName)
+			debug.Info("VM.ProcessIncomingText: TRIGGER MATCHED! Continuing script execution", "script", scriptName)
 			vm.state.ClearWait()
 			// Resume execution - the position was already advanced by ExecuteStep
 			return vm.Execute()
 		} else {
-			debug.Log("VM.ProcessIncomingText [%s]: trigger not found, still waiting", scriptName)
+			debug.Info("VM.ProcessIncomingText: trigger not found, still waiting", "script", scriptName)
 		}
 	}
 

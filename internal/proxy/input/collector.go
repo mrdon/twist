@@ -13,16 +13,16 @@ func debugSendOutput(output string, sendFunc func(string)) {
 	pc := make([]uintptr, 10)
 	n := runtime.Callers(2, pc) // Skip runtime.Callers and this function
 	frames := runtime.CallersFrames(pc[:n])
-	
-	debug.Log("INPUT_COLLECTOR sendOutput: %q", output)
+
+	debug.Info("INPUT_COLLECTOR sendOutput", "output", output)
 	for {
 		frame, more := frames.Next()
-		debug.Log("  at %s:%d in %s", frame.File, frame.Line, frame.Function)
+		debug.Info("  at", "file", frame.File, "line", frame.Line, "function", frame.Function)
 		if !more {
 			break
 		}
 	}
-	
+
 	sendFunc(output)
 }
 
@@ -48,7 +48,7 @@ type CompletionHandler func(menuName, value string) error
 func NewInputCollector(sendOutput func(string)) *InputCollector {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in NewInputCollector: %v", r)
+			debug.Error("PANIC in NewInputCollector", "error", r)
 		}
 	}()
 
@@ -71,7 +71,7 @@ func (ic *InputCollector) RegisterCompletionHandler(menuName string, handler Com
 func (ic *InputCollector) StartCollection(menuName, prompt string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in StartCollection: %v", r)
+			debug.Error("PANIC in StartCollection", "error", r)
 		}
 	}()
 
@@ -82,7 +82,7 @@ func (ic *InputCollector) StartCollection(menuName, prompt string) {
 
 	// Display the input prompt (scripts handle their own prompting)
 	if prompt != "" && !strings.HasPrefix(menuName, "SCRIPT_INPUT_") {
-		debugSendOutput("\r\n" + prompt + "\r\n", ic.sendOutput)
+		debugSendOutput("\r\n"+prompt+"\r\n", ic.sendOutput)
 	}
 
 	// Show help for input collection (but not for script inputs - TWX doesn't show this)
@@ -105,7 +105,7 @@ func (ic *InputCollector) GetCurrentMenu() string {
 func (ic *InputCollector) HandleInput(input string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in HandleInput: %v", r)
+			debug.Error("PANIC in HandleInput", "error", r)
 		}
 	}()
 
@@ -183,14 +183,14 @@ func (ic *InputCollector) showCollectionHelp() {
 	debugSendOutput("- Type your value and press Enter to submit\r\n", ic.sendOutput)
 	debugSendOutput("- Press Enter alone to submit empty value\r\n", ic.sendOutput)
 	debugSendOutput("- Press '\\' to cancel input collection\r\n", ic.sendOutput)
-	debugSendOutput("Current input: " + ic.buffer + "\r\n", ic.sendOutput)
+	debugSendOutput("Current input: "+ic.buffer+"\r\n", ic.sendOutput)
 }
 
 // completeCollection completes the input collection and calls the appropriate handler
 func (ic *InputCollector) completeCollection(value string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in completeCollection: %v", r)
+			debug.Error("PANIC in completeCollection", "error", r)
 		}
 	}()
 
@@ -203,7 +203,7 @@ func (ic *InputCollector) completeCollection(value string) error {
 	// Default behavior - show success message (but not for script inputs - TWX doesn't show this)
 	if !strings.HasPrefix(menuName, "SCRIPT_INPUT") {
 		if value != "" {
-			debugSendOutput("Value set: " + value + "\r\n", ic.sendOutput)
+			debugSendOutput("Value set: "+value+"\r\n", ic.sendOutput)
 		} else {
 			debugSendOutput("Value cleared\r\n", ic.sendOutput)
 		}
@@ -221,7 +221,7 @@ func (ic *InputCollector) cancelCollection() {
 func (ic *InputCollector) exitCollection() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in exitCollection: %v", r)
+			debug.Error("PANIC in exitCollection", "error", r)
 		}
 	}()
 

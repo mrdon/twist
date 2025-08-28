@@ -23,7 +23,7 @@ type HelpSystem struct {
 func NewHelpSystem(sendOutput func(string)) *HelpSystem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in NewHelpSystem: %v", r)
+			debug.Error("PANIC in NewHelpSystem", "error", r)
 		}
 	}()
 
@@ -93,7 +93,7 @@ func (hs *HelpSystem) initializeDefaultHelp() {
 func (hs *HelpSystem) ShowGeneralHelp() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowGeneralHelp: %v", r)
+			debug.Error("PANIC in ShowGeneralHelp", "error", r)
 		}
 	}()
 
@@ -105,7 +105,7 @@ func (hs *HelpSystem) ShowGeneralHelp() {
 func (hs *HelpSystem) ShowInputHelp() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowInputHelp: %v", r)
+			debug.Error("PANIC in ShowInputHelp", "error", r)
 		}
 	}()
 
@@ -117,7 +117,7 @@ func (hs *HelpSystem) ShowInputHelp() {
 func (hs *HelpSystem) ShowNavigationHelp() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowNavigationHelp: %v", r)
+			debug.Error("PANIC in ShowNavigationHelp", "error", r)
 		}
 	}()
 
@@ -129,7 +129,7 @@ func (hs *HelpSystem) ShowNavigationHelp() {
 func (hs *HelpSystem) ShowContextualHelp(currentMenu *TerminalMenuItem) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowContextualHelp: %v", r)
+			debug.Error("PANIC in ShowContextualHelp", "error", r)
 		}
 	}()
 
@@ -191,7 +191,7 @@ func (hs *HelpSystem) GetMenuHelp(menuName string) string {
 func (hs *HelpSystem) ShowScriptMenuHelp(menuName, customHelp string, options string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowScriptMenuHelp: %v", r)
+			debug.Error("PANIC in ShowScriptMenuHelp", "error", r)
 		}
 	}()
 
@@ -220,7 +220,7 @@ func (hs *HelpSystem) ShowScriptMenuHelp(menuName, customHelp string, options st
 func (hs *HelpSystem) ShowBreadcrumbs(currentMenu *TerminalMenuItem) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowBreadcrumbs: %v", r)
+			debug.Error("PANIC in ShowBreadcrumbs", "error", r)
 		}
 	}()
 
@@ -246,7 +246,7 @@ func (hs *HelpSystem) ShowBreadcrumbs(currentMenu *TerminalMenuItem) {
 func (hs *HelpSystem) ShowAllMenus(rootMenu *TerminalMenuItem, activeMenus map[string]*TerminalMenuItem) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ShowAllMenus: %v", r)
+			debug.Error("PANIC in ShowAllMenus", "error", r)
 		}
 	}()
 

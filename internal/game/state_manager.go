@@ -71,7 +71,7 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 			sectorInfo = api.SectorInfo{Number: sectorNum}
 		}
 
-		debug.Log("STATE_MANAGER: Firing OnCurrentSectorChanged for sector %d (oldSector=%d) [SOURCE: SetCurrentSector]", sectorNum, oldSector)
+		debug.Info("STATE_MANAGER: Firing OnCurrentSectorChanged [SOURCE: SetCurrentSector]", "sector", sectorNum, "old_sector", oldSector)
 		sm.tuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}
 }

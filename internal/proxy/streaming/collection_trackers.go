@@ -138,7 +138,7 @@ func (s *ShipsCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Log("COLLECTIONS: Updated %d ships for sector %d", len(s.ships), s.sectorIndex)
+	debug.Info("COLLECTIONS: Updated ships for sector", "count", len(s.ships), "sector", s.sectorIndex)
 	return nil
 }
 
@@ -210,7 +210,7 @@ func (t *TradersCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Log("COLLECTIONS: Updated %d traders for sector %d", len(t.traders), t.sectorIndex)
+	debug.Info("COLLECTIONS: Updated traders for sector", "count", len(t.traders), "sector", t.sectorIndex)
 	return nil
 }
 
@@ -284,6 +284,6 @@ func (p *PlanetsCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Log("COLLECTIONS: Updated %d planets for sector %d", len(p.planets), p.sectorIndex)
+	debug.Info("COLLECTIONS: Updated planets for sector", "count", len(p.planets), "sector", p.sectorIndex)
 	return nil
 }

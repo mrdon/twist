@@ -1,6 +1,7 @@
 package components
 
 import (
+	"twist/internal/debug"
 	"twist/internal/theme"
 
 	"github.com/gdamore/tcell/v2"
@@ -59,17 +60,31 @@ func (cd *ConnectionDialog) setupComponents() {
 	// Set focus to the input field
 	cd.form.SetFocus(0)
 
-	// Set up input capture to handle Enter key
-	cd.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
-		if event.Key() == tcell.KeyEnter {
-			// Activate the Connect button (first button, index 0)
-			serverAddress := cd.form.GetFormItem(0).(*tview.InputField).GetText()
+	// Set up input capture to handle Enter key from input field
+	inputField := cd.form.GetFormItem(0).(*tview.InputField)
+	inputField.SetDoneFunc(func(key tcell.Key) {
+		debug.Info("ConnectionDialog inputField.SetDoneFunc", "key", key)
+		if key == tcell.KeyEnter {
+			debug.Info("ConnectionDialog: ENTER detected, calling callback with address")
+			serverAddress := inputField.GetText()
 			if cd.callback != nil {
 				cd.callback(serverAddress)
 			}
-			return nil // Consume the event
 		}
-		return event // Allow other keys to be processed normally
+	})
+
+	// Also try setting input capture on the form itself as backup
+	cd.form.SetInputCapture(func(event *tcell.EventKey) *tcell.EventKey {
+		debug.Info("ConnectionDialog form.SetInputCapture", "key", event.Key(), "rune", event.Rune())
+		if event.Key() == tcell.KeyEnter {
+			debug.Info("ConnectionDialog form: ENTER detected, calling callback")
+			serverAddress := inputField.GetText()
+			if cd.callback != nil {
+				cd.callback(serverAddress)
+			}
+			return nil
+		}
+		return event
 	})
 }
 

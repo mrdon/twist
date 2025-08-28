@@ -33,11 +33,11 @@ type GameAdapter struct {
 
 // NewGameAdapter creates a new game adapter
 func NewGameAdapter(db database.Database) *GameAdapter {
-	debug.Log("NewGameAdapter: creating adapter with db=%v", db)
+	debug.Info("NewGameAdapter: creating adapter", "db", db)
 	adapter := &GameAdapter{db: db}
 	// Initialize system constants with self-reference for game interface
 	adapter.systemConstants = constants.NewSystemConstants(adapter)
-	debug.Log("NewGameAdapter: created adapter with db=%v", adapter.db)
+	debug.Info("NewGameAdapter: created adapter", "db", adapter.db)
 	return adapter
 }
 
@@ -63,7 +63,7 @@ func (g *GameAdapter) GetMenuManager() interface{} {
 
 // SetDatabase updates the database reference
 func (g *GameAdapter) SetDatabase(db database.Database) {
-	debug.Log("GameAdapter.SetDatabase: changing from %v to %v", g.db, db)
+	debug.Info("GameAdapter.SetDatabase: changing database", "from", g.db, "to", db)
 	g.db = db
 }
 
@@ -312,7 +312,7 @@ type ScriptManager struct {
 
 // NewScriptManager creates a new script manager
 func NewScriptManager(db database.Database) *ScriptManager {
-	debug.Log("NewScriptManager: creating with db=%v", db)
+	debug.Info("NewScriptManager: creating", "db", db)
 	gameAdapter := NewGameAdapter(db)
 	engine := NewEngine(gameAdapter)
 
@@ -321,7 +321,7 @@ func NewScriptManager(db database.Database) *ScriptManager {
 		db:          db,
 		gameAdapter: gameAdapter,
 	}
-	debug.Log("NewScriptManager: created with sm.db=%v, gameAdapter.db=%v", sm.db, gameAdapter.db)
+	debug.Info("NewScriptManager: created", "sm.db", sm.db, "gameAdapter.db", gameAdapter.db)
 	return sm
 }
 
@@ -342,17 +342,17 @@ func NewScriptManagerWithProvider(dbProvider DatabaseProvider) *ScriptManager {
 
 // getCurrentDatabase returns the current database, either from direct reference or provider
 func (sm *ScriptManager) getCurrentDatabase() database.Database {
-	debug.Log("getCurrentDatabase: sm.db=%v, sm.dbProvider=%v", sm.db, sm.dbProvider)
+	debug.Info("getCurrentDatabase", "sm.db", sm.db, "sm.dbProvider", sm.dbProvider)
 	if sm.db != nil {
-		debug.Log("getCurrentDatabase: returning sm.db=%v", sm.db)
+		debug.Info("getCurrentDatabase: returning sm.db", "db", sm.db)
 		return sm.db
 	}
 	if sm.dbProvider != nil {
 		providerDB := sm.dbProvider.GetDatabase()
-		debug.Log("getCurrentDatabase: provider returned db=%v", providerDB)
+		debug.Info("getCurrentDatabase: provider returned db", "db", providerDB)
 		return providerDB
 	}
-	debug.Log("getCurrentDatabase: returning nil")
+	debug.Info("getCurrentDatabase: returning nil")
 	return nil
 }
 
@@ -365,7 +365,7 @@ func (sm *ScriptManager) UpdateDatabase() {
 
 // SetDatabase updates the script manager's database reference directly
 func (sm *ScriptManager) SetDatabase(db database.Database) {
-	debug.Log("ScriptManager.SetDatabase: updating from %v to %v", sm.db, db)
+	debug.Info("ScriptManager.SetDatabase: updating database", "from", sm.db, "to", db)
 	sm.db = db
 	// Also update the game adapter immediately
 	sm.gameAdapter.SetDatabase(db)

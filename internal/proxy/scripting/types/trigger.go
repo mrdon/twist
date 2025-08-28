@@ -108,12 +108,12 @@ func (t *TextTrigger) Matches(input string) bool {
 		(input == t.Value || strings.Contains(input, t.Value))
 }
 
-// Execute executes the trigger action  
+// Execute executes the trigger action
 func (t *TextTrigger) Execute(vm VMInterface) error {
 	// DEBUG: Log the CURRENTLINE at the exact moment the trigger fires
 	currentLine := vm.GetVariable("CURRENTLINE")
 	if currentLine != nil {
-		debug.Log("TRIGGER FIRED: pattern=%q, CURRENTLINE=%q", t.Value, currentLine.String)
+		debug.Info("TRIGGER FIRED", "pattern", t.Value, "CURRENTLINE", currentLine.String)
 	}
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
@@ -122,25 +122,8 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 	}
 
 	if t.Label != "" {
-		// In TWX, the "label" can be either a label to jump to OR a command to execute
-		// If it starts with a command (like "echo"), execute it as a command
-		// Otherwise, treat it as a label to jump to
-		if strings.HasPrefix(t.Label, "echo ") ||
-			strings.HasPrefix(t.Label, "send ") ||
-			strings.HasPrefix(t.Label, "setvar ") ||
-			strings.Contains(t.Label, " ") { // If it contains spaces, likely a command
-			// Execute as a command by parsing and running it
-			// For now, handle common cases
-			if strings.HasPrefix(t.Label, "echo ") {
-				message := strings.TrimPrefix(t.Label, "echo ")
-				message = strings.Trim(message, "'\"") // Remove quotes
-				return vm.Echo(message)
-			}
-			// For other commands, we'd need to parse and execute them
-			// For now, fall back to goto behavior
-		}
-		// Execute trigger handlers synchronously like TWX does
-		// TWX creates nested execution context for triggers
+		// In TWX, setTextTrigger ALWAYS jumps to labels, never executes inline code
+		// This is TWX-compatible behavior - label parameter is always a label name
 		return vm.GotoAndExecuteSync(t.Label)
 	}
 

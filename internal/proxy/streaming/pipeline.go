@@ -173,19 +173,18 @@ func (p *Pipeline) processDataSync(rawData []byte) {
 
 		// Process through game detector FIRST with full decoded data (like original async pipeline)
 		if p.gameDetector != nil {
-			debug.Log("Pipeline: sending full chunk to gameDetector: %q", string(decoded))
 			p.gameDetector.ProcessLine(string(decoded))
 		}
 
 		// Split into lines to process synchronously like TWX for scripts and parsing
 		lines := strings.Split(string(decoded), "\n")
-		
+
 		for i, line := range lines {
 			// Skip empty lines except the last one (which might be a partial line)
 			if line == "" && i < len(lines)-1 {
 				continue
 			}
-			
+
 			// SINGLE PROCESSING PATH like TWX Pascal: let TWX parser handle everything
 			// This will update CURRENTLINE AND fire script triggers in correct sequence
 			if p.twxParser != nil {
@@ -206,7 +205,6 @@ func (p *Pipeline) processDataSync(rawData []byte) {
 func (p *Pipeline) SendTelnetNegotiation() error {
 	return p.telnetHandler.SendInitialNegotiation()
 }
-
 
 // GetMetrics returns pipeline performance metrics
 func (p *Pipeline) GetMetrics() (bytesProcessed, batchesProcessed uint64) {

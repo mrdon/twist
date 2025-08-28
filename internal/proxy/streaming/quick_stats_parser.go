@@ -35,12 +35,11 @@ func (p *TWXParser) startQuickStatsSession() {
 
 	// Reset incomplete tracker from previous session
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		debug.Log("QUICK_STATS: Discarding incomplete player stats tracker - new quick stats detected")
+		debug.Info("QUICK_STATS: Discarding incomplete player stats tracker - new quick stats detected")
 	}
 
 	// Start new discovered field session
 	p.playerStatsTracker = NewPlayerStatsTracker()
-	debug.Log("QUICK_STATS: Started new quick stats parsing session")
 }
 
 // completeQuickStatsSession finalizes quick stats parsing
@@ -58,7 +57,7 @@ func (p *TWXParser) completeQuickStatsSession() {
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
 		err := p.playerStatsTracker.Execute(p.database.GetDB())
 		if err != nil {
-			debug.Log("QUICK_STATS: Failed to update player stats: %v", err)
+			debug.Info("QUICK_STATS: Failed to update player stats", "error", err)
 			return
 		}
 
@@ -67,17 +66,14 @@ func (p *TWXParser) completeQuickStatsSession() {
 			fullPlayerStats, err := p.database.GetPlayerStatsInfo()
 			if err == nil {
 				p.firePlayerStatsEventDirect(fullPlayerStats)
-				debug.Log("QUICK_STATS: Fired player stats event with fresh data")
 			} else {
-				debug.Log("QUICK_STATS: Failed to read player stats info for API event: %v", err)
+				debug.Info("QUICK_STATS: Failed to read player stats info for API event", "error", err)
 			}
 		}
 
 		// Reset tracker for next parsing session
 		p.playerStatsTracker = nil
 	}
-
-	debug.Log("QUICK_STATS: Completed quick stats parsing session")
 }
 
 // checkQuickStatsEnd checks if we should end the quick stats session
@@ -117,7 +113,6 @@ func (p *TWXParser) handleQuickStatsLine(line string) {
 		values = strings.Split(content, "│")
 	} else {
 		// No recognized separator found - might be ship line or other format
-		debug.Log("QUICK_STATS: Line has no separator, skipping: %q", line)
 		return
 	}
 
@@ -141,7 +136,6 @@ func (p *TWXParser) handleQuickStatsLine(line string) {
 		p.processQuickStatField(key, val, parts)
 	}
 
-	debug.Log("QUICK_STATS: Processed quick stats line with %d fields", len(values))
 }
 
 // processQuickStatField processes a single key-value pair from quick stats

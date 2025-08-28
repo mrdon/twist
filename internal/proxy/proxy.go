@@ -416,9 +416,9 @@ func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
 	p.gameDetector = NewGameDetector(connInfo)
 
 	// If database path is provided, force load that database instead of auto-detection
-	debug.Log("Initializing database: DatabasePath=%q", opts.DatabasePath)
+	debug.Info("Initializing database", "database_path", opts.DatabasePath)
 	if opts.DatabasePath != "" {
-		debug.Log("Using forced database path: %s", opts.DatabasePath)
+		debug.Info("Using forced database path", "path", opts.DatabasePath)
 		db := database.NewDatabase()
 		if err := db.CreateDatabase(opts.DatabasePath); err != nil {
 			if err := db.OpenDatabase(opts.DatabasePath); err != nil {
@@ -433,7 +433,7 @@ func (p *Proxy) Connect(address string, options ...*api.ConnectOptions) error {
 		// Skip game detector's database loading by not setting callbacks
 	} else {
 		// Setup database loaded callback for normal auto-detection
-		debug.Log("Setting up database loaded callback for auto-detection")
+		debug.Info("Setting up database loaded callback for auto-detection")
 		p.gameDetector.SetDatabaseLoadedCallback(p.onDatabaseLoaded)
 	}
 
@@ -519,7 +519,7 @@ func (p *Proxy) Disconnect() error {
 	// Close database to properly release resources
 	if p.db != nil {
 		if err := p.db.CloseDatabase(); err != nil {
-			debug.Log("Error closing database during disconnect: %v", err)
+			debug.Info("Error closing database during disconnect", "error", err)
 		}
 	}
 
@@ -542,7 +542,7 @@ func (p *Proxy) SendToTUI(output string) {
 	err := p.getState().SendToTUI(output)
 	if err != nil {
 		// Log error but don't fail - maintains current behavior
-		debug.Log("SendToTUI error: %v", err)
+		debug.Info("SendToTUI error", "error", err)
 	}
 }
 
@@ -612,18 +612,18 @@ func (p *Proxy) handleInput() {
 		// Check if any script is waiting for input - if so, buffer input until complete line
 		if false && p.scriptManager != nil { // DISABLED - moved to handleScriptInput
 			runningScripts := p.scriptManager.GetEngine().GetRunningScripts()
-			debug.Log("PROXY INPUT: checking %d running scripts for input waiting", len(runningScripts))
+			debug.Info("PROXY INPUT: checking running scripts for input waiting", "count", len(runningScripts))
 			for _, script := range runningScripts {
-				debug.Log("PROXY INPUT: checking script %s", script.GetID())
+				debug.Info("PROXY INPUT: checking script", "id", script.GetID())
 				// Check if this script is waiting for input (need to cast to get internal methods)
 				if scriptEngine := p.scriptManager.GetEngine(); scriptEngine != nil {
 					if internalEngine, ok := scriptEngine.(*scripting.Engine); ok {
 						if internalScript, err := internalEngine.GetScript(script.GetID()); err == nil {
 							isWaiting := internalScript.VM.IsWaitingForInput()
-							debug.Log("PROXY INPUT: script %s IsWaitingForInput=%v", script.GetID(), isWaiting)
+							debug.Info("PROXY INPUT: script IsWaitingForInput", "script_id", script.GetID(), "waiting", isWaiting)
 							if isWaiting {
 								// Script is waiting for input - start buffering
-								debug.Log("SCRIPT INPUT DEBUG: received input %q (len=%d), current buffer: %q", input, len(input), p.scriptInputBuffer.String())
+								debug.Info("SCRIPT INPUT DEBUG: received input", "input", input, "length", len(input), "buffer", p.scriptInputBuffer.String())
 
 								// Check if this is ENTER (carriage return, newline, or CRLF)
 								isEnterPressed := (input == "\r" || input == "\n" || input == "\r\n")
@@ -634,7 +634,7 @@ func (p *Proxy) handleInput() {
 
 									// Clear buffer and send input to script
 									p.scriptInputBuffer.Reset()
-									debug.Log("SCRIPT INPUT DEBUG: sending final input %q to script %s", finalInput, script.GetID())
+									debug.Info("SCRIPT INPUT DEBUG: sending final input to script", "input", finalInput, "script_id", script.GetID())
 
 									err := internalEngine.ResumeScriptWithInput(script.GetID(), finalInput)
 									if err != nil {
@@ -739,17 +739,17 @@ func (p *Proxy) injectInboundData(data []byte) {
 
 // injectTUIData sends client-side data directly to TUI without server processing
 func (p *Proxy) injectTUIData(data []byte) {
-	debug.Log("injectTUIData called with data: %q", string(data))
+	debug.Info("injectTUIData called with data", "data", string(data))
 	currentState := p.getState()
 	if connectedState, ok := currentState.(*ConnectedState); ok {
 		if connectedState.pipeline != nil {
-			debug.Log("injectTUIData: calling pipeline.InjectTUIData")
+			debug.Info("injectTUIData: calling pipeline.InjectTUIData")
 			connectedState.pipeline.InjectTUIData(data)
 		} else {
-			debug.Log("injectTUIData: no pipeline available")
+			debug.Info("injectTUIData: no pipeline available")
 		}
 	} else {
-		debug.Log("injectTUIData: not in connected state")
+		debug.Info("injectTUIData: not in connected state")
 	}
 }
 
@@ -845,7 +845,7 @@ func (p *Proxy) SetCurrentSector(sectorNum int) {
 	// Trigger callback if sector changed and TuiAPI is available
 	if shouldCallback {
 		sectorInfo := api.SectorInfo{Number: sectorNum}
-		debug.Log("PROXY: Firing OnCurrentSectorChanged for sector %d (oldSector=%d) [SOURCE: SetCurrentSector]", sectorNum, oldSector)
+		debug.Info("PROXY: Firing OnCurrentSectorChanged [SOURCE: SetCurrentSector]", "sector", sectorNum, "old_sector", oldSector)
 		go currentTuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}
 }
@@ -871,7 +871,7 @@ func (p *Proxy) SetPlayerName(name string) {
 
 // onDatabaseLoaded is called when the game detector loads a database
 func (p *Proxy) onDatabaseLoaded(db database.Database, scriptManager *scripting.ScriptManager) error {
-	debug.Log("onDatabaseLoaded: callback triggered with db=%v", db)
+	debug.Info("onDatabaseLoaded: callback triggered", "db", db)
 	// Update proxy state with new database
 	p.db = db
 
@@ -979,7 +979,7 @@ func (p *Proxy) handleScriptInput(input string) bool {
 						// Use shared input collector - handles buffering, echoing, backspace, etc.
 						err := p.scriptInputCollector.HandleInput(input)
 						if err != nil {
-							debug.Log("Script input collection error: %v", err)
+							debug.Info("Script input collection error", "error", err)
 						}
 
 						// Input was consumed by script

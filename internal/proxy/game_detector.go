@@ -110,6 +110,11 @@ type GameDetector struct {
 	// Token channel
 	tokens chan Token
 
+	// Instance-specific state machines (moved from global variables)
+	gOptionState   *gameOptionState
+	altOptionState *alternativeGameOptionState
+	iLetterState   *isolatedLetterState
+
 	// Database management
 	currentDatabase      database.Database
 	currentScriptManager *scripting.ScriptManager
@@ -132,6 +137,10 @@ func NewGameDetector(connInfo ConnectionInfo) *GameDetector {
 		detectionTimeout: time.Minute * 5,
 		patternMatchers:  make(map[string]*PatternMatcher),
 		ansiStripper:     ansi.NewStreamingStripper(),
+		// Initialize instance-specific state machines
+		gOptionState:   &gameOptionState{},
+		altOptionState: &alternativeGameOptionState{},
+		iLetterState:   &isolatedLetterState{},
 	}
 
 	// Initialize atomic state
@@ -260,7 +269,6 @@ func (l *GameDetector) ProcessLine(text string) {
 
 	// Update activity timestamp
 	l.lastActivity = time.Now()
-	debug.Log("GameDetector.ProcessLine: received text %q", text)
 
 	// Strip ANSI codes before processing using streaming stripper
 	cleanText := l.ansiStripper.StripChunk(text)
@@ -401,48 +409,45 @@ type alternativeGameOptionState struct {
 	gameName strings.Builder
 }
 
-var gOptionState = &gameOptionState{}
-var altOptionState = &alternativeGameOptionState{}
-
 // processGameOptionPattern handles <X> Game Name pattern parsing
 func (l *GameDetector) processGameOptionPattern(char rune) {
 
-	switch gOptionState.state {
+	switch l.gOptionState.state {
 	case 0: // Looking for '<'
 		if char == '<' {
-			gOptionState.state = 1
+			l.gOptionState.state = 1
 		}
 	case 1: // Looking for letter after '<'
 		if char >= 'A' && char <= 'Z' {
-			gOptionState.letter = string(char)
-			gOptionState.state = 2
+			l.gOptionState.letter = string(char)
+			l.gOptionState.state = 2
 		} else {
-			gOptionState.state = 0 // Reset
+			l.gOptionState.state = 0 // Reset
 		}
 	case 2: // Looking for '>' after letter
 		if char == '>' {
-			gOptionState.state = 3
+			l.gOptionState.state = 3
 		} else {
-			gOptionState.state = 0 // Reset
+			l.gOptionState.state = 0 // Reset
 		}
 	case 3: // Skip whitespace, start collecting game name
 		if char == ' ' || char == '\t' {
 			// Continue waiting
 		} else if char == '\n' || char == '\r' || char == '[' {
 			// End of game name
-			l.emitGameOptionToken(gOptionState.letter, gOptionState.gameName.String())
-			gOptionState.reset()
+			l.emitGameOptionToken(l.gOptionState.letter, l.gOptionState.gameName.String())
+			l.gOptionState.reset()
 		} else {
-			gOptionState.gameName.WriteRune(char)
-			gOptionState.state = 4
+			l.gOptionState.gameName.WriteRune(char)
+			l.gOptionState.state = 4
 		}
 	case 4: // Collecting game name
 		if char == '\n' || char == '\r' || char == '[' {
 			// End of game name
-			l.emitGameOptionToken(gOptionState.letter, gOptionState.gameName.String())
-			gOptionState.reset()
+			l.emitGameOptionToken(l.gOptionState.letter, l.gOptionState.gameName.String())
+			l.gOptionState.reset()
 		} else {
-			gOptionState.gameName.WriteRune(char)
+			l.gOptionState.gameName.WriteRune(char)
 		}
 	}
 }
@@ -455,40 +460,40 @@ func (g *gameOptionState) reset() {
 
 // processAlternativeGameOptionPattern handles X - Game Name pattern parsing (Trade Wars style)
 func (l *GameDetector) processAlternativeGameOptionPattern(char rune) {
-	switch altOptionState.state {
+	switch l.altOptionState.state {
 	case 0: // Looking for letter at start of line
 		if char >= 'A' && char <= 'Z' {
-			altOptionState.letter = string(char)
-			altOptionState.state = 1
+			l.altOptionState.letter = string(char)
+			l.altOptionState.state = 1
 		}
 	case 1: // Looking for space after letter
 		if char == ' ' {
-			altOptionState.state = 2
+			l.altOptionState.state = 2
 		} else {
-			altOptionState.reset() // Reset if no space
+			l.altOptionState.reset() // Reset if no space
 		}
 	case 2: // Looking for dash
 		if char == '-' {
-			altOptionState.state = 3
+			l.altOptionState.state = 3
 		} else {
-			altOptionState.reset() // Reset if no dash
+			l.altOptionState.reset() // Reset if no dash
 		}
 	case 3: // Looking for space after dash
 		if char == ' ' {
-			altOptionState.state = 4
+			l.altOptionState.state = 4
 		} else {
-			altOptionState.reset() // Reset if no space
+			l.altOptionState.reset() // Reset if no space
 		}
 	case 4: // Collecting game name
 		if char == '\n' || char == '\r' {
 			// End of game name
-			gameName := strings.TrimSpace(altOptionState.gameName.String())
+			gameName := strings.TrimSpace(l.altOptionState.gameName.String())
 			if gameName != "" {
-				l.emitGameOptionToken(altOptionState.letter, gameName)
+				l.emitGameOptionToken(l.altOptionState.letter, gameName)
 			}
-			altOptionState.reset()
+			l.altOptionState.reset()
 		} else {
-			altOptionState.gameName.WriteRune(char)
+			l.altOptionState.gameName.WriteRune(char)
 		}
 	}
 }
@@ -505,16 +510,14 @@ type isolatedLetterState struct {
 	prevPrevChar rune
 }
 
-var iLetterState = &isolatedLetterState{}
-
 // processIsolatedLetter handles isolated letters from server output (could be echoed user input)
 func (l *GameDetector) processIsolatedLetter(char rune) {
 	// Store the current previous character before updating
-	currentPrevChar := iLetterState.prevChar
+	currentPrevChar := l.iLetterState.prevChar
 
 	// Update state tracking
-	iLetterState.prevPrevChar = iLetterState.prevChar
-	iLetterState.prevChar = char
+	l.iLetterState.prevPrevChar = l.iLetterState.prevChar
+	l.iLetterState.prevChar = char
 
 	// Only process if we're in game menu state and have game options
 	currentState := l.state.Load()
@@ -524,7 +527,7 @@ func (l *GameDetector) processIsolatedLetter(char rune) {
 
 	// Skip isolated letter detection if we're currently parsing a game option pattern
 	// This prevents letters inside <A> patterns from being treated as user input
-	if gOptionState.state != 0 {
+	if l.gOptionState.state != 0 {
 		return
 	}
 
@@ -717,16 +720,16 @@ func (l *GameDetector) handleToken(token Token) {
 		})
 		// Load database after state update
 		currentState := l.state.Load()
-		debug.Log("GameDetector: state after update is %s, checking if should load database", currentState.currentState)
+		debug.Info("GameDetector: state after update, checking if should load database", "state", currentState.currentState)
 		if currentState.currentState == StateGameActive {
-			debug.Log("GameDetector: state is StateGameActive, calling loadGameDatabase()")
+			debug.Info("GameDetector: state is StateGameActive, calling loadGameDatabase()")
 			if err := l.loadGameDatabase(); err != nil {
-				debug.Log("GameDetector: loadGameDatabase() failed: %v", err)
+				debug.Info("GameDetector: loadGameDatabase() failed", "error", err)
 			} else {
-				debug.Log("GameDetector: loadGameDatabase() completed successfully")
+				debug.Info("GameDetector: loadGameDatabase() completed successfully")
 			}
 		} else {
-			debug.Log("GameDetector: state is %s, not loading database", currentState.currentState)
+			debug.Info("GameDetector: not loading database", "state", currentState.currentState)
 		}
 
 	case TokenGameExit:
@@ -796,10 +799,10 @@ func (l *GameDetector) resetGameState() {
 	}
 
 	// Reset state machines
-	gOptionState.reset()
-	altOptionState.reset()
-	iLetterState.prevChar = 0
-	iLetterState.prevPrevChar = 0
+	l.gOptionState.reset()
+	l.altOptionState.reset()
+	l.iLetterState.prevChar = 0
+	l.iLetterState.prevPrevChar = 0
 
 	// Reset ANSI stripper state
 	l.ansiStripper.Reset()
@@ -899,7 +902,7 @@ func (l *GameDetector) loadGameDatabase() error {
 	currentState := l.state.Load()
 	dbName := l.createDatabaseName(currentState.selectedGame)
 
-	debug.Log("GAME DETECTOR: Loading database at %s for game %s", dbName, currentState.selectedGame)
+	debug.Info("GAME DETECTOR: Loading database", "dbName", dbName, "selectedGame", currentState.selectedGame)
 
 	db := database.NewDatabase()
 
@@ -909,7 +912,7 @@ func (l *GameDetector) loadGameDatabase() error {
 		}
 	}
 
-	debug.Log("GAME DETECTOR: Successfully loaded database at %s", dbName)
+	debug.Info("GAME DETECTOR: Successfully loaded database", "dbName", dbName)
 
 	scriptManager := scripting.NewScriptManager(db)
 
@@ -925,16 +928,16 @@ func (l *GameDetector) loadGameDatabase() error {
 	}
 
 	if l.onDatabaseLoaded != nil {
-		debug.Log("GameDetector: triggering onDatabaseLoaded callback with db=%v", db)
+		debug.Info("GameDetector: triggering onDatabaseLoaded callback", "db", db)
 		go func() {
 			if err := l.onDatabaseLoaded(db, scriptManager); err != nil {
-				debug.Log("GameDetector: onDatabaseLoaded callback error: %v", err)
+				debug.Info("GameDetector: onDatabaseLoaded callback error", "error", err)
 			} else {
-				debug.Log("GameDetector: onDatabaseLoaded callback completed successfully")
+				debug.Info("GameDetector: onDatabaseLoaded callback completed successfully")
 			}
 		}()
 	} else {
-		debug.Log("GameDetector: no onDatabaseLoaded callback set")
+		debug.Info("GameDetector: no onDatabaseLoaded callback set")
 	}
 
 	return nil

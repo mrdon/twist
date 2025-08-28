@@ -1018,7 +1018,7 @@ func (p *TWXParser) handleSectorPorts(line string) {
 	if p.portTracker != nil {
 		p.portTracker.SetName(portName).SetClassIndex(classNum).SetBuildTime(0)
 		p.portTracker.SetBuyProducts(buyOre, buyOrg, buyEquip)
-		// debug.Log("PORT: Tracker updated - name=%s, class=%d, buy_pattern=%t%t%t", portName, classNum, buyOre, buyOrg, buyEquip)
+		// debug.Info("PORT: Tracker updated", "name", portName, "class", classNum, "buy_ore", buyOre, "buy_org", buyOrg, "buy_equip", buyEquip)
 	}
 }
 

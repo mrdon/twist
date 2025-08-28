@@ -267,7 +267,7 @@ func (p *PlayerStatsTracker) Execute(db *sql.DB) error {
 	// Ensure player_stats record exists (single row table with id=1)
 	_, err := db.Exec("INSERT OR IGNORE INTO player_stats (id) VALUES (1)")
 	if err != nil {
-		debug.Log("Failed to ensure player_stats record exists: %v", err)
+		debug.Info("Failed to ensure player_stats record exists", "error", err)
 		return err
 	}
 
@@ -279,19 +279,18 @@ func (p *PlayerStatsTracker) Execute(db *sql.DB) error {
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		debug.Log("Failed to build player stats update query: %v", err)
+		debug.Info("Failed to build player stats update query", "error", err)
 		return err
 	}
 
-	// debug.Log("Executing player stats update with %d discovered fields: %s", len(p.updates), sql)
+	// debug.Info("Executing player stats update", "field_count", len(p.updates), "sql", sql)
 
 	_, err = db.Exec(sql, args...)
 	if err != nil {
-		debug.Log("Failed to execute player stats update: %v", err)
+		debug.Info("Failed to execute player stats update", "error", err)
 		return err
 	}
 
-	debug.Log("Successfully updated player stats with discovered fields: %v", getFieldNames(p.updates))
 	return nil
 }
 
@@ -407,7 +406,7 @@ func (s *SectorTracker) Execute(db *sql.DB) error {
 	// Ensure sector record exists (UPSERT pattern)
 	_, err := db.Exec("INSERT OR IGNORE INTO sectors (sector_index) VALUES (?)", s.sectorIndex)
 	if err != nil {
-		debug.Log("Failed to ensure sector record exists for sector %d: %v", s.sectorIndex, err)
+		debug.Info("Failed to ensure sector record exists", "sector", s.sectorIndex, "error", err)
 		return err
 	}
 
@@ -419,19 +418,19 @@ func (s *SectorTracker) Execute(db *sql.DB) error {
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		debug.Log("Failed to build sector update query for sector %d: %v", s.sectorIndex, err)
+		debug.Info("Failed to build sector update query", "sector", s.sectorIndex, "error", err)
 		return err
 	}
 
-	debug.Log("Executing sector update for sector %d with %d discovered fields: %s", s.sectorIndex, len(s.updates), sql)
+	debug.Info("Executing sector update", "sector", s.sectorIndex, "field_count", len(s.updates), "sql", sql)
 
 	_, err = db.Exec(sql, args...)
 	if err != nil {
-		debug.Log("Failed to execute sector update for sector %d: %v", s.sectorIndex, err)
+		debug.Info("Failed to execute sector update", "sector", s.sectorIndex, "error", err)
 		return err
 	}
 
-	debug.Log("Successfully updated sector %d with discovered fields: %v", s.sectorIndex, getFieldNames(s.updates))
+	debug.Info("Successfully updated sector with discovered fields", "sector", s.sectorIndex, "fields", getFieldNames(s.updates))
 	return nil
 }
 
@@ -636,7 +635,7 @@ func (p *PortTracker) Execute(db *sql.DB) error {
 	// Ensure port record exists (UPSERT pattern)
 	_, err := db.Exec("INSERT OR IGNORE INTO ports (sector_index) VALUES (?)", p.sectorIndex)
 	if err != nil {
-		debug.Log("Failed to ensure port record exists for sector %d: %v", p.sectorIndex, err)
+		debug.Info("Failed to ensure port record exists", "sector", p.sectorIndex, "error", err)
 		return err
 	}
 
@@ -648,18 +647,18 @@ func (p *PortTracker) Execute(db *sql.DB) error {
 
 	sql, args, err := query.ToSql()
 	if err != nil {
-		debug.Log("Failed to build port update query for sector %d: %v", p.sectorIndex, err)
+		debug.Info("Failed to build port update query", "sector", p.sectorIndex, "error", err)
 		return err
 	}
 
-	debug.Log("Executing port update for sector %d with %d discovered fields: %s", p.sectorIndex, len(p.updates), sql)
+	debug.Info("Executing port update", "sector", p.sectorIndex, "field_count", len(p.updates), "sql", sql)
 
 	_, err = db.Exec(sql, args...)
 	if err != nil {
-		debug.Log("Failed to execute port update for sector %d: %v", p.sectorIndex, err)
+		debug.Info("Failed to execute port update", "sector", p.sectorIndex, "error", err)
 		return err
 	}
 
-	debug.Log("Successfully updated port for sector %d with discovered fields: %v", p.sectorIndex, getFieldNames(p.updates))
+	debug.Info("Successfully updated port with discovered fields", "sector", p.sectorIndex, "fields", getFieldNames(p.updates))
 	return nil
 }

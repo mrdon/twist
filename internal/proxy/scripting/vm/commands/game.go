@@ -40,7 +40,7 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 		if param.Type == types.ParamVar {
 			// Get variable value
 			value := vm.GetVariable(param.VarName)
-			debug.Log("SEND command (line %d): variable %s resolves to %q", vm.GetCurrentLine(), param.VarName, value.ToString())
+			debug.Info("SEND command: variable resolves", "line", vm.GetCurrentLine(), "variable", param.VarName, "value", value.ToString())
 			message += value.ToString()
 		} else {
 			// Use literal value
@@ -52,7 +52,7 @@ func cmdSend(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Log("SEND command [%s] (line %d): sending message %q", scriptName, vm.GetCurrentLine(), message)
+	debug.Info("SEND command: sending message", "script", scriptName, "line", vm.GetCurrentLine(), "message", message)
 
 	// Send message as-is (carriage returns from lexer are preserved)
 	return vm.Send(message)
@@ -68,7 +68,7 @@ func cmdWaitFor(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Log("WAITFOR command [%s] (line %d): waiting for pattern %q", scriptName, vm.GetCurrentLine(), pattern)
+	debug.Info("WAITFOR command: waiting for pattern", "script", scriptName, "line", vm.GetCurrentLine(), "pattern", pattern)
 	return vm.WaitFor(pattern)
 }
 
@@ -119,15 +119,14 @@ func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Log("GETINPUT [%s] (line %d): prompt=%q, default=%q", scriptName, vm.GetCurrentLine(), prompt, defaultValue)
-	debug.Log("GETINPUT [%s]: pendingResult=%q, waitingForInput=%v, pendingPrompt=%q",
-		scriptName, vm.GetPendingInputResult(), vm.IsWaitingForInput(), vm.GetPendingInputPrompt())
+	debug.Info("GETINPUT command: parameters", "script", scriptName, "line", vm.GetCurrentLine(), "prompt", prompt, "default", defaultValue)
+	debug.Info("GETINPUT command: state check", "script", scriptName, "pendingResult", vm.GetPendingInputResult(), "waitingForInput", vm.IsWaitingForInput(), "pendingPrompt", vm.GetPendingInputPrompt())
 
 	// Check if there's a pending input result (we're resuming from input)
 	// We use JustResumedFromInput to handle cases where input is empty string
 	if vm.IsWaitingForInput() || vm.JustResumedFromInput() {
 		// We're resuming - get the input result and store it
-		debug.Log("GETINPUT [%s]: RESUMING from input, processing stored result", scriptName)
+		debug.Info("GETINPUT command: resuming from input", "script", scriptName)
 		input := vm.GetPendingInputResult()
 
 		// Use default value if input is empty
@@ -135,7 +134,7 @@ func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 			input = defaultValue
 		}
 
-		debug.Log("GETINPUT [%s]: setting variable %s = %q", scriptName, params[0].VarName, input)
+		debug.Info("GETINPUT command: setting variable", "script", scriptName, "variable", params[0].VarName, "value", input)
 
 		// Store result in the variable
 		result := &types.Value{
@@ -151,7 +150,7 @@ func cmdGetInput(vm types.VMInterface, params []*types.CommandParam) error {
 	}
 
 	// First time executing this command - initiate input collection
-	debug.Log("GETINPUT [%s]: FIRST TIME - initiating input collection", scriptName)
+	debug.Info("GETINPUT command: initiating input collection", "script", scriptName)
 	// Format the prompt like TWX does
 	fullPrompt := prompt
 	if defaultValue != "" {
@@ -197,7 +196,7 @@ func cmdDebugLog(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Log("SCRIPT DEBUG [%s] (line %d): %s", scriptName, vm.GetCurrentLine(), message)
+	debug.Info("SCRIPT DEBUG command", "script", scriptName, "line", vm.GetCurrentLine(), "message", message)
 	return nil
 }
 
@@ -352,20 +351,20 @@ func cmdGetSector(vm types.VMInterface, params []*types.CommandParam) error {
 	// Add panic recovery for debugging
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdGetSector: %v", r)
+			debug.Error("PANIC in cmdGetSector", "error", r)
 			panic(r) // Re-panic after logging
 		}
 	}()
-	
+
 	if len(params) != 2 {
 		return vm.Error("GETSECTOR requires exactly 2 parameters: sector_index, result_var")
 	}
 
 	// Get sector index from first parameter
 	indexValue := GetParamValue(vm, params[0])
-	debug.Log("cmdGetSector: indexValue=%v", indexValue)
+	debug.Info("cmdGetSector: index value", "indexValue", indexValue)
 	sectorIndex := int(indexValue.ToNumber())
-	debug.Log("cmdGetSector: sectorIndex=%d", sectorIndex)
+	debug.Info("cmdGetSector: sector index", "sectorIndex", sectorIndex)
 
 	// Ignore invalid call with index of zero (Pascal TWX behavior)
 	if sectorIndex == 0 {
@@ -374,25 +373,25 @@ func cmdGetSector(vm types.VMInterface, params []*types.CommandParam) error {
 
 	// Get variable name for result
 	varName := params[1].VarName
-	debug.Log("cmdGetSector: varName=%s", varName)
+	debug.Info("cmdGetSector: variable name", "varName", varName)
 
 	// Get sector data from game interface
 	gameInterface := vm.GetGameInterface()
-	debug.Log("cmdGetSector: gameInterface=%v", gameInterface)
+	debug.Info("cmdGetSector: game interface", "gameInterface", gameInterface)
 	if gameInterface == nil {
-		debug.Log("cmdGetSector: ERROR - gameInterface is nil!")
+		debug.Info("cmdGetSector: ERROR - gameInterface is nil!")
 		return vm.Error("Game interface not available")
 	}
 	sector, err := gameInterface.GetSector(sectorIndex)
-	debug.Log("cmdGetSector: after GetSector call, err=%v", err)
+	debug.Info("cmdGetSector: after GetSector call", "error", err)
 	if err != nil {
-		debug.Log("GETSECTOR: sector %d not found in database, setting default values. Error: %v", sectorIndex, err)
+		debug.Info("GETSECTOR: sector not found, setting default values", "sectorIndex", sectorIndex, "error", err)
 		// If sector not found, set default empty values
 		setSectorVariables(vm, varName, sectorIndex, nil)
 		return nil
 	}
 
-	debug.Log("GETSECTOR: sector %d found - PortName=%q, PortClass=%d, HasPort=%v", sectorIndex, sector.PortName, sector.PortClass, sector.HasPort)
+	debug.Info("GETSECTOR: sector found", "sectorIndex", sectorIndex, "portName", sector.PortName, "portClass", sector.PortClass, "hasPort", sector.HasPort)
 
 	// Set all sector variables matching Pascal TWX exactly
 	setSectorVariables(vm, varName, sectorIndex, &sector)
@@ -476,12 +475,12 @@ func setPortVariables(vm types.VMInterface, varName string, sector *types.Sector
 
 	if !sector.HasPort {
 		// No port exists
-		debug.Log("SETPORTVARS: %s - No port (portName=%q, hasPort=%v) - setting PORT.CLASS=0", varName, portName, sector != nil && sector.HasPort)
+		debug.Info("SETPORTVARS: no port, setting PORT.CLASS=0", "varName", varName, "portName", portName, "hasPort", sector != nil && sector.HasPort)
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: 0})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 0})
 	} else {
 		// Port exists - set all port variables using actual sector data
-		debug.Log("SETPORTVARS: %s - Port exists (portName=%q, portClass=%d) - setting PORT.CLASS=%d", varName, portName, sector.PortClass, sector.PortClass)
+		debug.Info("SETPORTVARS: port exists", "varName", varName, "portName", portName, "portClass", sector.PortClass)
 		vm.SetVariable(varName+".PORT.CLASS", &types.Value{Type: types.NumberType, Number: float64(sector.PortClass)})
 		vm.SetVariable(varName+".PORT.EXISTS", &types.Value{Type: types.NumberType, Number: 1})
 		vm.SetVariable(varName+".PORT.BUILDTIME", &types.Value{Type: types.NumberType, Number: 0})

@@ -111,7 +111,7 @@ type GraphvizSectorMap struct {
 	hasBorder    bool
 	sixelLayer   *SixelLayer
 	regionID     string
-	isGenerating bool // Track when image generation is in progress
+	isGenerating bool               // Track when image generation is in progress
 	app          *tview.Application // Reference for async UI updates
 
 	// Debouncing for rapid sector updates (e.g., during probe processing)
@@ -128,12 +128,6 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer, app *tview.Application) *Graph
 	defaultColors := currentTheme.DefaultColors()
 	panelColors := currentTheme.PanelColors()
 
-	r, g, b := defaultColors.Background.RGB()
-	debug.Log("GraphvizSectorMap: Constructor - theme default background RGB(%d,%d,%d)", r, g, b)
-
-	r2, g2, b2 := panelColors.Background.RGB()
-	debug.Log("GraphvizSectorMap: Constructor - theme panel background RGB(%d,%d,%d)", r2, g2, b2)
-
 	box := tview.NewBox()
 	box.SetBackgroundColor(defaultColors.Background) // Use theme's default background
 	box.SetBorderColor(panelColors.Border)
@@ -149,7 +143,7 @@ func NewGraphvizSectorMap(sixelLayer *SixelLayer, app *tview.Application) *Graph
 		sixelLayer:    sixelLayer,
 		regionID:      "sector_map",           // Unique ID for this component
 		debounceDelay: 200 * time.Millisecond, // 200ms debounce delay for rapid updates
-		app:           app,                     // Store app reference for async updates
+		app:           app,                    // Store app reference for async updates
 	}
 	gsm.SetBorder(false).SetTitle("")
 	return gsm
@@ -171,21 +165,17 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 
 	// Get the component area
 	x, y, width, height := gsm.GetRect()
-	debug.Log("GraphvizSectorMap.Draw: Component rect x=%d y=%d w=%d h=%d", x, y, width, height)
 
 	if width <= 0 || height <= 0 {
-		debug.Log("GraphvizSectorMap.Draw: Invalid dimensions, returning")
 		return
 	}
 
 	// Generate map image and sixel if needed
 	needsGeneration := gsm.needsRedraw || gsm.pendingRedraw
-	debug.Log("GraphvizSectorMap.Draw: needsGeneration=%t (needsRedraw=%t, pendingRedraw=%t), isGenerating=%t",
-		needsGeneration, gsm.needsRedraw, gsm.pendingRedraw, gsm.isGenerating)
 
 	if needsGeneration && !gsm.isGenerating {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil && gsm.app != nil {
-			debug.Log("GraphvizSectorMap.Draw: Starting async generation for sector %d", gsm.currentSector)
+			debug.Info("GraphvizSectorMap.Draw: Starting async generation", "sector", gsm.currentSector)
 			gsm.isGenerating = true // Mark that we're generating
 
 			// Clear the region before generating new content to prevent artifacts
@@ -199,10 +189,8 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 				// Generate new graphviz image
 				g, err := gsm.buildSectorGraph()
 				if err == nil {
-					debug.Log("GraphvizSectorMap.AsyncGen: Graph built successfully, generating image")
 					_, err := gsm.generateGraphvizImage(g, width, height)
 					if err == nil {
-						debug.Log("GraphvizSectorMap.AsyncGen: Image generated successfully")
 						// Update UI on main thread
 						gsm.app.QueueUpdateDraw(func() {
 							// Image data is now cached in LRU cache, cachedImage/cachedSixel set by generateGraphvizImage
@@ -211,31 +199,27 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 							gsm.isGenerating = false // Mark generation complete
 						})
 					} else {
-						debug.Log("GraphvizSectorMap.AsyncGen: Error generating image: %v", err)
+						debug.Info("GraphvizSectorMap.AsyncGen: Error generating image", "error", err)
 						gsm.app.QueueUpdateDraw(func() {
 							gsm.isGenerating = false
 						})
 					}
 				} else {
-					debug.Log("GraphvizSectorMap.AsyncGen: Error building graph: %v", err)
+					debug.Info("GraphvizSectorMap.AsyncGen: Error building graph", "error", err)
 					gsm.app.QueueUpdateDraw(func() {
 						gsm.isGenerating = false
 					})
 				}
 			}()
 		} else {
-			debug.Log("GraphvizSectorMap.Draw: Cannot generate - currentSector=%d, proxyAPI!=nil=%t, app!=nil=%t",
-				gsm.currentSector, gsm.proxyAPI != nil, gsm.app != nil)
+			debug.Info("GraphvizSectorMap.Draw: Cannot generate", "currentSector", gsm.currentSector, "has_proxyAPI", gsm.proxyAPI != nil, "has_app", gsm.app != nil)
 		}
 	}
 
 	// Register sixel region with the layer if we have cached image
 	if gsm.currentHashKey != "" && gsm.sixelLayer != nil {
-		debug.Log("GraphvizSectorMap.Draw: Registering sixel region")
 		gsm.registerSixelRegion(x, y, width, height)
 	} else {
-		debug.Log("GraphvizSectorMap.Draw: No image ready - currentHashKey=%s, sixelLayer!=nil=%t",
-			gsm.currentHashKey, gsm.sixelLayer != nil)
 
 		// Hide sixel region when not ready (no status text shown)
 		if gsm.sixelLayer != nil {
@@ -243,7 +227,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 		}
 	}
 
-	// debug.Log("GraphvizSectorMap.Draw: Draw complete")
+	// debug.Info("GraphvizSectorMap.Draw: Draw complete")
 }
 
 // registerSixelRegion registers this component's sixel region with the layer
@@ -251,7 +235,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 	// Get cached data from LRU cache
 	cached, found := gsm.graphCache.Get(gsm.currentHashKey)
 	if !found {
-		debug.Log("GraphvizSectorMap.registerSixelRegion: No cached data found for hash %s", gsm.currentHashKey)
+		debug.Info("GraphvizSectorMap.registerSixelRegion: No cached data found", "hash", gsm.currentHashKey)
 		return
 	}
 
@@ -260,7 +244,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 		// Decode the cached PNG image
 		img, err := png.Decode(bytes.NewReader(cached.ImageData))
 		if err != nil {
-			debug.Log("GraphvizSectorMap.registerSixelRegion: Failed to decode PNG: %v", err)
+			debug.Info("GraphvizSectorMap.registerSixelRegion: Failed to decode PNG", "error", err)
 			return
 		}
 
@@ -273,7 +257,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 		var buf bytes.Buffer
 		err = rasterm.SixelWriteImage(&buf, palettedImg)
 		if err != nil {
-			debug.Log("GraphvizSectorMap.registerSixelRegion: Failed to encode sixel: %v", err)
+			debug.Info("GraphvizSectorMap.registerSixelRegion: Failed to encode sixel", "error", err)
 			return
 		}
 
@@ -389,8 +373,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 		gsm.currentHashKey = ""              // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
-		debug.Log("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed from %d to %d, triggering redraw",
-			oldSector, sectorInfo.Number)
+		debug.Info("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed, triggering redraw", "old_sector", oldSector, "new_sector", sectorInfo.Number)
 
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
@@ -429,28 +412,18 @@ func (gsm *GraphvizSectorMap) scheduleRedrawWithDebounce(sectorNumber int, sourc
 	if !needsImmediate {
 		// Check if the graph would actually change by comparing DOT content hash
 		if newHash, err := gsm.generateDOTContentHash(); err == nil {
-			debug.Log("GraphvizSectorMap: %s - Hash comparison for sector %d: current='%s', new='%s'",
-				source, sectorNumber, gsm.currentHashKey, newHash)
 			if newHash != gsm.currentHashKey {
-				debug.Log("GraphvizSectorMap: %s - DOT content changed for sector %d, scheduling debounced redraw (old hash: %s, new hash: %s)",
-					source, sectorNumber, gsm.currentHashKey, newHash)
 				needsImmediate = true
 				gsm.currentHashKey = "" // Clear current hash key to force regeneration
 			} else {
-				debug.Log("GraphvizSectorMap: %s - DOT content unchanged for sector %d, skipping redraw (hash: %s)",
-					source, sectorNumber, gsm.currentHashKey)
 				return // No change needed
 			}
 		} else {
 			// If we can't generate hash, fall back to always redrawing
-			debug.Log("GraphvizSectorMap: %s - Failed to generate DOT hash for sector %d, scheduling debounced redraw: %v",
-				source, sectorNumber, err)
+			debug.Info("GraphvizSectorMap: Failed to generate DOT hash, scheduling debounced redraw", "source", source, "sector", sectorNumber, "error", err)
 			needsImmediate = true
 			gsm.currentHashKey = "" // Clear current hash key to force regeneration
 		}
-	} else {
-		debug.Log("GraphvizSectorMap: %s - No current hash for sector %d, scheduling debounced redraw",
-			source, sectorNumber)
 	}
 
 	if !needsImmediate {
@@ -468,7 +441,6 @@ func (gsm *GraphvizSectorMap) scheduleRedrawWithDebounce(sectorNumber int, sourc
 	// Set up new timer
 	gsm.debounceTimer = time.AfterFunc(gsm.debounceDelay, func() {
 		if gsm.pendingRedraw {
-			debug.Log("GraphvizSectorMap: Debounce timer fired, triggering redraw for sector %d", sectorNumber)
 			gsm.needsRedraw = true
 			gsm.pendingRedraw = false
 		}

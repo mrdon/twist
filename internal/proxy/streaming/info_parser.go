@@ -50,7 +50,7 @@ func (p *TWXParser) handleInfoDisplayStart(line string) {
 
 	// Reset incomplete tracker from previous session
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		debug.Log("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
+		debug.Info("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
 	}
 
 	// Start new discovered field session
@@ -84,7 +84,7 @@ func (p *TWXParser) completeInfoDisplay() {
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
 		err := p.playerStatsTracker.Execute(p.database.GetDB())
 		if err != nil {
-			debug.Log("INFO_PARSER: Failed to update player stats: %v", err)
+			debug.Info("INFO_PARSER: Failed to update player stats", "error", err)
 			return
 		}
 
@@ -94,7 +94,7 @@ func (p *TWXParser) completeInfoDisplay() {
 			if err == nil {
 				p.firePlayerStatsEventDirect(fullPlayerStats)
 			} else {
-				debug.Log("INFO_PARSER: Failed to read player stats info for API event: %v", err)
+				debug.Info("INFO_PARSER: Failed to read player stats info for API event", "error", err)
 			}
 		}
 

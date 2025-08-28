@@ -75,7 +75,7 @@ type ScriptManagerInterface interface {
 func NewTerminalMenuManager() *TerminalMenuManager {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in NewTerminalMenuManager: %v", r)
+			debug.Error("PANIC in NewTerminalMenuManager", "error", r)
 		}
 	}()
 
@@ -143,7 +143,7 @@ func (tmm *TerminalMenuManager) SetProxyInterface(proxy ProxyInterface) {
 func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ProcessMenuKey: %v", r)
+			debug.Error("PANIC in ProcessMenuKey", "error", r)
 		}
 	}()
 
@@ -158,7 +158,7 @@ func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
 func (tmm *TerminalMenuManager) MenuText(input string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in MenuText: %v", r)
+			debug.Error("PANIC in MenuText", "error", r)
 		}
 	}()
 
@@ -169,7 +169,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	input = strings.TrimSpace(input)
 
 	// Debug logging to see what's happening
-	debug.Log("MenuText called with input: '%s', inputCollectionMode: %v", input, tmm.inputCollector.IsCollecting())
+	debug.Info("MenuText called", "input", input, "inputCollectionMode", tmm.inputCollector.IsCollecting())
 
 	// DISABLED: Script input handling is done at the proxy level for proper character buffering
 	// The proxy.go handles script input with proper buffering, menu system handles menu operations
@@ -181,11 +181,11 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 		if scriptManager != nil {
 			scriptID, scriptName := scriptManager.HasScriptWaitingForInput()
 			if scriptID != "" {
-				debug.Log("SCRIPT INPUT DETECTED: Routing input '%s' to script %s", input, scriptName)
+				debug.Info("SCRIPT INPUT DETECTED: Routing input to script", "input", input, "scriptName", scriptName)
 				// Route directly to script input system, bypassing menu input collector
 				err := scriptManager.ResumeScriptWithInput(scriptID, input)
 				if err != nil {
-					debug.Log("Error resuming script with input: %v", err)
+					debug.Info("Error resuming script with input", "error", err)
 				}
 				return nil
 			}
@@ -196,7 +196,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	// Handle two-stage input collection mode using the input collector
 	// This only handles MENU input collection (like script loading, menu operations)
 	if tmm.inputCollector.IsCollecting() {
-		debug.Log("Handling menu input collection for: '%s'", input)
+		debug.Info("Handling menu input collection", "input", input)
 		return tmm.inputCollector.HandleInput(input)
 	}
 
@@ -236,7 +236,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ActivateMainMenu: %v", r)
+			debug.Error("PANIC in ActivateMainMenu", "error", r)
 		}
 	}()
 
@@ -256,7 +256,7 @@ func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 func (tmm *TerminalMenuManager) selectMenuItem(item *TerminalMenuItem) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in selectMenuItem: %v", r)
+			debug.Error("PANIC in selectMenuItem", "error", r)
 		}
 	}()
 
@@ -285,7 +285,7 @@ func (tmm *TerminalMenuManager) selectMenuItem(item *TerminalMenuItem) error {
 func (tmm *TerminalMenuManager) displayCurrentMenu() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in displayCurrentMenu: %v", r)
+			debug.Error("PANIC in displayCurrentMenu", "error", r)
 		}
 	}()
 
@@ -326,7 +326,7 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 func (tmm *TerminalMenuManager) closeCurrentMenu() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in closeCurrentMenu: %v", r)
+			debug.Error("PANIC in closeCurrentMenu", "error", r)
 		}
 	}()
 
@@ -354,7 +354,7 @@ func (tmm *TerminalMenuManager) IsActive() bool {
 func (tmm *TerminalMenuManager) AddCustomMenu(name string, parent *TerminalMenuItem) *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in AddCustomMenu: %v", r)
+			debug.Error("PANIC in AddCustomMenu", "error", r)
 		}
 	}()
 
@@ -375,7 +375,7 @@ func (tmm *TerminalMenuManager) GetMenu(name string) *TerminalMenuItem {
 func (tmm *TerminalMenuManager) RemoveMenu(name string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in RemoveMenu: %v", r)
+			debug.Error("PANIC in RemoveMenu", "error", r)
 		}
 	}()
 
@@ -398,7 +398,7 @@ func (tmm *TerminalMenuManager) GetMenuKey() rune {
 func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in createTWXMainMenu: %v", r)
+			debug.Error("PANIC in createTWXMainMenu", "error", r)
 		}
 	}()
 
@@ -435,7 +435,7 @@ func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleBurstCommands: %v", r)
+			debug.Error("PANIC in handleBurstCommands", "error", r)
 		}
 	}()
 
@@ -450,7 +450,7 @@ func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, para
 func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleLoadScript: %v", r)
+			debug.Error("PANIC in handleLoadScript", "error", r)
 		}
 	}()
 
@@ -479,7 +479,7 @@ func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleTerminateScript: %v", r)
+			debug.Error("PANIC in handleTerminateScript", "error", r)
 		}
 	}()
 
@@ -513,7 +513,7 @@ func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, pa
 func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptMenu: %v", r)
+			debug.Error("PANIC in handleScriptMenu", "error", r)
 		}
 	}()
 
@@ -528,7 +528,7 @@ func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleDataMenu: %v", r)
+			debug.Error("PANIC in handleDataMenu", "error", r)
 		}
 	}()
 
@@ -543,7 +543,7 @@ func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handlePortMenu: %v", r)
+			debug.Error("PANIC in handlePortMenu", "error", r)
 		}
 	}()
 
@@ -558,7 +558,7 @@ func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in createTWXScriptMenu: %v", r)
+			debug.Error("PANIC in createTWXScriptMenu", "error", r)
 		}
 	}()
 
@@ -600,7 +600,7 @@ func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in createTWXDataMenu: %v", r)
+			debug.Error("PANIC in createTWXDataMenu", "error", r)
 		}
 	}()
 
@@ -647,7 +647,7 @@ func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in createTWXPortMenu: %v", r)
+			debug.Error("PANIC in createTWXPortMenu", "error", r)
 		}
 	}()
 
@@ -679,7 +679,7 @@ func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in createTWXBurstMenu: %v", r)
+			debug.Error("PANIC in createTWXBurstMenu", "error", r)
 		}
 	}()
 
@@ -707,7 +707,7 @@ func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptLoad: %v", r)
+			debug.Error("PANIC in handleScriptLoad", "error", r)
 		}
 	}()
 
@@ -748,7 +748,7 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptTerminate: %v", r)
+			debug.Error("PANIC in handleScriptTerminate", "error", r)
 		}
 	}()
 
@@ -780,7 +780,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, pa
 func (tmm *TerminalMenuManager) handleScriptPause(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptPause: %v", r)
+			debug.Error("PANIC in handleScriptPause", "error", r)
 		}
 	}()
 
@@ -792,7 +792,7 @@ func (tmm *TerminalMenuManager) handleScriptPause(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleScriptResume(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptResume: %v", r)
+			debug.Error("PANIC in handleScriptResume", "error", r)
 		}
 	}()
 
@@ -804,7 +804,7 @@ func (tmm *TerminalMenuManager) handleScriptResume(item *TerminalMenuItem, param
 func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptDebug: %v", r)
+			debug.Error("PANIC in handleScriptDebug", "error", r)
 		}
 	}()
 
@@ -876,7 +876,7 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleVariableDump: %v", r)
+			debug.Error("PANIC in handleVariableDump", "error", r)
 		}
 	}()
 
@@ -905,7 +905,7 @@ func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, param
 func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleSectorDisplay: %v", r)
+			debug.Error("PANIC in handleSectorDisplay", "error", r)
 		}
 	}()
 
@@ -946,7 +946,7 @@ func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, para
 func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleTraderList: %v", r)
+			debug.Error("PANIC in handleTraderList", "error", r)
 		}
 	}()
 
@@ -958,7 +958,7 @@ func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handlePortList: %v", r)
+			debug.Error("PANIC in handlePortList", "error", r)
 		}
 	}()
 
@@ -1019,7 +1019,7 @@ func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) handleRoutePlot(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleRoutePlot: %v", r)
+			debug.Error("PANIC in handleRoutePlot", "error", r)
 		}
 	}()
 
@@ -1031,7 +1031,7 @@ func (tmm *TerminalMenuManager) handleRoutePlot(item *TerminalMenuItem, params [
 func (tmm *TerminalMenuManager) handleBubbleInfo(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleBubbleInfo: %v", r)
+			debug.Error("PANIC in handleBubbleInfo", "error", r)
 		}
 	}()
 
@@ -1054,7 +1054,7 @@ func min(a, b int) int {
 func (tmm *TerminalMenuManager) AddScriptMenu(name, description, parent, reference, prompt, scriptOwner string, hotkey rune, closeMenu bool) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in AddScriptMenu: %v", r)
+			debug.Error("PANIC in AddScriptMenu", "error", r)
 		}
 	}()
 
@@ -1107,7 +1107,7 @@ func (tmm *TerminalMenuManager) AddScriptMenu(name, description, parent, referen
 func (tmm *TerminalMenuManager) OpenScriptMenu(menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in OpenScriptMenu: %v", r)
+			debug.Error("PANIC in OpenScriptMenu", "error", r)
 		}
 	}()
 
@@ -1128,7 +1128,7 @@ func (tmm *TerminalMenuManager) OpenScriptMenu(menuName string) error {
 func (tmm *TerminalMenuManager) CloseScriptMenu(menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in CloseScriptMenu: %v", r)
+			debug.Error("PANIC in CloseScriptMenu", "error", r)
 		}
 	}()
 
@@ -1190,7 +1190,7 @@ func (tmm *TerminalMenuManager) SetScriptMenuOptions(menuName, options string) e
 func (tmm *TerminalMenuManager) RemoveScriptMenusByOwner(scriptID string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in RemoveScriptMenusByOwner: %v", r)
+			debug.Error("PANIC in RemoveScriptMenusByOwner", "error", r)
 		}
 	}()
 
@@ -1235,7 +1235,7 @@ func (tmm *TerminalMenuManager) removeScriptMenu(menuName string) {
 func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, params []string, menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleScriptMenuItem: %v", r)
+			debug.Error("PANIC in handleScriptMenuItem", "error", r)
 		}
 	}()
 
@@ -1364,7 +1364,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) er
 func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleSendBurst: %v", r)
+			debug.Error("PANIC in handleSendBurst", "error", r)
 		}
 	}()
 
@@ -1382,7 +1382,7 @@ func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params [
 func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleRepeatBurst: %v", r)
+			debug.Error("PANIC in handleRepeatBurst", "error", r)
 		}
 	}()
 
@@ -1418,7 +1418,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleEditBurst: %v", r)
+			debug.Error("PANIC in handleEditBurst", "error", r)
 		}
 	}()
 
@@ -1489,7 +1489,7 @@ func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
 // sendBurstToServer sends burst text to the server through the proxy
 func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 	if tmm.proxyInterface == nil {
-		debug.Log("Cannot send burst - no proxy interface")
+		debug.Info("Cannot send burst - no proxy interface")
 		return
 	}
 
@@ -1499,7 +1499,7 @@ func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 		if strings.TrimSpace(cmd) != "" {
 			// Send each command directly to server bypassing menu system
 			tmm.proxyInterface.SendDirectToServer(strings.TrimSpace(cmd) + "\r\n")
-			debug.Log("Burst command sent directly to server: %s", strings.TrimSpace(cmd))
+			debug.Info("Burst command sent directly to server", "command", strings.TrimSpace(cmd))
 		}
 	}
 }
@@ -1737,7 +1737,7 @@ func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, 
 func (tmm *TerminalMenuManager) handleShowPort(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleShowPort: %v", r)
+			debug.Error("PANIC in handleShowPort", "error", r)
 		}
 	}()
 
@@ -1965,7 +1965,7 @@ func (tmm *TerminalMenuManager) handlePlotCourse(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleShowSpecialPorts(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in handleShowSpecialPorts: %v", r)
+			debug.Error("PANIC in handleShowSpecialPorts", "error", r)
 		}
 	}()
 
@@ -2125,7 +2125,7 @@ func (tmm *TerminalMenuManager) GetMenuManager() *TerminalMenuManager {
 func (tmm *TerminalMenuManager) StartScriptInputCollection(prompt string, callback func(string)) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in StartScriptInputCollection: %v", r)
+			debug.Error("PANIC in StartScriptInputCollection", "error", r)
 		}
 	}()
 

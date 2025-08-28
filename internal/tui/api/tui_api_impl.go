@@ -115,7 +115,7 @@ func (tui *TuiApiImpl) processDataLoop() {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						// Panic in data processing - recovered
+						debug.Error("PANIC recovered in TUI data processing", "function", "run", "error", r)
 					}
 				}()
 				tui.app.HandleTerminalData(data)

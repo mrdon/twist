@@ -2,48 +2,44 @@ package debug
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
-	"strings"
-	"time"
 )
 
 // Logger provides centralized debug logging for the entire application
 type Logger struct {
+	logger *slog.Logger
 	file   *os.File
-	logger *log.Logger
 }
 
 var globalLogger *Logger
 
-// isTestMode detects if we're running in test mode
-func isTestMode() bool {
-	// Check if any argument contains "test" (e.g., go test, _test, etc.)
-	for _, arg := range os.Args {
-		if strings.Contains(arg, "test") || strings.HasSuffix(arg, ".test") {
-			return true
-		}
+// init creates the global debug logger with console output by default
+func init() {
+	// Default to console logging
+	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+	})
+	globalLogger = &Logger{
+		logger: slog.New(handler),
+		file:   os.Stdout,
 	}
-	return false
 }
 
-// init creates the global debug logger
-func init() {
-	var err error
-	if isTestMode() {
-		// In test mode, log to stdout
-		globalLogger = &Logger{
-			file:   os.Stdout,
-			logger: log.New(os.Stdout, "[DEBUG] ", log.LstdFlags|log.Lmicroseconds),
-		}
-	} else {
-		// In normal mode, log to file
-		globalLogger, err = NewLogger("twist_debug.log")
-		if err != nil {
-			// Disable logging if we can't create the log file (don't write to stdout in TUI mode)
-			globalLogger = nil
-		}
+// SetFileOutput configures the logger to write to the specified file
+func SetFileOutput(filename string) error {
+	logger, err := NewLogger(filename)
+	if err != nil {
+		return err
 	}
+
+	// Close existing file if it's not stdout
+	if globalLogger != nil && globalLogger.file != os.Stdout {
+		globalLogger.file.Close()
+	}
+
+	globalLogger = logger
+	return nil
 }
 
 // NewLogger creates a new debug logger that writes to the specified file
@@ -53,42 +49,48 @@ func NewLogger(filename string) (*Logger, error) {
 		return nil, err
 	}
 
-	logger := log.New(file, "", log.LstdFlags|log.Lmicroseconds)
+	handler := slog.NewTextHandler(file, &slog.HandlerOptions{
+		Level: slog.LevelDebug,
+		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+			// Customize timestamp format to match old format
+			if a.Key == slog.TimeKey {
+				return slog.Attr{
+					Key:   slog.TimeKey,
+					Value: slog.StringValue(a.Value.Time().Format("2006/01/02 15:04:05.000000")),
+				}
+			}
+			return a
+		},
+	})
 
 	return &Logger{
+		logger: slog.New(handler),
 		file:   file,
-		logger: logger,
 	}, nil
 }
 
-// Log writes a debug message with caller information
-func Log(format string, args ...interface{}) {
+// Standard logging methods
+func Debug(msg string, args ...any) {
 	if globalLogger != nil {
-		globalLogger.logger.Printf(format, args...)
+		globalLogger.logger.Debug(msg, args...)
 	}
 }
 
-// LogError writes an error message
-func LogError(err error, context string) {
-	Log("ERROR in %s: %v", context, err)
-}
-
-// LogFunction logs function entry and exit
-func LogFunction(funcName string) func() {
-	Log("ENTER %s", funcName)
-	start := time.Now()
-	return func() {
-		duration := time.Since(start)
-		Log("EXIT %s (took %v)", funcName, duration)
+func Info(msg string, args ...any) {
+	if globalLogger != nil {
+		globalLogger.logger.Info(msg, args...)
 	}
 }
 
-// LogState logs application state changes
-func LogState(component, state string, details ...interface{}) {
-	if len(details) > 0 {
-		Log("STATE %s: %s - %v", component, state, details)
-	} else {
-		Log("STATE %s: %s", component, state)
+func Warn(msg string, args ...any) {
+	if globalLogger != nil {
+		globalLogger.logger.Warn(msg, args...)
+	}
+}
+
+func Error(msg string, args ...any) {
+	if globalLogger != nil {
+		globalLogger.logger.Error(msg, args...)
 	}
 }
 
@@ -107,8 +109,8 @@ func LogDataChunk(direction string, data []byte) {
 		logFile.Close()
 	} else {
 		// Fallback to regular debug log if we can't open the data chunks file
-		Log("ERROR: Could not open data chunks log: %v", err)
-		Log("%s: %q", direction, string(data))
+		Error("Could not open data chunks log", "error", err)
+		Debug("Raw data", "direction", direction, "data", string(data))
 	}
 }
 

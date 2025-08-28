@@ -36,7 +36,7 @@ func (h *HelpMenu) GetMenuItems() []twistComponents.MenuItem {
 func (h *HelpMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in HelpMenu.HandleMenuAction: %v", r)
+			debug.Error("PANIC in HelpMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -48,7 +48,7 @@ func (h *HelpMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "User Manual":
 		return h.handleUserManual(app)
 	default:
-		debug.Log("HelpMenu: Unknown action '%s'", action)
+		debug.Info("HelpMenu: Unknown action", "action", action)
 		return nil
 	}
 }

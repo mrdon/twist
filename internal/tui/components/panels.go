@@ -586,25 +586,24 @@ func (pc *PanelComponent) UpdateLeftPanelSize() {
 // loadPlayerStatsFromAPI loads current player stats from the live parser
 func (pc *PanelComponent) loadPlayerStatsFromAPI() {
 	if pc.proxyAPI == nil {
-		debug.Log("loadPlayerStatsFromAPI: proxyAPI is nil")
+		debug.Info("loadPlayerStatsFromAPI: proxyAPI is nil")
 		return
 	}
 
 	// Get player stats from API (single source of truth)
 	playerStats, err := pc.proxyAPI.GetPlayerStats()
 	if err != nil {
-		debug.Log("loadPlayerStatsFromAPI: failed to load player stats: %v", err)
+		debug.Info("loadPlayerStatsFromAPI: failed to load player stats", "error", err)
 		return
 	}
 
 	if playerStats != nil {
 		// Store and display the stats
 		pc.lastPlayerStats = playerStats
-		debug.Log("loadPlayerStatsFromAPI: successfully loaded stats - credits: %d, turns: %d, sector: %d",
-			playerStats.Credits, playerStats.Turns, playerStats.CurrentSector)
+		debug.Info("loadPlayerStatsFromAPI: successfully loaded stats", "credits", playerStats.Credits, "turns", playerStats.Turns, "sector", playerStats.CurrentSector)
 		pc.UpdatePlayerStats(*pc.lastPlayerStats)
 	} else {
-		debug.Log("loadPlayerStatsFromAPI: playerStats is nil")
+		debug.Info("loadPlayerStatsFromAPI: playerStats is nil")
 	}
 }
 
@@ -615,26 +614,19 @@ func (pc *PanelComponent) HasDetailedPlayerStats() bool {
 
 // UpdatePlayerStatsSector updates the current sector in existing player stats and refreshes display
 func (pc *PanelComponent) UpdatePlayerStatsSector(sectorNumber int) {
-	debug.Log("UpdatePlayerStatsSector: called with sector %d, lastPlayerStats is nil: %v", sectorNumber, pc.lastPlayerStats == nil)
-
 	if pc.lastPlayerStats == nil {
 		// First sector change - try to load from API
-		debug.Log("UpdatePlayerStatsSector: attempting to load from API")
 		pc.loadPlayerStatsFromAPI()
 		if pc.lastPlayerStats != nil {
 			// Successfully loaded from API, update sector and display
 			pc.lastPlayerStats.CurrentSector = sectorNumber
-			debug.Log("UpdatePlayerStatsSector: loaded from API and updating sector to %d", sectorNumber)
 			pc.UpdatePlayerStats(*pc.lastPlayerStats)
-		} else {
-			debug.Log("UpdatePlayerStatsSector: failed to load from API")
 		}
 		return
 	}
 
 	// Update the sector in the existing stats
 	pc.lastPlayerStats.CurrentSector = sectorNumber
-	debug.Log("UpdatePlayerStatsSector: updating existing stats sector to %d", sectorNumber)
 
 	// Refresh the display with updated stats
 	pc.UpdatePlayerStats(*pc.lastPlayerStats)

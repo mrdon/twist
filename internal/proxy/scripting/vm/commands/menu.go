@@ -91,7 +91,7 @@ func GetParamBool(vm types.VMInterface, param *types.CommandParam) bool {
 func cmdAddMenu(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdAddMenu: %v", r)
+			debug.Error("PANIC in cmdAddMenu", "error", r)
 		}
 	}()
 
@@ -133,7 +133,7 @@ func cmdAddMenu(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("ADDMENU failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for ADDMENU")
+		debug.Info("Terminal menu manager not available for ADDMENU")
 	}
 
 	return nil
@@ -144,7 +144,7 @@ func cmdAddMenu(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdOpenMenu(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdOpenMenu: %v", r)
+			debug.Error("PANIC in cmdOpenMenu", "error", r)
 		}
 	}()
 
@@ -162,7 +162,7 @@ func cmdOpenMenu(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("OPENMENU failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for OPENMENU")
+		debug.Info("Terminal menu manager not available for OPENMENU")
 	}
 
 	return nil
@@ -173,7 +173,7 @@ func cmdOpenMenu(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdCloseMenu(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdCloseMenu: %v", r)
+			debug.Error("PANIC in cmdCloseMenu", "error", r)
 		}
 	}()
 
@@ -191,7 +191,7 @@ func cmdCloseMenu(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("CLOSEMENU failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for CLOSEMENU")
+		debug.Info("Terminal menu manager not available for CLOSEMENU")
 	}
 
 	return nil
@@ -202,7 +202,7 @@ func cmdCloseMenu(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdGetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdGetMenuValue: %v", r)
+			debug.Error("PANIC in cmdGetMenuValue", "error", r)
 		}
 	}()
 
@@ -242,7 +242,7 @@ func cmdGetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdSetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdSetMenuValue: %v", r)
+			debug.Error("PANIC in cmdSetMenuValue", "error", r)
 		}
 	}()
 
@@ -261,7 +261,7 @@ func cmdSetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("SETMENUVALUE failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for SETMENUVALUE")
+		debug.Info("Terminal menu manager not available for SETMENUVALUE")
 	}
 
 	return nil
@@ -272,7 +272,7 @@ func cmdSetMenuValue(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdSetMenuHelp(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdSetMenuHelp: %v", r)
+			debug.Error("PANIC in cmdSetMenuHelp", "error", r)
 		}
 	}()
 
@@ -291,7 +291,7 @@ func cmdSetMenuHelp(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("SETMENUHELP failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for SETMENUHELP")
+		debug.Info("Terminal menu manager not available for SETMENUHELP")
 	}
 
 	return nil
@@ -302,7 +302,7 @@ func cmdSetMenuHelp(vm types.VMInterface, params []*types.CommandParam) error {
 func cmdSetMenuOptions(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdSetMenuOptions: %v", r)
+			debug.Error("PANIC in cmdSetMenuOptions", "error", r)
 		}
 	}()
 
@@ -321,7 +321,7 @@ func cmdSetMenuOptions(vm types.VMInterface, params []*types.CommandParam) error
 			return fmt.Errorf("SETMENUOPTIONS failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for SETMENUOPTIONS")
+		debug.Info("Terminal menu manager not available for SETMENUOPTIONS")
 	}
 
 	return nil
@@ -332,7 +332,7 @@ func cmdSetMenuOptions(vm types.VMInterface, params []*types.CommandParam) error
 func cmdSetMenuKey(vm types.VMInterface, params []*types.CommandParam) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in cmdSetMenuKey: %v", r)
+			debug.Error("PANIC in cmdSetMenuKey", "error", r)
 		}
 	}()
 
@@ -350,7 +350,7 @@ func cmdSetMenuKey(vm types.VMInterface, params []*types.CommandParam) error {
 			return fmt.Errorf("SETMENUKEY failed: %v", err)
 		}
 	} else {
-		debug.Log("Terminal menu manager not available for SETMENUKEY")
+		debug.Info("Terminal menu manager not available for SETMENUKEY")
 	}
 
 	return nil
@@ -365,7 +365,7 @@ func getTerminalMenuManager(gameInterface types.GameInterface) interface{} {
 	}); ok {
 		return gameAdapter.GetMenuManager()
 	}
-	debug.Log("GameInterface does not support GetMenuManager()")
+	debug.Info("GameInterface does not support GetMenuManager()")
 	return nil
 }
 
@@ -385,7 +385,7 @@ func addScriptMenu(menuManager interface{}, menu *ScriptMenu) error {
 			menu.CloseMenu,
 		)
 	}
-	debug.Log("Adding script menu: %s (hotkey: %c)", menu.Name, menu.Hotkey)
+	debug.Info("Adding script menu", "name", menu.Name, "hotkey", menu.Hotkey)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -395,7 +395,7 @@ func openScriptMenu(menuManager interface{}, menuName string) error {
 	}); ok {
 		return tmm.OpenScriptMenu(menuName)
 	}
-	debug.Log("Opening script menu: %s", menuName)
+	debug.Info("Opening script menu", "menuName", menuName)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -405,7 +405,7 @@ func closeScriptMenu(menuManager interface{}, menuName string) error {
 	}); ok {
 		return tmm.CloseScriptMenu(menuName)
 	}
-	debug.Log("Closing script menu: %s", menuName)
+	debug.Info("Closing script menu", "menuName", menuName)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -415,7 +415,7 @@ func getScriptMenuValue(menuManager interface{}, menuName string) (string, error
 	}); ok {
 		return tmm.GetScriptMenuValue(menuName)
 	}
-	debug.Log("Getting value for menu: %s", menuName)
+	debug.Info("Getting value for menu", "menuName", menuName)
 	return "", fmt.Errorf("menu manager interface not available")
 }
 
@@ -425,7 +425,7 @@ func setScriptMenuValue(menuManager interface{}, menuName, value string) error {
 	}); ok {
 		return tmm.SetScriptMenuValue(menuName, value)
 	}
-	debug.Log("Setting value for menu %s: %s", menuName, value)
+	debug.Info("Setting value for menu", "menuName", menuName, "value", value)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -435,7 +435,7 @@ func setScriptMenuHelp(menuManager interface{}, menuName, helpText string) error
 	}); ok {
 		return tmm.SetScriptMenuHelp(menuName, helpText)
 	}
-	debug.Log("Setting help for menu %s: %s", menuName, helpText)
+	debug.Info("Setting help for menu", "menuName", menuName, "helpText", helpText)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -445,7 +445,7 @@ func setScriptMenuOptions(menuManager interface{}, menuName, options string) err
 	}); ok {
 		return tmm.SetScriptMenuOptions(menuName, options)
 	}
-	debug.Log("Setting options for menu %s: %s", menuName, options)
+	debug.Info("Setting options for menu", "menuName", menuName, "options", options)
 	return fmt.Errorf("menu manager interface not available")
 }
 
@@ -456,6 +456,6 @@ func setMenuKey(menuManager interface{}, newKey rune) error {
 		tmm.SetMenuKey(newKey)
 		return nil
 	}
-	debug.Log("Setting menu key to: %c", newKey)
+	debug.Info("Setting menu key", "newKey", newKey)
 	return fmt.Errorf("menu manager interface not available")
 }

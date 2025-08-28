@@ -38,6 +38,12 @@ func SetupRealComponents(t *testing.T) *IntegrationTestSetup {
 	// Create real VM
 	realVM := vm.NewVirtualMachine(gameAdapter)
 
+	// Initialize CURRENTLINE system constant for integration tests
+	// This ensures tests that use cutText on CURRENTLINE have valid data to work with
+	if systemConstants := gameAdapter.GetSystemConstants(); systemConstants != nil {
+		systemConstants.UpdateCurrentLine("Command [TL=00:00:00]:")
+	}
+
 	setup := &IntegrationTestSetup{
 		DB:          db,
 		GameAdapter: gameAdapter,

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"twist/internal/debug"
 )
 
 // EventBus implements the IEventBus interface for module communication
@@ -76,6 +77,7 @@ func (eb *EventBus) Fire(event Event) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
+					debug.Error("PANIC recovered in event handler", "function", "Fire", "event_type", event.Type, "error", r)
 				}
 			}()
 			handler(event)
@@ -103,6 +105,7 @@ func (eb *EventBus) FireAsync(event Event) {
 		go func(id string, h EventHandler) {
 			defer func() {
 				if r := recover(); r != nil {
+					debug.Error("PANIC recovered in async event handler", "function", "FireAsync", "subscription_id", id, "event_type", event.Type, "error", r)
 				}
 			}()
 			h(event)

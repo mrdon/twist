@@ -38,7 +38,7 @@ func (s *SessionMenu) GetMenuItems() []twistComponents.MenuItem {
 func (s *SessionMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in SessionMenu.HandleMenuAction: %v", r)
+			debug.Error("PANIC in SessionMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -54,7 +54,7 @@ func (s *SessionMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Quit":
 		return s.handleQuit(app)
 	default:
-		debug.Log("SessionMenu: Unknown action '%s'", action)
+		debug.Info("SessionMenu: Unknown action", "action", action)
 		return nil
 	}
 }

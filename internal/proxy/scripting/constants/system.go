@@ -33,16 +33,16 @@ func (sc *SystemConstants) GetConstant(name string) (*types.Value, bool) {
 	sc.updateDynamicConstant(name)
 
 	value, exists := sc.constants[name]
-	
+
 	// Log CURRENTLINE access for debugging
 	if name == "CURRENTLINE" {
 		if exists {
-			debug.Log("CURRENTLINE ACCESSED: returning value=%q", value.String)
+			debug.Info("CURRENTLINE ACCESSED: returning value", "value", value.String)
 		} else {
-			debug.Log("CURRENTLINE ACCESSED: not found in constants")
+			debug.Info("CURRENTLINE ACCESSED: not found in constants")
 		}
 	}
-	
+
 	if exists {
 		return value.Clone(), true
 	}
@@ -329,8 +329,8 @@ func (sc *SystemConstants) UpdateCurrentLine(text string) {
 	// CURRENTLINE contains text with ANSI codes stripped
 	strippedText := ansi.StripString(text)
 	sc.constants["CURRENTLINE"] = types.NewStringValue(strippedText)
-	
-	debug.Log("CURRENTLINE UPDATED: systemConstants=%p, original=%q, stripped=%q", sc, text, strippedText)
+
+	debug.Info("CURRENTLINE UPDATED", "systemConstants", sc, "original", text, "stripped", strippedText)
 
 	// Update raw packet if needed
 	sc.constants["RAWPACKET"] = types.NewStringValue(text)

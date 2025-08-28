@@ -28,7 +28,7 @@ func (v *ViewMenu) GetMenuItems() []twistComponents.MenuItem {
 func (v *ViewMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Log("PANIC in ViewMenu.HandleMenuAction: %v", r)
+			debug.Error("PANIC in ViewMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -44,7 +44,7 @@ func (v *ViewMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Panels":
 		return v.handlePanels(app)
 	default:
-		debug.Log("ViewMenu: Unknown action '%s'", action)
+		debug.Info("ViewMenu: Unknown action", "action", action)
 		return nil
 	}
 }
@@ -99,10 +99,10 @@ func (v *ViewMenu) handleFullScreen(app AppInterface) error {
 func (v *ViewMenu) handlePanels(app AppInterface) error {
 	if app.GetPanelsVisible() {
 		app.HidePanels()
-		debug.Log("ViewMenu: Hiding panels")
+		debug.Info("ViewMenu: Hiding panels")
 	} else {
 		app.ShowPanels()
-		debug.Log("ViewMenu: Showing panels")
+		debug.Info("ViewMenu: Showing panels")
 	}
 	return nil
 }

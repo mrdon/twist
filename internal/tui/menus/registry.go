@@ -50,7 +50,7 @@ func (mr *MenuRegistry) initializeMenus() {
 			Name:     "Session",
 			Shortcut: "Alt+S",
 			Items: []twistComponents.MenuItem{
-				{Label: "Connect", Shortcut: "Alt+C"},
+				{Label: "Connect", Shortcut: "Alt+C", CreatesModal: true},
 				{Label: "Disconnect", Shortcut: "Alt+D"},
 				{Label: "Quit", Shortcut: "Alt+Q"},
 			},

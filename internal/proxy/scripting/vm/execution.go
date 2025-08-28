@@ -43,6 +43,15 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 	}
 
 	node := ee.ast.Children[ee.vm.state.Position]
+
+	// Skip labels during execution (TWX compatibility)
+	// In TWX, labels are pure metadata and don't generate executable code
+	// When we encounter a label, just skip it and continue to the next instruction
+	if node.Type == parser.NodeLabel {
+		ee.vm.state.Position++
+		return ee.ExecuteStep() // Continue to next executable instruction
+	}
+
 	err := ee.executeNode(node)
 
 	// Handle script pause (like TWX caPause) - don't advance position for input pauses

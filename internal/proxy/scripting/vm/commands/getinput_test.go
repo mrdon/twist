@@ -51,6 +51,7 @@ func (m *MockVMInterface) Pause() error {
 func (m *MockVMInterface) GetVarParam(name string) *types.VarParam           { return nil }
 func (m *MockVMInterface) SetVarParam(name string, varParam *types.VarParam) {}
 func (m *MockVMInterface) Goto(label string) error                           { return nil }
+func (m *MockVMInterface) GotoAndExecuteSync(label string) error             { return nil }
 func (m *MockVMInterface) Gosub(label string) error                          { return nil }
 func (m *MockVMInterface) Return() error                                     { return nil }
 func (m *MockVMInterface) Halt() error                                       { return nil }

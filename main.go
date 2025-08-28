@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/mattn/go-isatty"
+	"twist/internal/debug"
 	_ "twist/internal/proxy" // Import proxy package to register Connect implementation
 	"twist/internal/tui"
 )
@@ -16,6 +17,11 @@ var (
 )
 
 func main() {
+	// Configure debug logging to file for main application
+	if err := debug.SetFileOutput("twist_debug.log"); err != nil {
+		fmt.Printf("Warning: Could not configure debug logging to file: %v\n", err)
+	}
+
 	// Check if we have a proper TTY
 	if !isatty.IsTerminal(os.Stdout.Fd()) {
 		fmt.Println("Trade Wars 2002 Client")

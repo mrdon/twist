@@ -9,9 +9,13 @@ Testing:
 
 Debugging:
 * Always keep the internal/debug package import in all files
-* Use debug.Log() for debugging during development
-* Remove debug.Log() calls before final commits, except for critical error recovery (panics)
-* Keep debug.Log() calls in panic recovery blocks: `defer func() { if r := recover() { debug.Log("PANIC: %v", r) } }()`
+* Use structured logging with debug.Debug(), debug.Info(), debug.Warn(), debug.Error()
+* Use key-value pairs for structured logging: `debug.Info("Processing user input", "user", username, "command", cmd)`
+* Use debug.Debug() for low-level details that can be filtered out in production
+* Use debug.Info() for important application events and flow tracking
+* Use debug.Warn() for potential issues or unusual conditions
+* Use debug.Error() for errors and panic recovery: `defer func() { if r := recover() { debug.Error("PANIC in function", "function", "SomeFunction", "error", r) } }()`
+* Logging output: defaults to console (tests, utilities), writes to twist_debug.log when main application runs
 
 UI Development (tview):
 * NEVER call QueueUpdateDraw() from within another QueueUpdateDraw() callback - this causes deadlocks
