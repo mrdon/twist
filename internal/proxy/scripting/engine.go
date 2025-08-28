@@ -545,12 +545,6 @@ func (e *Engine) GetRunningScriptsInternal() []*Script {
 
 // ProcessText processes incoming text through triggers
 func (e *Engine) ProcessText(text string) error {
-
-	// Process global triggers first
-	if err := e.triggerManager.ProcessText(text); err != nil {
-		return err
-	}
-
 	// Strip ANSI escape sequences using streaming stripper to handle chunks properly
 	// This ensures waitfor triggers match properly against clean text
 	strippedText := e.ansiStripper.StripChunk(text)
@@ -571,8 +565,11 @@ func (e *Engine) ProcessText(text string) error {
 }
 
 // ProcessTextLine processes incoming text line through triggers
-func (e *Engine) ProcessTextLine(line string) error {
-	return e.triggerManager.ProcessTextLine(line)
+// Returns (matched, error) - matched=true if any TextLineTrigger fired
+// Note: Triggers are handled at VM level, this just returns false to indicate no engine-level triggers fired
+func (e *Engine) ProcessTextLine(line string) (bool, error) {
+	// Engine-level trigger processing removed - triggers are handled per-VM
+	return false, nil
 }
 
 // ProcessTextOut processes outgoing text through triggers

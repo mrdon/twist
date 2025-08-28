@@ -15,7 +15,7 @@ import (
 // External script engine interface from scripting package
 type ExternalScriptEngine interface {
 	ProcessText(text string) error
-	ProcessTextLine(line string) error
+	ProcessTextLine(line string) (bool, error)
 	ActivateTriggers() error
 	ProcessAutoText(text string) error
 	UpdateCurrentLine(text string) error
@@ -30,7 +30,7 @@ func (a *scriptEngineAdapter) ProcessText(text string) error {
 	return a.engine.ProcessText(text)
 }
 
-func (a *scriptEngineAdapter) ProcessTextLine(line string) error {
+func (a *scriptEngineAdapter) ProcessTextLine(line string) (bool, error) {
 	return a.engine.ProcessTextLine(line)
 }
 
@@ -48,7 +48,7 @@ func (a *scriptEngineAdapter) UpdateCurrentLine(text string) error {
 
 // ScriptManager interface for script processing
 type ScriptManager interface {
-	ProcessGameLine(line string) error
+	ProcessGameLine(line string) (bool, error)
 	GetEngine() interfaces.ScriptEngine // Return properly typed interface
 }
 

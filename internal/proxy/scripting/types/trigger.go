@@ -148,6 +148,7 @@ func (t *TextLineTrigger) Matches(input string) bool {
 
 // Execute executes the trigger action
 func (t *TextLineTrigger) Execute(vm VMInterface) error {
+	debug.Info("TEXTLINE TRIGGER EXECUTING", "id", t.ID, "label", t.Label, "response", t.Response)
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
 			return err
@@ -166,8 +167,8 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 				return vm.Echo(message)
 			}
 		}
-		// Execute trigger handlers synchronously like TWX does
-		// TWX creates nested execution context for triggers
+		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
+		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
 	}
 
@@ -191,8 +192,8 @@ func (t *TextOutTrigger) Matches(input string) bool {
 // Execute executes the trigger action
 func (t *TextOutTrigger) Execute(vm VMInterface) error {
 	if t.Label != "" {
-		// Execute trigger handlers synchronously like TWX does
-		// TWX creates nested execution context for triggers
+		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
+		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
 	}
 	return nil
@@ -214,8 +215,8 @@ func (t *DelayTrigger) Matches(input string) bool {
 // Execute executes the trigger action
 func (t *DelayTrigger) Execute(vm VMInterface) error {
 	if t.Label != "" {
-		// Execute trigger handlers synchronously like TWX does
-		// TWX creates nested execution context for triggers
+		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
+		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
 	}
 	return nil
@@ -241,8 +242,8 @@ func (t *EventTrigger) Execute(vm VMInterface) error {
 	}
 
 	if t.Label != "" {
-		// Execute trigger handlers synchronously like TWX does
-		// TWX creates nested execution context for triggers
+		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
+		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
 	}
 
@@ -300,4 +301,23 @@ func (t *AutoTextTrigger) Execute(vm VMInterface) error {
 	}
 
 	return nil
+}
+
+// TriggerManagerInterface defines the interface for managing triggers (matches TWX per-script design)
+type TriggerManagerInterface interface {
+	// Trigger management
+	AddTrigger(trigger TriggerInterface) error
+	RemoveTrigger(id string) error
+	RemoveAllTriggers() error
+	GetTrigger(id string) TriggerInterface
+	
+	// Trigger processing
+	ProcessText(text string) error
+	ProcessTextLine(line string) (bool, error)
+	ProcessTextOut(text string) error
+	ProcessDelayTriggers() error
+	
+	// Trigger queries
+	HasTriggers() bool
+	GetTriggerCount() int
 }

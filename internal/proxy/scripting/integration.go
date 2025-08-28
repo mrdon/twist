@@ -459,7 +459,8 @@ func (sm *ScriptManager) ProcessGameText(text string) error {
 }
 
 // ProcessGameLine processes incoming game line through triggers
-func (sm *ScriptManager) ProcessGameLine(line string) error {
+// Returns (matched, error) - matched=true if any TextLineTrigger fired
+func (sm *ScriptManager) ProcessGameLine(line string) (bool, error) {
 	return sm.engine.ProcessTextLine(line)
 }
 

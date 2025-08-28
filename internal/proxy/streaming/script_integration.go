@@ -8,7 +8,7 @@ type ScriptEngine interface {
 	ProcessText(text string) error
 
 	// TextLineEvent processes text line events (mirrors Pascal TWXInterpreter.TextLineEvent)
-	ProcessTextLine(line string) error
+	ProcessTextLine(line string) (bool, error)
 
 	// ActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
 	ActivateTriggers() error
@@ -61,16 +61,13 @@ func (sep *ScriptEventProcessor) FireTextEvent(text string, blockExtended bool) 
 }
 
 // FireTextLineEvent fires a text line event (mirrors Pascal TWXInterpreter.TextLineEvent)
-func (sep *ScriptEventProcessor) FireTextLineEvent(line string, blockExtended bool) error {
+// Returns (matched, error) - matched=true if any TextLineTrigger fired
+func (sep *ScriptEventProcessor) FireTextLineEvent(line string, blockExtended bool) (bool, error) {
 	if !sep.IsEnabled() {
-		return nil
+		return false, nil
 	}
 
-	if err := sep.scriptEngine.ProcessTextLine(line); err != nil {
-		return err
-	}
-
-	return nil
+	return sep.scriptEngine.ProcessTextLine(line)
 }
 
 // FireActivateTriggers activates script triggers (mirrors Pascal TWXInterpreter.ActivateTriggers)
@@ -111,13 +108,17 @@ func (sep *ScriptEventProcessor) ProcessLineWithScriptEvents(line string) error 
 	// AutoTextEvent is NOT fired for complete lines, only for prompts
 
 	// Fire TextLineEvent (mirrors Pascal ProcessLine)
-	if err := sep.FireTextLineEvent(line, false); err != nil {
+	textLineTriggerFired, err := sep.FireTextLineEvent(line, false)
+	if err != nil {
 		return err
 	}
 
-	// Fire TextEvent (mirrors Pascal ProcessPrompt)
-	if err := sep.FireTextEvent(line, false); err != nil {
-		return err
+	// If a TextLineTrigger fired, skip Text event processing (waitfor) - matches TWX behavior
+	if !textLineTriggerFired {
+		// Fire TextEvent (mirrors Pascal ProcessPrompt)
+		if err := sep.FireTextEvent(line, false); err != nil {
+			return err
+		}
 	}
 
 	// Activate triggers (mirrors Pascal ProcessLine end)

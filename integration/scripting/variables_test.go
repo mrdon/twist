@@ -35,7 +35,7 @@ func TestSaveVarCommand_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"Saved string variable: Hello, World!",
-		"Saved number variable: 42.5",
+		"Saved number variable: 43",  // 42.5 rounded to 43
 		"Saved empty variable: []",
 	}
 
@@ -103,8 +103,8 @@ func TestLoadVarCommand_RealIntegration(t *testing.T) {
 		t.Errorf("Post-load string: got %q, want %q", result2.Output[2], "After load - string: Persistent Value")
 	}
 
-	if len(result2.Output) > 3 && result2.Output[3] != "After load - number: 123.45" {
-		t.Errorf("Post-load number: got %q, want %q", result2.Output[3], "After load - number: 123.45")
+	if len(result2.Output) > 3 && result2.Output[3] != "After load - number: 123" {
+		t.Errorf("Post-load number: got %q, want %q", result2.Output[3], "After load - number: 123")
 	}
 }
 
@@ -176,7 +176,7 @@ func TestVariablePersistence_CrossInstance_RealIntegration(t *testing.T) {
 		t.Errorf("Expected 1 output line from instance 3, got %d", len(result3.Output))
 	}
 
-	expected := "Instance 3 loaded: counter=2 message=Second instance pi=3.14159"
+	expected := "Instance 3 loaded: counter=2 message=Second instance pi=3"  // 3.14159 rounded to 3
 	if len(result3.Output) > 0 && result3.Output[0] != expected {
 		t.Errorf("Final persistence check: got %q, want %q", result3.Output[0], expected)
 	}
@@ -428,7 +428,7 @@ func TestTWXSetVar_OriginalSyntax_RealIntegration(t *testing.T) {
 	expectedOutputs := []string{
 		"Counter: 1",
 		"Message: Hello World",
-		"Decimal: 42.5",
+		"Decimal: 43",  // 42.5 rounded to 43
 		"Empty: []",
 	}
 

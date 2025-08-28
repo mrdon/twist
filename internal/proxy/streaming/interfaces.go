@@ -53,7 +53,7 @@ type IModExtractor interface {
 
 	// Script integration points
 	FireTextEvent(line string, outbound bool)
-	FireTextLineEvent(line string, outbound bool)
+	FireTextLineEvent(line string, outbound bool) (bool, error)
 	ActivateTriggers()
 	FireAutoTextEvent(line string, outbound bool)
 

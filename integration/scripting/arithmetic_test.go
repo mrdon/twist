@@ -76,7 +76,7 @@ func TestTWXArithmetic_WithVariables_RealIntegration(t *testing.T) {
 	expectedOutputs := []string{
 		"Base after increment: 125", // 100 + 25
 		"Base after multiply: 375",  // 125 * 3
-		"Base after halve: 187.5",   // 375 / 2
+		"Base after halve: 188",     // 375 / 2 = 187.5, rounded to 188
 	}
 
 	if len(result.Output) != 3 {
@@ -119,9 +119,9 @@ func TestArithmetic_DecimalPrecision_RealIntegration(t *testing.T) {
 	}
 
 	expectedOutputs := []string{
-		"Subtotal: 59.97", // 19.99 * 3
-		"Tax: 4.7976",     // 59.97 * 0.08
-		"Total: 64.7676",  // 59.97 + 4.7976
+		"Subtotal: 60",    // 19.99 * 3 = 59.97, rounded to 60
+		"Tax: 5",          // 59.97 * 0.08 = 4.7976, rounded to 5
+		"Total: 65",       // 59.97 + 4.7976 = 64.7676, rounded to 65
 	}
 
 	if len(result.Output) != 3 {
@@ -191,6 +191,53 @@ func TestArithmetic_EdgeCases_RealIntegration(t *testing.T) {
 	for i, expected := range expectedOutputs {
 		if i < len(result.Output) && result.Output[i] != expected {
 			t.Errorf("Edge case output %d: got %q, want %q", i+1, result.Output[i], expected)
+		}
+	}
+}
+
+// TestSetVarArithmeticExpressions tests SETVAR with complex arithmetic expressions (original issue)
+func TestSetVarArithmeticExpressions_RealIntegration(t *testing.T) {
+	tester := NewIntegrationScriptTester(t)
+
+	script := `
+		# Test the original failing case: setVar $price (($startPrice * $buyPerc) / 100)
+		setVar $startPrice 100.0
+		setVar $buyPerc 15
+		setVar $price (($startPrice * $buyPerc) / 100)
+		echo "Price calculation: " $price
+		
+		# Test more complex arithmetic expressions
+		setVar $base 50
+		setVar $multiplier 3
+		setVar $divisor 2
+		setVar $result ((($base * $multiplier) + 10) / $divisor)
+		echo "Complex calculation: " $result
+		
+		# Test with mixed numeric/string variables
+		setVar $num1 "25"
+		setVar $num2 4
+		setVar $mixed ($num1 * $num2)
+		echo "Mixed calculation: " $mixed
+	`
+
+	result := tester.ExecuteScript(script)
+	if result.Error != nil {
+		t.Fatalf("SETVAR arithmetic expressions script failed: %v", result.Error)
+	}
+
+	expectedOutputs := []string{
+		"Price calculation: 15",       // (100.0 * 15) / 100 = 1500 / 100 = 15
+		"Complex calculation: 80",     // (((50 * 3) + 10) / 2) = ((150 + 10) / 2) = (160 / 2) = 80
+		"Mixed calculation: 100",      // "25" * 4 = 100 (string "25" converted to number)
+	}
+
+	if len(result.Output) != 3 {
+		t.Errorf("Expected 3 output lines, got %d: %v", len(result.Output), result.Output)
+	}
+
+	for i, expected := range expectedOutputs {
+		if i < len(result.Output) && result.Output[i] != expected {
+			t.Errorf("SETVAR arithmetic output %d: got %q, want %q", i+1, result.Output[i], expected)
 		}
 	}
 }

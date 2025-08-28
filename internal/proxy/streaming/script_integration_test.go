@@ -28,9 +28,9 @@ func (m *MockScriptEngine) ProcessText(text string) error {
 	return nil
 }
 
-func (m *MockScriptEngine) ProcessTextLine(line string) error {
+func (m *MockScriptEngine) ProcessTextLine(line string) (bool, error) {
 	m.textLineEvents = append(m.textLineEvents, line)
-	return nil
+	return false, nil
 }
 
 func (m *MockScriptEngine) ActivateTriggers() error {
@@ -88,7 +88,7 @@ func TestScriptEventProcessor_FireTextLineEvent(t *testing.T) {
 	processor := NewScriptEventProcessor(mockEngine)
 
 	testLine := "Test text line event"
-	err := processor.FireTextLineEvent(testLine, false)
+	_, err := processor.FireTextLineEvent(testLine, false)
 
 	if err != nil {
 		t.Errorf("Unexpected error firing text line event: %v", err)
@@ -188,7 +188,7 @@ func TestScriptEventProcessor_DisabledEngine(t *testing.T) {
 		t.Errorf("Unexpected error with disabled engine: %v", err)
 	}
 
-	err = processor.FireTextLineEvent("test", false)
+	_, err = processor.FireTextLineEvent("test", false)
 	if err != nil {
 		t.Errorf("Unexpected error with disabled engine: %v", err)
 	}

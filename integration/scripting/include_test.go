@@ -188,10 +188,10 @@ echo "Include test completed"
 
 	expectedOutputs := []string{
 		"Testing constants and utilities",
-		"PI = 3.14159",
+		"PI = 3",      // 3.14159 rounded to 3
 		"Radius: 5",
-		"Radius squared: 25",
-		"PI = 3.14159",
+		"Radius squared: 25", 
+		"PI = 3",      // 3.14159 rounded to 3
 		"Include test completed",
 	}
 	tester.AssertOutput(result, expectedOutputs)

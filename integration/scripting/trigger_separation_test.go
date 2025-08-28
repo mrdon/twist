@@ -25,13 +25,12 @@ func TestTriggerHandlerSeparation(t *testing.T) {
 		t.Fatalf("Script execution failed: %v", result.Error)
 	}
 
-	// Check that all expected output was executed (including handler code during normal flow)
-	// In TWX, labels are transparent and execution flows through them
+	// Check that execution stops at pause and doesn't continue
+	// In TWX, pause stops execution until triggered
 	expectedOutput := []string{
 		"Setting up trigger",
 		"After setting trigger, now pausing",
-		"This should execute after pause",
-		"HANDLER EXECUTED - This should NOT run during normal flow!", // This WILL execute in TWX
+		// Execution stops at pause - no further output expected
 	}
 
 	for _, expected := range expectedOutput {
@@ -47,6 +46,6 @@ func TestTriggerHandlerSeparation(t *testing.T) {
 		}
 	}
 
-	fmt.Printf("Test passed - TWX-compatible label behavior: execution flows through labels\n")
+	fmt.Printf("Test passed - TWX-compatible pause behavior: execution stops at pause\n")
 	fmt.Printf("Output was: %v\n", result.Output)
 }

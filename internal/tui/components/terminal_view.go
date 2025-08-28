@@ -777,16 +777,24 @@ func (tv *TerminalView) InputHandler() func(event *tcell.EventKey, setFocus func
 
 		switch event.Key() {
 		case tcell.KeyPgUp:
-			// Page up - scroll up by page height
-			newRow := tv.scrollOffsetRow - height
+			// Page up - scroll up by two-thirds of page height
+			scrollAmount := height * 2 / 3
+			if scrollAmount < 1 {
+				scrollAmount = 1
+			}
+			newRow := tv.scrollOffsetRow - scrollAmount
 			if newRow < 0 {
 				newRow = 0
 			}
 			tv.scrollOffsetRow = newRow
 
 		case tcell.KeyPgDn:
-			// Page down - scroll down by page height
-			newRow := tv.scrollOffsetRow + height
+			// Page down - scroll down by two-thirds of page height
+			scrollAmount := height * 2 / 3
+			if scrollAmount < 1 {
+				scrollAmount = 1
+			}
+			newRow := tv.scrollOffsetRow + scrollAmount
 			if newRow+height > totalLines {
 				newRow = totalLines - height
 				if newRow < 0 {

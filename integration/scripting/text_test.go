@@ -175,9 +175,9 @@ func TestTextCommands_NumberToStringConversion_RealIntegration(t *testing.T) {
 		t.Errorf("Expected 1 output line, got %d", len(result.Output))
 	}
 
-	// Should convert number to string representation
-	if len(result.Output) > 0 && !strings.Contains(result.Output[0], "42.5") {
-		t.Errorf("ECHO number conversion: got %q, want to contain '42.5'", result.Output[0])
+	// Should convert number to string representation (rounded)
+	if len(result.Output) > 0 && !strings.Contains(result.Output[0], "43") {
+		t.Errorf("ECHO number conversion: got %q, want to contain '43' (42.5 rounded)", result.Output[0])
 	}
 }
 

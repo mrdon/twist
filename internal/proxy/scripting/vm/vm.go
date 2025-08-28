@@ -8,6 +8,7 @@ import (
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting/manager"
 	"twist/internal/proxy/scripting/parser"
+	"twist/internal/proxy/scripting/triggers"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -25,8 +26,8 @@ type VirtualMachine struct {
 	scriptManager *manager.ScriptManager
 
 	// Commands and triggers
-	commands map[string]*types.CommandDef
-	triggers map[string]types.TriggerInterface
+	commands       map[string]*types.CommandDef
+	triggerManager types.TriggerManagerInterface // Per-script trigger manager (matches TWX architecture)
 
 	// Output handlers
 	outputHandler func(string) error
@@ -57,9 +58,11 @@ func NewVirtualMachine(gameInterface types.GameInterface) *VirtualMachine {
 		callStack:     NewCallStack(),
 		variables:     NewVariableManager(gameInterface),
 		commands:      make(map[string]*types.CommandDef),
-		triggers:      make(map[string]types.TriggerInterface),
 		gameInterface: gameInterface,
 	}
+
+	// Initialize per-script trigger manager (matches TWX architecture)
+	vm.triggerManager = triggers.NewManager(vm)
 
 	// Initialize execution engine
 	vm.execution = NewExecutionEngine(vm)
@@ -108,7 +111,7 @@ func (vm *VirtualMachine) Execute() error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Info("VM.Execute: starting execution loop", "script", scriptName)
+	debug.Info("VM.Execute: starting execution loop", "script", scriptName, "isRunning", vm.state.IsRunning(), "isWaiting", vm.state.IsWaiting(), "isPaused", vm.state.IsPaused(), "position", vm.state.Position)
 
 	for vm.state.IsRunning() && !vm.state.IsWaiting() {
 		debug.Info("VM.Execute: executing step", "script", scriptName, "position", vm.state.Position)
@@ -119,21 +122,12 @@ func (vm *VirtualMachine) Execute() error {
 			return err
 		}
 
-		// Handle pause state
+		// Handle pause state - TWX compatibility: truly pause and wait for triggers
 		if vm.state.IsPaused() {
-			debug.Info("VM.Execute: detected PAUSED state", "script", scriptName, "waitingForInput", vm.waitingForInput)
-			// If paused waiting for input, return control to caller
-			// The script manager will handle input collection and resume
-			if vm.waitingForInput {
-				debug.Info("VM.Execute: RETURNING from Execute() - waiting for input", "script", scriptName)
-				return nil
-			}
-
-			debug.Info("VM.Execute: continuing execution after pause (not waiting for input)", "script", scriptName)
-			// For other pause types (like regular pause command), continue automatically
-			// This maintains backwards compatibility with existing test behavior
-			vm.state.SetRunning()
-			vm.state.Position++ // Advance past the pause command
+			debug.Info("VM.Execute: script is PAUSED - waiting for trigger activation", "script", scriptName, "waitingForInput", vm.waitingForInput)
+			// In TWX, PAUSE means stop execution completely and wait for triggers to resume
+			// Do NOT auto-resume - script remains paused until trigger fires or external intervention
+			return nil
 		}
 
 	}
@@ -226,13 +220,19 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 
 	// Jump to the label immediately (no delayed jump)
 	newPos := vm.execution.FindLabel(label)
+
+	Ok, the problem is our login script broke and we don't know the change that did it. Start there, then get back to
+	debugging the port script'
+	debug.Info("Jumping to ", "newPos", newPos, "position", vm.state.Position)
 	if newPos == -1 {
 		return fmt.Errorf("label not found: %s", label)
 	}
 	vm.state.Position = newPos
 
+	debug.Info("About to execute ", "isRunning", vm.state.IsRunning(), "isWaiting", vm.state.IsWaiting(), "isPaused", vm.state.IsPaused(), "position", vm.state.Position)
 	// Execute until we hit a pause, halt, or return
 	for vm.state.IsRunning() && !vm.state.IsWaiting() && !vm.state.IsPaused() {
+		debug.Info("Executing somehow")
 		if err := vm.execution.ExecuteStep(); err != nil {
 			debug.Info("VM.GotoAndExecuteSync: ExecuteStep returned error", "script", scriptName, "error", err)
 			// Restore state on error
@@ -303,7 +303,7 @@ func (vm *VirtualMachine) WaitFor(text string) error {
 	if vm.script != nil {
 		scriptName = vm.script.GetName()
 	}
-	debug.Info("VM.WaitFor: waiting for trigger", "script", scriptName, "trigger", text)
+	debug.Info("VM.WaitFor: waiting for trigger", "script", scriptName, "trigger", text, "currentPosition", vm.state.Position)
 	vm.state.SetWaiting(text)
 	return nil
 }
@@ -454,58 +454,42 @@ func (vm *VirtualMachine) StopScript(scriptID string) error {
 
 // Trigger management
 func (vm *VirtualMachine) SetTrigger(trigger types.TriggerInterface) error {
-	vm.triggers[trigger.GetID()] = trigger
-	return nil
+	return vm.triggerManager.AddTrigger(trigger)
 }
 
 func (vm *VirtualMachine) KillTrigger(triggerID string) error {
-	delete(vm.triggers, triggerID)
-	return nil
+	return vm.triggerManager.RemoveTrigger(triggerID)
 }
 
 func (vm *VirtualMachine) KillAllTriggers() {
-	vm.triggers = make(map[string]types.TriggerInterface)
+	vm.triggerManager.RemoveAllTriggers()
 }
 
 func (vm *VirtualMachine) GetTriggerCount() int {
-	return len(vm.triggers)
+	return vm.triggerManager.GetTriggerCount()
 }
 
 func (vm *VirtualMachine) GetActiveTriggersCount() int {
-	count := 0
-	for _, trigger := range vm.triggers {
-		if trigger.IsActive() {
-			count++
-		}
-	}
-	return count
+	return vm.triggerManager.GetTriggerCount() // TriggerManager only stores active triggers
 }
 
-// Text processing
-func (vm *VirtualMachine) ProcessTriggers(text string) error {
-	for _, trigger := range vm.triggers {
-		if trigger.IsActive() && trigger.Matches(text) {
-			if err := trigger.Execute(vm); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
+// Text processing - ProcessTriggers method removed, logic moved to ProcessIncomingText for TWX compatibility
 
 func (vm *VirtualMachine) ProcessIncomingText(text string) error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
 
-	// Process triggers first
-	if err := vm.ProcessTriggers(text); err != nil {
+	// 1. Process TextLine triggers first (like TWX TextLineEvent)
+	textLineTriggerFired, err := vm.triggerManager.ProcessTextLine(text)
+	if err != nil {
+		debug.Error("VM.ProcessIncomingText: error processing TextLine triggers", "script", scriptName, "error", err)
 		return err
 	}
 
 	// Check if we're waiting for specific text (like TWX WaitFor)
 	if vm.state.IsWaiting() && vm.state.WaitText != "" {
-		scriptName := "unknown"
-		if vm.script != nil {
-			scriptName = vm.script.GetName()
-		}
 		debug.Info("VM.ProcessIncomingText: checking if text contains waitfor trigger", "script", scriptName, "text", text, "waitforTrigger", vm.state.WaitText)
 		// Use substring matching like TWX does with Pos(FWaitText, Text) > 0
 		if strings.Contains(text, vm.state.WaitText) {
@@ -516,6 +500,14 @@ func (vm *VirtualMachine) ProcessIncomingText(text string) error {
 		} else {
 			debug.Info("VM.ProcessIncomingText: trigger not found, still waiting", "script", scriptName)
 		}
+	}
+
+	// 3. Only process Text triggers if TextLine trigger didn't fire (matches TWX behavior)
+	if !textLineTriggerFired {
+		debug.Debug("VM.ProcessIncomingText: processing Text triggers (no TextLineTrigger fired)", "script", scriptName)
+		return vm.triggerManager.ProcessText(text)
+	} else {
+		debug.Debug("VM.ProcessIncomingText: skipping Text triggers (TextLineTrigger fired)", "script", scriptName)
 	}
 
 	return nil

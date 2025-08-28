@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 )
@@ -58,11 +59,9 @@ func (v *Value) ToString() string {
 	case StringType:
 		return v.String
 	case NumberType:
-		// Format like TWX does (integers without decimals)
-		if v.Number == float64(int64(v.Number)) {
-			return fmt.Sprintf("%.0f", v.Number)
-		}
-		return fmt.Sprintf("%g", v.Number)
+		// Format like TWX does - always round decimals to integers for game compatibility
+		// TWX doesn't send decimal numbers to the game, it rounds them
+		return fmt.Sprintf("%.0f", math.Round(v.Number))
 	case ArrayType:
 		return "" // Arrays don't convert to strings directly
 	default:

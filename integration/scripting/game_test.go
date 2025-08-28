@@ -130,18 +130,16 @@ func TestPauseCommand_RealIntegration(t *testing.T) {
 		t.Errorf("Script execution failed: %v", result.Error)
 	}
 
-	// PAUSE should allow script to continue and complete
-	if len(result.Output) != 2 {
-		t.Errorf("Expected 2 output lines, got %d", len(result.Output))
+	// PAUSE should stop execution until triggered/resumed
+	if len(result.Output) != 1 {
+		t.Errorf("Expected 1 output line (paused after first echo), got %d", len(result.Output))
 	}
 
 	if len(result.Output) > 0 && result.Output[0] != "Before pause" {
 		t.Errorf("First echo: got %q, want %q", result.Output[0], "Before pause")
 	}
 
-	if len(result.Output) > 1 && result.Output[1] != "After pause" {
-		t.Errorf("Second echo: got %q, want %q", result.Output[1], "After pause")
-	}
+	// Script should be paused and not continue to "After pause"
 }
 
 // TestHaltCommand_RealIntegration tests HALT command
@@ -354,8 +352,8 @@ func TestGameCommands_NumberToStringConversion_RealIntegration(t *testing.T) {
 		t.Errorf("Sector echo should contain '1234': got %q", result.Output[0])
 	}
 
-	if len(result.Output) > 1 && !strings.Contains(result.Output[1], "5000.5") {
-		t.Errorf("Credits echo should contain '5000.5': got %q", result.Output[1])
+	if len(result.Output) > 1 && !strings.Contains(result.Output[1], "5001") {
+		t.Errorf("Credits echo should contain '5001' (5000.5 rounded): got %q", result.Output[1])
 	}
 }
 

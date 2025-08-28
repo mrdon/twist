@@ -579,10 +579,16 @@ func (p *TWXParser) processLine(line string) {
 	}
 
 	// Fire TextLineEvent as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.TextLineEvent)
-	p.FireTextLineEvent(line, false)
+	textLineTriggerFired, err := p.FireTextLineEvent(line, false)
+	if err != nil {
+		debug.Error("Error firing TextLineEvent", "error", err, "line", line)
+	}
 
-	// Always check for prompts
-	p.processPrompt(line)
+	// If a TextLineTrigger fired, skip Text event processing (waitfor) - matches TWX behavior
+	if !textLineTriggerFired {
+		// Always check for prompts (this fires TextEvent)
+		p.processPrompt(line)
+	}
 
 	// Reactivate script triggers as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.ActivateTriggers)
 	p.ActivateTriggers()
@@ -2507,15 +2513,17 @@ func (p *TWXParser) FireTextEvent(line string, outbound bool) {
 }
 
 // FireTextLineEvent fires a text line event to the script system (Pascal: TWXInterpreter.TextLineEvent)
-func (p *TWXParser) FireTextLineEvent(line string, outbound bool) {
+func (p *TWXParser) FireTextLineEvent(line string, outbound bool) (bool, error) {
 	if p.scriptInterpreter != nil {
 		p.scriptInterpreter.TextLineEvent(line, outbound)
 	}
 
 	// Also fire through the ScriptEventProcessor for the new scripting engine
 	if p.scriptEventProcessor != nil && p.scriptEventProcessor.IsEnabled() {
-		p.scriptEventProcessor.FireTextLineEvent(line, outbound)
+		return p.scriptEventProcessor.FireTextLineEvent(line, outbound)
 	}
+
+	return false, nil
 }
 
 // ActivateTriggers activates script triggers (Pascal: TWXInterpreter.ActivateTriggers)
@@ -2565,7 +2573,10 @@ func (p *TWXParser) ProcessOutBound(data string) bool {
 
 	// Fire outbound text events
 	p.FireTextEvent(data, true)
-	p.FireTextLineEvent(data, true)
+	_, err := p.FireTextLineEvent(data, true)
+	if err != nil {
+		debug.Error("Error firing outbound TextLineEvent", "error", err, "data", data)
+	}
 
 	// Fire outbound event to event bus
 	if p.eventBus != nil {

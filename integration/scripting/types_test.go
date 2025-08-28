@@ -127,7 +127,7 @@ func TestTypeConversion_StringToNumber_RealIntegration(t *testing.T) {
 
 	expectedOutputs := []string{
 		"Result1: 50",
-		"Result2: 6.28",
+		"Result2: 6",  // 6.28 rounded to 6
 	}
 
 	for i, expected := range expectedOutputs {

@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -13,6 +14,11 @@ func RegisterControlCommands(vm CommandRegistry) {
 
 func cmdGoto(vm types.VMInterface, params []*types.CommandParam) error {
 	label := GetParamString(vm, params[0])
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Info("GOTO command: jumping to label", "script", scriptName, "label", label)
 	return vm.Goto(label)
 }
 

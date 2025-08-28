@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/parser"
 	"twist/internal/proxy/scripting/types"
 )
@@ -68,10 +69,12 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 
 	// Handle jump targets
 	if ee.vm.state.HasJumpTarget() {
-		newPos := ee.findLabel(ee.vm.state.JumpTarget)
+		jumpTarget := ee.vm.state.JumpTarget
+		newPos := ee.findLabel(jumpTarget)
 		if newPos == -1 {
-			return fmt.Errorf("label not found: %s", ee.vm.state.JumpTarget)
+			return fmt.Errorf("label not found: %s", jumpTarget)
 		}
+		debug.Info("ExecuteStep: jumping to label", "label", jumpTarget, "oldPosition", ee.vm.state.Position, "newPosition", newPos)
 		ee.vm.state.Position = newPos
 		ee.vm.state.ClearJumpTarget()
 	} else {
@@ -531,6 +534,7 @@ func (ee *ExecutionEngine) findLabel(label string) int {
 		if node.Type == parser.NodeLabel {
 			// Normalize the node label (remove colon, convert to lowercase)
 			nodeLabel := strings.ToLower(strings.TrimPrefix(node.Value, ":"))
+			debug.Info("Finding label ", "target", label, "nodeLabel", nodeLabel, "pos", i)
 			if nodeLabel == targetLabel {
 				return i
 			}
@@ -819,7 +823,13 @@ func (ee *ExecutionEngine) evaluateBinaryExpression(node *parser.ASTNode) (*type
 		}, nil
 	}
 
-	// Handle string comparison/concatenation
+	// For arithmetic operators, always treat as numeric operations (TWX compatibility)
+	// TWX automatically converts strings to numbers for arithmetic
+	if operator == "*" || operator == "/" || operator == "+" || operator == "-" {
+		return ee.evaluateNumericOperation(left, right, operator)
+	}
+
+	// Handle string comparison/concatenation for other operators
 	if left.Type == types.StringType || right.Type == types.StringType {
 		return ee.evaluateStringOperation(left, right, operator)
 	}
