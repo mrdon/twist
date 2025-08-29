@@ -28,17 +28,37 @@ func (ee *ExecutionEngine) LoadAST(ast *parser.ASTNode) {
 	ee.ast = ast
 }
 
+// GetAST returns the current AST being executed
+func (ee *ExecutionEngine) GetAST() *parser.ASTNode {
+	return ee.ast
+}
+
 // ExecuteStep executes a single step of the script
 func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 	// Add panic recovery for bounds checking and other runtime errors
 	defer func() {
 		if r := recover(); r != nil {
-			retErr = fmt.Errorf("%v", r)
+			if ee.ast != nil && ee.vm.state.Position < len(ee.ast.Children) {
+				node := ee.ast.Children[ee.vm.state.Position]
+				retErr = fmt.Errorf("line %d: panic: %v", node.Line, r)
+			} else {
+				retErr = fmt.Errorf("panic: %v", r)
+			}
 			ee.vm.state.SetError(retErr.Error())
 		}
 	}()
 
 	if ee.ast == nil || ee.vm.state.Position >= len(ee.ast.Children) {
+		// Script has reached natural end - clean up triggers like TWX does
+		scriptName := "unknown"
+		if ee.vm.script != nil {
+			scriptName = ee.vm.script.GetName()
+		}
+		debug.Info("ExecuteStep: script reached natural end, cleaning up triggers", "script", scriptName, "activeTriggers", ee.vm.triggerManager.GetTriggerCount())
+		
+		// TWX behavior: all script termination cleans up triggers (via destructor)
+		ee.vm.KillAllTriggers()
+		
 		ee.vm.state.SetHalted()
 		return nil
 	}
@@ -63,8 +83,9 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 	}
 
 	if err != nil {
-		ee.vm.state.SetError(err.Error())
-		return err
+		lineErr := fmt.Errorf("line %d: %w", node.Line, err)
+		ee.vm.state.SetError(lineErr.Error())
+		return lineErr
 	}
 
 	// Handle jump targets
@@ -74,7 +95,19 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 		if newPos == -1 {
 			return fmt.Errorf("label not found: %s", jumpTarget)
 		}
-		debug.Info("ExecuteStep: jumping to label", "label", jumpTarget, "oldPosition", ee.vm.state.Position, "newPosition", newPos)
+		scriptName := "unknown"
+		oldLine := 0
+		newLine := 0
+		if script := ee.vm.GetCurrentScript(); script != nil {
+			scriptName = script.GetName()
+		}
+		if ee.ast != nil && ee.vm.state.Position < len(ee.ast.Children) {
+			oldLine = ee.ast.Children[ee.vm.state.Position].Line
+		}
+		if ee.ast != nil && newPos < len(ee.ast.Children) {
+			newLine = ee.ast.Children[newPos].Line
+		}
+		debug.Info("ExecuteStep: jumping to label", "script", scriptName, "label", jumpTarget, "oldPosition", ee.vm.state.Position, "oldLine", oldLine, "newPosition", newPos, "newLine", newLine)
 		ee.vm.state.Position = newPos
 		ee.vm.state.ClearJumpTarget()
 	} else {
@@ -365,7 +398,7 @@ func (ee *ExecutionEngine) executeWhile(node *parser.ASTNode) error {
 					currentNode := ee.ast.Children[ee.vm.state.Position]
 					err = ee.executeNode(currentNode)
 					if err != nil {
-						return err
+						return fmt.Errorf("line %d: %w", currentNode.Line, err)
 					}
 
 					// Check if a RETURN command was executed by seeing if call stack shrank

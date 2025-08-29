@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"twist/internal/debug"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -107,6 +108,12 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 	// TWX logic: branch when value is NOT equal to 1
 	// Check both exact equality and rounded equality (like TWX does)
 	shouldBranch := !(numericValue == 1.0 || int(numericValue+0.5) == 1)
+
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Info("BRANCH command: evaluating condition", "script", scriptName, "line", vm.GetCurrentLine(), "expression", expression, "value", numericValue, "shouldBranch", shouldBranch, "label", label)
 
 	if shouldBranch {
 		return vm.Goto(label)

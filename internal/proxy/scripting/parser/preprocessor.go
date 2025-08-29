@@ -15,12 +15,19 @@ type ConditionStruct struct {
 	AtElse   bool   // true if we've seen ELSE in this IF block
 }
 
+// LineMapping tracks the relationship between original and processed line numbers
+type LineMapping struct {
+	ProcessedLine int // Line number in processed output
+	OriginalLine  int // Line number in original source
+}
+
 // Preprocessor handles macro expansion (IF/ELSE/END, WHILE/END)
 // This mirrors the functionality in TWX ScriptCmp.pas
 type Preprocessor struct {
 	ifStack      []*ConditionStruct // Stack of nested control structures
 	ifLabelCount int                // Counter for generating unique labels
 	output       []string           // Preprocessed output lines
+	lineMappings []LineMapping      // Maps processed lines back to original lines
 }
 
 // NewPreprocessor creates a new preprocessor instance
@@ -29,6 +36,7 @@ func NewPreprocessor() *Preprocessor {
 		ifStack:      make([]*ConditionStruct, 0),
 		ifLabelCount: 0,
 		output:       make([]string, 0),
+		lineMappings: make([]LineMapping, 0),
 	}
 }
 
@@ -36,6 +44,7 @@ func NewPreprocessor() *Preprocessor {
 // This mirrors the RecurseCmd functionality from TWX ScriptCmp.pas
 func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 	p.output = make([]string, 0)
+	p.lineMappings = make([]LineMapping, 0)
 	p.ifStack = make([]*ConditionStruct, 0)
 	p.ifLabelCount = 0
 
@@ -44,14 +53,14 @@ func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 
 		// Skip empty lines and comments
 		if line == "" || strings.HasPrefix(line, "#") {
-			p.output = append(p.output, line)
+			p.addOutputLine(line, lineNum+1) // +1 because lineNum is 0-based
 			continue
 		}
 
 		// Parse the command and parameters
 		parts := strings.Fields(line)
 		if len(parts) == 0 {
-			p.output = append(p.output, line)
+			p.addOutputLine(line, lineNum+1)
 			continue
 		}
 
@@ -81,7 +90,7 @@ func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 			}
 		default:
 			// Not a macro command, pass through unchanged
-			p.output = append(p.output, line)
+			p.addOutputLine(line, lineNum+1)
 		}
 	}
 
@@ -91,6 +100,25 @@ func (p *Preprocessor) ProcessScript(lines []string) ([]string, error) {
 	}
 
 	return p.output, nil
+}
+
+// addOutputLine adds a line to the output and tracks its original line number
+func (p *Preprocessor) addOutputLine(line string, originalLine int) {
+	p.output = append(p.output, line)
+	p.lineMappings = append(p.lineMappings, LineMapping{
+		ProcessedLine: len(p.output), // 1-based line number in processed output
+		OriginalLine:  originalLine,
+	})
+}
+
+// addGeneratedLine adds a generated line (from macro expansion) and tracks it
+func (p *Preprocessor) addGeneratedLine(line string, originalLine int) {
+	p.addOutputLine(line, originalLine)
+}
+
+// GetLineMappings returns the line mappings for use by the lexer
+func (p *Preprocessor) GetLineMappings() []LineMapping {
+	return p.lineMappings
 }
 
 // processIf handles IF macro expansion
@@ -119,7 +147,7 @@ func (p *Preprocessor) processIf(parts []string, lineNum int) error {
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
-	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel))
+	p.addGeneratedLine(fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel), lineNum)
 
 	return nil
 }
@@ -146,8 +174,8 @@ func (p *Preprocessor) processElse(parts []string, lineNum int) error {
 	conStruct.AtElse = true
 
 	// Generate GOTO to end and place the condition label
-	p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.EndLabel))
-	p.output = append(p.output, conStruct.ConLabel)
+	p.addGeneratedLine(fmt.Sprintf("GOTO %s", conStruct.EndLabel), lineNum)
+	p.addGeneratedLine(conStruct.ConLabel, lineNum)
 
 	return nil
 }
@@ -172,8 +200,8 @@ func (p *Preprocessor) processElseIf(parts []string, lineNum int) error {
 	}
 
 	// Generate GOTO to end and place the old condition label
-	p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.EndLabel))
-	p.output = append(p.output, conStruct.ConLabel)
+	p.addGeneratedLine(fmt.Sprintf("GOTO %s", conStruct.EndLabel), lineNum)
+	p.addGeneratedLine(conStruct.ConLabel, lineNum)
 
 	// Generate new condition label for this ELSEIF
 	p.ifLabelCount++
@@ -183,7 +211,7 @@ func (p *Preprocessor) processElseIf(parts []string, lineNum int) error {
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
-	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel))
+	p.addGeneratedLine(fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.ConLabel), lineNum)
 
 	return nil
 }
@@ -210,11 +238,11 @@ func (p *Preprocessor) processWhile(parts []string, lineNum int) error {
 	p.ifStack = append(p.ifStack, conStruct)
 
 	// Generate loop start label and BRANCH command
-	p.output = append(p.output, conStruct.ConLabel)
+	p.addGeneratedLine(conStruct.ConLabel, lineNum)
 	condition := strings.Join(parts[1:], " ")
 	// Escape any quotes in the condition string
 	escapedCondition := strings.ReplaceAll(condition, "\"", "\\\"")
-	p.output = append(p.output, fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.EndLabel))
+	p.addGeneratedLine(fmt.Sprintf("BRANCH \"%s\" %s", escapedCondition, conStruct.EndLabel), lineNum)
 
 	return nil
 }
@@ -235,14 +263,14 @@ func (p *Preprocessor) processEnd(parts []string, lineNum int) error {
 
 	if conStruct.IsWhile {
 		// For WHILE: jump back to loop start, then place end label
-		p.output = append(p.output, fmt.Sprintf("GOTO %s", conStruct.ConLabel))
+		p.addGeneratedLine(fmt.Sprintf("GOTO %s", conStruct.ConLabel), lineNum)
 	} else {
 		// For IF: place the condition label (in case there was no ELSE)
-		p.output = append(p.output, conStruct.ConLabel)
+		p.addGeneratedLine(conStruct.ConLabel, lineNum)
 	}
 
 	// Place the end label
-	p.output = append(p.output, conStruct.EndLabel)
+	p.addGeneratedLine(conStruct.EndLabel, lineNum)
 
 	return nil
 }

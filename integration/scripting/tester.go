@@ -393,8 +393,8 @@ func (tester *IntegrationScriptTester) parseScriptWithPreprocessor(source string
 	// Rejoin the processed lines
 	processedSource := strings.Join(processedLines, "\n")
 
-	// Step 2: Create lexer
-	lexer := parser.NewLexer(strings.NewReader(processedSource))
+	// Step 2: Create lexer (no line mappings for integration tests)
+	lexer := parser.NewLexer(strings.NewReader(processedSource), nil)
 
 	// Step 3: Tokenize
 	tokens, err := lexer.TokenizeAll()

@@ -128,8 +128,8 @@ func (ip *IncludeProcessor) loadAndParseFile(filepath string) (*parser.ASTNode, 
 	}
 	defer file.Close()
 
-	// Create lexer and parse
-	lexer := parser.NewLexer(file)
+	// Create lexer and parse (no line mappings for included files)
+	lexer := parser.NewLexer(file, nil)
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("tokenization error in %s: %v", filepath, err)

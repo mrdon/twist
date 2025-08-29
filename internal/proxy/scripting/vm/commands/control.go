@@ -18,15 +18,25 @@ func cmdGoto(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Info("GOTO command: jumping to label", "script", scriptName, "label", label)
+	debug.Info("GOTO command: jumping to label", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
 	return vm.Goto(label)
 }
 
 func cmdGosub(vm types.VMInterface, params []*types.CommandParam) error {
 	label := GetParamString(vm, params[0])
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Info("GOSUB command: calling subroutine", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
 	return vm.Gosub(label)
 }
 
 func cmdReturn(vm types.VMInterface, params []*types.CommandParam) error {
+	scriptName := "unknown"
+	if script := vm.GetCurrentScript(); script != nil {
+		scriptName = script.GetName()
+	}
+	debug.Info("RETURN command: returning from subroutine", "script", scriptName, "line", vm.GetCurrentLine())
 	return vm.Return()
 }

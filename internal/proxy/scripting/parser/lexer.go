@@ -85,22 +85,41 @@ type Token struct {
 
 // Lexer tokenizes script source code
 type Lexer struct {
-	reader *bufio.Reader
-	line   int
-	column int
-	ch     rune
-	eof    bool
+	reader       *bufio.Reader
+	line         int // Current line in processed source
+	column       int
+	ch           rune
+	eof          bool
+	lineMappings []LineMapping // Maps processed lines to original lines
 }
 
-// NewLexer creates a new lexer
-func NewLexer(reader io.Reader) *Lexer {
+// NewLexer creates a new lexer with line mappings from preprocessing
+func NewLexer(reader io.Reader, lineMappings []LineMapping) *Lexer {
 	l := &Lexer{
-		reader: bufio.NewReader(reader),
-		line:   1,
-		column: 0,
+		reader:       bufio.NewReader(reader),
+		line:         1,
+		column:       0,
+		lineMappings: lineMappings,
 	}
 	l.nextChar()
 	return l
+}
+
+// getOriginalLine returns the original line number for the current processed line
+func (l *Lexer) getOriginalLine() int {
+	if l.lineMappings == nil {
+		return l.line // No mappings, use processed line number
+	}
+	
+	// Find the mapping for this processed line
+	for _, mapping := range l.lineMappings {
+		if mapping.ProcessedLine == l.line {
+			return mapping.OriginalLine
+		}
+	}
+	
+	// If no mapping found, use the processed line number
+	return l.line
 }
 
 // nextChar reads the next character
@@ -302,10 +321,10 @@ func (l *Lexer) NextToken() (*Token, error) {
 	l.skipWhitespace()
 
 	if l.eof {
-		return &Token{Type: TokenEOF, Line: l.line, Column: l.column}, nil
+		return &Token{Type: TokenEOF, Line: l.getOriginalLine(), Column: l.column}, nil
 	}
 
-	token := &Token{Line: l.line, Column: l.column}
+	token := &Token{Line: l.getOriginalLine(), Column: l.column}
 
 	switch l.ch {
 	case '\n':

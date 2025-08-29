@@ -1,0 +1,12 @@
+# Simple test - start after the initial checks, expect script to trigger port command
+# Based on debug_1_Port.ts flow after initial setup
+
+<< Command [TL=00:00:00]? : 
+>> d
+<< Sector  : 1000 in Test Space\r\n
+<< Warps to Sector(s) : 1001 - 1002\r\n
+>> 1001
+>> 5
+>> 10
+<< Command [TL=00:00:01]:[1000] (?=Help)? : 
+>> pt

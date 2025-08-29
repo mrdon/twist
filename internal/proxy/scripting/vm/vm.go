@@ -221,13 +221,26 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 	// Jump to the label immediately (no delayed jump)
 	newPos := vm.execution.FindLabel(label)
 
-	Ok, the problem is our login script broke and we don't know the change that did it. Start there, then get back to
-	debugging the port script'
-	debug.Info("Jumping to ", "newPos", newPos, "position", vm.state.Position)
 	if newPos == -1 {
 		return fmt.Errorf("label not found: %s", label)
 	}
+	
+	// Get line numbers for better logging
+	oldLine := 0
+	newLine := 0
+	if vm.execution != nil && vm.execution.GetAST() != nil && savedPosition < len(vm.execution.GetAST().Children) {
+		oldLine = vm.execution.GetAST().Children[savedPosition].Line
+	}
+	if vm.execution != nil && vm.execution.GetAST() != nil && newPos < len(vm.execution.GetAST().Children) {
+		newLine = vm.execution.GetAST().Children[newPos].Line
+	}
+	
+	debug.Info("TRIGGER JUMP: synchronous execution to label", "script", scriptName, "label", label, "oldPosition", savedPosition, "oldLine", oldLine, "newPosition", newPos, "newLine", newLine)
 	vm.state.Position = newPos
+
+	// Temporarily set the VM to running state for trigger handler execution
+	// This is necessary because triggers must execute even when the script is paused
+	vm.state.SetRunning()
 
 	debug.Info("About to execute ", "isRunning", vm.state.IsRunning(), "isWaiting", vm.state.IsWaiting(), "isPaused", vm.state.IsPaused(), "position", vm.state.Position)
 	// Execute until we hit a pause, halt, or return
@@ -235,7 +248,15 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 		debug.Info("Executing somehow")
 		if err := vm.execution.ExecuteStep(); err != nil {
 			debug.Info("VM.GotoAndExecuteSync: ExecuteStep returned error", "script", scriptName, "error", err)
-			// Restore state on error
+			
+			// In TWX, trigger handlers can use RETURN to end execution even without GOSUB context
+			// This is different from regular script execution where RETURN without GOSUB is an error
+			if strings.Contains(err.Error(), "Return without gosub") {
+				debug.Info("VM.GotoAndExecuteSync: trigger handler ended with RETURN (TWX compatibility)", "script", scriptName)
+				break // Exit the execution loop normally
+			}
+			
+			// Restore state on other errors
 			vm.state.Position = savedPosition
 			if savedRunning {
 				vm.state.SetRunning()
@@ -250,14 +271,21 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 		}
 	}
 
-	// If the handler didn't end naturally, restore execution state
+	// Restore execution state after trigger handler completes
 	// (In TWX, trigger handlers typically end with a return or implicit return)
 	if vm.state.IsRunning() && !vm.state.IsPaused() && !vm.waitingForInput {
 		debug.Info("VM.GotoAndExecuteSync: restoring execution position", "script", scriptName, "position", savedPosition)
-		vm.state.Position = savedPosition
+		// FIX: In TWX, after a trigger handler completes during a PAUSE, 
+		// execution should resume AFTER the pause command, not at the pause itself
+		vm.state.Position = savedPosition + 1 // Resume after the pause that was interrupted
+		
+		// Restore the original running state
 		if savedRunning {
 			vm.state.SetRunning()
+		} else {
+			vm.state.SetPaused() // Restore paused state if script was paused before trigger
 		}
+		debug.Info("VM.GotoAndExecuteSync: restored original state", "script", scriptName, "newPosition", vm.state.Position, "isRunning", vm.state.IsRunning(), "isPaused", vm.state.IsPaused())
 	}
 
 	debug.Info("VM.GotoAndExecuteSync: COMPLETED synchronous execution of trigger handler", "script", scriptName, "label", label)
@@ -266,6 +294,15 @@ func (vm *VirtualMachine) GotoAndExecuteSync(label string) error {
 
 // State control
 func (vm *VirtualMachine) Halt() error {
+	scriptName := "unknown"
+	if vm.script != nil {
+		scriptName = vm.script.GetName()
+	}
+	debug.Info("VM.Halt: halting script and cleaning up triggers", "script", scriptName, "activeTriggers", vm.triggerManager.GetTriggerCount())
+	
+	// Clean up all triggers when script halts (TWX behavior)
+	vm.KillAllTriggers()
+	
 	vm.state.SetHalted()
 	return nil
 }
@@ -548,8 +585,8 @@ func (vm *VirtualMachine) EvaluateExpression(expression string) (*types.Value, e
 	// Unescape any escaped quotes in the expression
 	unescapedExpression := strings.ReplaceAll(expression, "\\\"", "\"")
 
-	// Parse the expression string into an AST node
-	lexer := parser.NewLexer(strings.NewReader(unescapedExpression))
+	// Parse the expression string into an AST node (no line mappings for expressions)
+	lexer := parser.NewLexer(strings.NewReader(unescapedExpression), nil)
 	tokens, err := lexer.TokenizeAll()
 	if err != nil {
 		return nil, fmt.Errorf("failed to tokenize expression: %v", err)

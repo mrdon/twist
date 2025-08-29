@@ -88,6 +88,8 @@ func (p *Parser) skipNewlines() {
 func (p *Parser) Parse() (*ASTNode, error) {
 	program := &ASTNode{
 		Type:     NodeProgram,
+		Line:     1, // Program starts at line 1
+		Column:   1,
 		Children: make([]*ASTNode, 0),
 	}
 

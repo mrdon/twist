@@ -630,8 +630,8 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 	// Rejoin the processed lines
 	processedSource := strings.Join(processedLines, "\n")
 
-	// Step 2: Create lexer
-	lexer := parser.NewLexer(strings.NewReader(processedSource))
+	// Step 2: Create lexer with line mappings from preprocessor
+	lexer := parser.NewLexer(strings.NewReader(processedSource), preprocessor.GetLineMappings())
 
 	// Step 3: Tokenize
 	tokens, err := lexer.TokenizeAll()
