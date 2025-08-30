@@ -2,7 +2,7 @@ package menus
 
 import (
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // ViewMenu handles View menu actions
@@ -28,7 +28,7 @@ func (v *ViewMenu) GetMenuItems() []twistComponents.MenuItem {
 func (v *ViewMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in ViewMenu.HandleMenuAction", "error", r)
+			log.Error("PANIC in ViewMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -44,7 +44,7 @@ func (v *ViewMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Panels":
 		return v.handlePanels(app)
 	default:
-		debug.Info("ViewMenu: Unknown action", "action", action)
+		log.Info("ViewMenu: Unknown action", "action", action)
 		return nil
 	}
 }
@@ -99,10 +99,10 @@ func (v *ViewMenu) handleFullScreen(app AppInterface) error {
 func (v *ViewMenu) handlePanels(app AppInterface) error {
 	if app.GetPanelsVisible() {
 		app.HidePanels()
-		debug.Info("ViewMenu: Hiding panels")
+		log.Info("ViewMenu: Hiding panels")
 	} else {
 		app.ShowPanels()
-		debug.Info("ViewMenu: Showing panels")
+		log.Info("ViewMenu: Showing panels")
 	}
 	return nil
 }

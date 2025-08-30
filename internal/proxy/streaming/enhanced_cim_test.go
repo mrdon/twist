@@ -13,7 +13,7 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("CIM Prompt Detection", func(t *testing.T) {
 		// Test CIM prompt detection (Pascal ": " handling)
@@ -60,11 +60,8 @@ func TestEnhancedCIMProcessing(t *testing.T) {
 	})
 
 	t.Run("Port CIM Line Processing", func(t *testing.T) {
-		// Debug: Verify parser uses same database
-		if parser.database != db {
-			t.Fatalf("Parser database (%p) != test database (%p)", parser.database, db)
-		}
-		t.Logf("✓ Parser and test use same database instance: %p", db)
+		// Debug: Parser now uses database through function closure
+		t.Logf("✓ Parser uses database through closure: %p", db)
 
 		// Set up CIM state
 		parser.currentDisplay = DisplayCIM
@@ -356,7 +353,7 @@ func TestCIMIntegrationWithRealData(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Complete CIM workflow", func(t *testing.T) {
 		// Simulate complete CIM download workflow

@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"strings"
 
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // debugSendOutput logs output with stack trace for debugging
@@ -14,10 +14,10 @@ func debugSendOutput(output string, sendFunc func(string)) {
 	n := runtime.Callers(2, pc) // Skip runtime.Callers and this function
 	frames := runtime.CallersFrames(pc[:n])
 
-	debug.Info("INPUT_COLLECTOR sendOutput", "output", output)
+	log.Info("INPUT_COLLECTOR sendOutput", "output", output)
 	for {
 		frame, more := frames.Next()
-		debug.Info("  at", "file", frame.File, "line", frame.Line, "function", frame.Function)
+		log.Info("  at", "file", frame.File, "line", frame.Line, "function", frame.Function)
 		if !more {
 			break
 		}
@@ -48,7 +48,7 @@ type CompletionHandler func(menuName, value string) error
 func NewInputCollector(sendOutput func(string)) *InputCollector {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in NewInputCollector", "error", r)
+			log.Error("PANIC in NewInputCollector", "error", r)
 		}
 	}()
 
@@ -71,7 +71,7 @@ func (ic *InputCollector) RegisterCompletionHandler(menuName string, handler Com
 func (ic *InputCollector) StartCollection(menuName, prompt string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in StartCollection", "error", r)
+			log.Error("PANIC in StartCollection", "error", r)
 		}
 	}()
 
@@ -105,7 +105,7 @@ func (ic *InputCollector) GetCurrentMenu() string {
 func (ic *InputCollector) HandleInput(input string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in HandleInput", "error", r)
+			log.Error("PANIC in HandleInput", "error", r)
 		}
 	}()
 
@@ -190,7 +190,7 @@ func (ic *InputCollector) showCollectionHelp() {
 func (ic *InputCollector) completeCollection(value string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in completeCollection", "error", r)
+			log.Error("PANIC in completeCollection", "error", r)
 		}
 	}()
 
@@ -221,7 +221,7 @@ func (ic *InputCollector) cancelCollection() {
 func (ic *InputCollector) exitCollection() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in exitCollection", "error", r)
+			log.Error("PANIC in exitCollection", "error", r)
 		}
 	}()
 

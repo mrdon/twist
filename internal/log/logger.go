@@ -1,4 +1,4 @@
-package debug
+package log
 
 import (
 	"fmt"
@@ -120,3 +120,4 @@ func Close() {
 		globalLogger.file.Close()
 	}
 }
+

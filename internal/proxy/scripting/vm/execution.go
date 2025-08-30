@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/parser"
 	"twist/internal/proxy/scripting/types"
 )
@@ -54,11 +54,11 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 		if ee.vm.script != nil {
 			scriptName = ee.vm.script.GetName()
 		}
-		debug.Info("ExecuteStep: script reached natural end, cleaning up triggers", "script", scriptName, "activeTriggers", ee.vm.triggerManager.GetTriggerCount())
-		
+		log.Info("ExecuteStep: script reached natural end, cleaning up triggers", "script", scriptName, "activeTriggers", ee.vm.triggerManager.GetTriggerCount())
+
 		// TWX behavior: all script termination cleans up triggers (via destructor)
 		ee.vm.KillAllTriggers()
-		
+
 		ee.vm.state.SetHalted()
 		return nil
 	}
@@ -107,7 +107,7 @@ func (ee *ExecutionEngine) ExecuteStep() (retErr error) {
 		if ee.ast != nil && newPos < len(ee.ast.Children) {
 			newLine = ee.ast.Children[newPos].Line
 		}
-		debug.Info("ExecuteStep: jumping to label", "script", scriptName, "label", jumpTarget, "oldPosition", ee.vm.state.Position, "oldLine", oldLine, "newPosition", newPos, "newLine", newLine)
+		log.Info("ExecuteStep: jumping to label", "script", scriptName, "label", jumpTarget, "oldPosition", ee.vm.state.Position, "oldLine", oldLine, "newPosition", newPos, "newLine", newLine)
 		ee.vm.state.Position = newPos
 		ee.vm.state.ClearJumpTarget()
 	} else {
@@ -567,7 +567,7 @@ func (ee *ExecutionEngine) findLabel(label string) int {
 		if node.Type == parser.NodeLabel {
 			// Normalize the node label (remove colon, convert to lowercase)
 			nodeLabel := strings.ToLower(strings.TrimPrefix(node.Value, ":"))
-			debug.Info("Finding label ", "target", label, "nodeLabel", nodeLabel, "pos", i)
+			log.Info("Finding label ", "target", label, "nodeLabel", nodeLabel, "pos", i)
 			if nodeLabel == targetLabel {
 				return i
 			}

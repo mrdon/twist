@@ -13,7 +13,7 @@ import (
 func TestTUIImportRestrictions(t *testing.T) {
 	allowedPrefixes := []string{
 		"twist/internal/api",        // Core API only
-		"twist/internal/debug",      // Debug package (required in all files per CLAUDE.md)
+		"twist/internal/log",        // Debug package (required in all files per CLAUDE.md)
 		"twist/internal/theme",      // UI theming (until shared)
 		"twist/internal/ansi",       // ANSI processing (until shared)
 		"twist/internal/terminal",   // Terminal utilities (until shared)

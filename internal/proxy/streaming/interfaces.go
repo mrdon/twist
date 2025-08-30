@@ -59,7 +59,6 @@ type IModExtractor interface {
 
 	// Database integration
 	GetDatabase() database.Database
-	SetDatabase(db database.Database)
 }
 
 // ITWXModule defines the base interface for all TWX modules

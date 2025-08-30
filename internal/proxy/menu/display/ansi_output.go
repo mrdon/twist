@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 const (
@@ -34,7 +34,7 @@ const (
 func FormatMenuPrompt(prompt, line string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatMenuPrompt", "error", r)
+			log.Error("PANIC in FormatMenuPrompt", "error", r)
 		}
 	}()
 
@@ -56,7 +56,7 @@ func FormatMenuPrompt(prompt, line string) string {
 func FormatMenuTitle(title string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatMenuTitle", "error", r)
+			log.Error("PANIC in FormatMenuTitle", "error", r)
 		}
 	}()
 
@@ -78,7 +78,7 @@ func FormatMenuTitle(title string) string {
 func FormatMenuOption(hotkey rune, description string, enabled bool) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatMenuOption", "error", r)
+			log.Error("PANIC in FormatMenuOption", "error", r)
 		}
 	}()
 
@@ -104,7 +104,7 @@ func FormatMenuOption(hotkey rune, description string, enabled bool) string {
 func FormatHelpText(text string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatHelpText", "error", r)
+			log.Error("PANIC in FormatHelpText", "error", r)
 		}
 	}()
 
@@ -125,7 +125,7 @@ func FormatHelpText(text string) string {
 func FormatErrorMessage(message string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatErrorMessage", "error", r)
+			log.Error("PANIC in FormatErrorMessage", "error", r)
 		}
 	}()
 
@@ -138,7 +138,7 @@ func FormatErrorMessage(message string) string {
 func FormatSuccessMessage(message string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatSuccessMessage", "error", r)
+			log.Error("PANIC in FormatSuccessMessage", "error", r)
 		}
 	}()
 
@@ -179,7 +179,7 @@ func MoveCursorToColumn(col int) string {
 func FormatMenuSeparator(width int) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatMenuSeparator", "error", r)
+			log.Error("PANIC in FormatMenuSeparator", "error", r)
 		}
 	}()
 
@@ -194,7 +194,7 @@ func FormatMenuSeparator(width int) string {
 func FormatInputPrompt(prompt string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatInputPrompt", "error", r)
+			log.Error("PANIC in FormatInputPrompt", "error", r)
 		}
 	}()
 
@@ -204,7 +204,7 @@ func FormatInputPrompt(prompt string) string {
 func FormatBreadcrumb(path string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in FormatBreadcrumb", "error", r)
+			log.Error("PANIC in FormatBreadcrumb", "error", r)
 		}
 	}()
 
@@ -218,7 +218,7 @@ func FormatBreadcrumb(path string) string {
 func WrapText(text string, width int) []string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in WrapText", "error", r)
+			log.Error("PANIC in WrapText", "error", r)
 		}
 	}()
 
@@ -256,7 +256,7 @@ func WrapText(text string, width int) []string {
 func StripANSI(text string) string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in StripANSI", "error", r)
+			log.Error("PANIC in StripANSI", "error", r)
 		}
 	}()
 

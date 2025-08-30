@@ -6,7 +6,7 @@ import (
 	"golang.org/x/text/encoding"
 	"golang.org/x/text/encoding/charmap"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/interfaces"
 	"twist/internal/telnet"
@@ -83,35 +83,11 @@ type Pipeline struct {
 }
 
 // NewPipeline creates an optimized streaming pipeline
-func NewPipeline(tuiAPI api.TuiAPI, db database.Database) *Pipeline {
-	return &Pipeline{
-		tuiAPI:    tuiAPI, // Direct TuiAPI reference
-		decoder:   charmap.CodePage437.NewDecoder(),
-		twxParser: NewTWXParser(db, tuiAPI),
-	}
-}
-
-// NewPipelineWithScriptManager creates an optimized streaming pipeline with script support
-func NewPipelineWithScriptManager(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager) *Pipeline {
+func NewPipeline(tuiAPI api.TuiAPI, getDatabaseFunc func() database.Database, scriptManager ScriptManager, stateManager StateManager, gameDetector GameDetector, writer func([]byte) error) *Pipeline {
 	p := &Pipeline{
 		tuiAPI:        tuiAPI, // Direct TuiAPI reference
 		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db, tuiAPI),
-		scriptManager: scriptManager,
-	}
-
-	// Initialize telnet handler with no writer - scripts don't need to write back to connection
-	p.telnetHandler = telnet.NewHandler(nil)
-
-	return p
-}
-
-// NewPipelineWithWriter creates an optimized streaming pipeline with a writer for telnet negotiation
-func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManager ScriptManager, stateManager StateManager, gameDetector GameDetector, writer func([]byte) error) *Pipeline {
-	p := &Pipeline{
-		tuiAPI:        tuiAPI, // Direct TuiAPI reference
-		decoder:       charmap.CodePage437.NewDecoder(),
-		twxParser:     NewTWXParser(db, tuiAPI),
+		twxParser:     NewTWXParser(getDatabaseFunc, tuiAPI),
 		scriptManager: scriptManager,
 		stateManager:  stateManager,
 		gameDetector:  gameDetector,
@@ -121,17 +97,11 @@ func NewPipelineWithWriter(tuiAPI api.TuiAPI, db database.Database, scriptManage
 	p.telnetHandler = telnet.NewHandler(writer)
 
 	// Connect script engine to TWX parser for script events
-	if scriptManager != nil {
-		engineInterface := scriptManager.GetEngine()
-		if engineInterface != nil {
-			// Type assert the engine to our external interface
-			if engine, ok := engineInterface.(ExternalScriptEngine); ok {
-				// Create adapter to convert between interface types
-				adapter := &scriptEngineAdapter{engine: engine}
-				p.twxParser.SetScriptEngine(adapter)
-			}
-		}
-	}
+	engineInterface := scriptManager.GetEngine()
+	// Type assert the engine to our external interface - this should always succeed
+	engine := engineInterface.(ExternalScriptEngine)
+	adapter := &scriptEngineAdapter{engine: engine}
+	p.twxParser.SetScriptEngine(adapter)
 
 	return p
 }
@@ -160,7 +130,7 @@ func (p *Pipeline) Write(data []byte) {
 
 // processDataSync processes data synchronously (replaces async batchProcessor)
 func (p *Pipeline) processDataSync(rawData []byte) {
-	debug.LogDataChunk("<<", rawData)
+	log.LogDataChunk("<<", rawData)
 	// Process telnet commands immediately
 	cleanData := p.telnetHandler.ProcessData(rawData)
 

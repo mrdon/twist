@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -34,7 +34,7 @@ func (m *Manager) AddTrigger(trigger types.TriggerInterface) error {
 	defer m.mutex.Unlock()
 
 	m.triggers[trigger.GetID()] = trigger
-	debug.Info("TRIGGER REGISTERED", "id", trigger.GetID(), "type", trigger.GetType(), "pattern", trigger.GetValue(), "label", trigger.GetLabel())
+	log.Info("TRIGGER REGISTERED", "id", trigger.GetID(), "type", trigger.GetType(), "pattern", trigger.GetValue(), "label", trigger.GetLabel())
 	return nil
 }
 
@@ -44,10 +44,10 @@ func (m *Manager) RemoveTrigger(id string) error {
 	defer m.mutex.Unlock()
 
 	if trigger, exists := m.triggers[id]; exists {
-		debug.Info("TRIGGER REMOVED", "id", id, "type", trigger.GetType(), "pattern", trigger.GetValue())
+		log.Info("TRIGGER REMOVED", "id", id, "type", trigger.GetType(), "pattern", trigger.GetValue())
 		delete(m.triggers, id)
 	} else {
-		debug.Warn("TRIGGER NOT FOUND FOR REMOVAL", "id", id)
+		log.Warn("TRIGGER NOT FOUND FOR REMOVAL", "id", id)
 	}
 	return nil
 }
@@ -92,11 +92,11 @@ func (m *Manager) ProcessText(text string) error {
 	}
 	m.mutex.RUnlock()
 
-	debug.Debug("TRIGGER ProcessText", "text", text, "textTriggerCount", len(triggers))
-	
+	log.Debug("TRIGGER ProcessText", "text", text, "textTriggerCount", len(triggers))
+
 	for _, trigger := range triggers {
 		if trigger.Matches(text) {
-			debug.Info("TEXT TRIGGER FIRED", "id", trigger.GetID(), "pattern", trigger.GetValue(), "text", text)
+			log.Info("TEXT TRIGGER FIRED", "id", trigger.GetID(), "pattern", trigger.GetValue(), "text", text)
 			if err := trigger.Execute(m.vm); err != nil {
 				return err
 			}
@@ -129,13 +129,13 @@ func (m *Manager) ProcessTextLine(line string) (bool, error) {
 	}
 	m.mutex.RUnlock()
 
-	debug.Debug("TRIGGER ProcessTextLine", "line", line, "textLineTriggerCount", len(triggers))
+	log.Debug("TRIGGER ProcessTextLine", "line", line, "textLineTriggerCount", len(triggers))
 
 	matched := false
 	for _, trigger := range triggers {
-		debug.Debug("TEXTLINE TRIGGER CHECKING", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line, "active", trigger.IsActive())
+		log.Debug("TEXTLINE TRIGGER CHECKING", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line, "active", trigger.IsActive())
 		if trigger.Matches(line) {
-			debug.Info("TEXTLINE TRIGGER FIRED", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line)
+			log.Info("TEXTLINE TRIGGER FIRED", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line)
 			if err := trigger.Execute(m.vm); err != nil {
 				return false, err
 			}
@@ -151,7 +151,7 @@ func (m *Manager) ProcessTextLine(line string) (bool, error) {
 				}
 			}
 		} else {
-			debug.Debug("TEXTLINE TRIGGER NO MATCH", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line)
+			log.Debug("TEXTLINE TRIGGER NO MATCH", "id", trigger.GetID(), "pattern", trigger.GetValue(), "line", line)
 		}
 	}
 

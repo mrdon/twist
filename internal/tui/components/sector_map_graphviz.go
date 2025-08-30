@@ -17,7 +17,7 @@ import (
 	"strings"
 	"time"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/theme"
 
 	"github.com/BourgeoisBear/rasterm"
@@ -175,7 +175,7 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 
 	if needsGeneration && !gsm.isGenerating {
 		if gsm.currentSector > 0 && gsm.proxyAPI != nil && gsm.app != nil {
-			debug.Info("GraphvizSectorMap.Draw: Starting async generation", "sector", gsm.currentSector)
+			log.Info("GraphvizSectorMap.Draw: Starting async generation", "sector", gsm.currentSector)
 			gsm.isGenerating = true // Mark that we're generating
 
 			// Clear the region before generating new content to prevent artifacts
@@ -199,20 +199,20 @@ func (gsm *GraphvizSectorMap) Draw(screen tcell.Screen) {
 							gsm.isGenerating = false // Mark generation complete
 						})
 					} else {
-						debug.Info("GraphvizSectorMap.AsyncGen: Error generating image", "error", err)
+						log.Info("GraphvizSectorMap.AsyncGen: Error generating image", "error", err)
 						gsm.app.QueueUpdateDraw(func() {
 							gsm.isGenerating = false
 						})
 					}
 				} else {
-					debug.Info("GraphvizSectorMap.AsyncGen: Error building graph", "error", err)
+					log.Info("GraphvizSectorMap.AsyncGen: Error building graph", "error", err)
 					gsm.app.QueueUpdateDraw(func() {
 						gsm.isGenerating = false
 					})
 				}
 			}()
 		} else {
-			debug.Info("GraphvizSectorMap.Draw: Cannot generate", "currentSector", gsm.currentSector, "has_proxyAPI", gsm.proxyAPI != nil, "has_app", gsm.app != nil)
+			log.Info("GraphvizSectorMap.Draw: Cannot generate", "currentSector", gsm.currentSector, "has_proxyAPI", gsm.proxyAPI != nil, "has_app", gsm.app != nil)
 		}
 	}
 
@@ -235,7 +235,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 	// Get cached data from LRU cache
 	cached, found := gsm.graphCache.Get(gsm.currentHashKey)
 	if !found {
-		debug.Info("GraphvizSectorMap.registerSixelRegion: No cached data found", "hash", gsm.currentHashKey)
+		log.Info("GraphvizSectorMap.registerSixelRegion: No cached data found", "hash", gsm.currentHashKey)
 		return
 	}
 
@@ -244,7 +244,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 		// Decode the cached PNG image
 		img, err := png.Decode(bytes.NewReader(cached.ImageData))
 		if err != nil {
-			debug.Info("GraphvizSectorMap.registerSixelRegion: Failed to decode PNG", "error", err)
+			log.Info("GraphvizSectorMap.registerSixelRegion: Failed to decode PNG", "error", err)
 			return
 		}
 
@@ -257,7 +257,7 @@ func (gsm *GraphvizSectorMap) registerSixelRegion(x, y, width, height int) {
 		var buf bytes.Buffer
 		err = rasterm.SixelWriteImage(&buf, palettedImg)
 		if err != nil {
-			debug.Info("GraphvizSectorMap.registerSixelRegion: Failed to encode sixel", "error", err)
+			log.Info("GraphvizSectorMap.registerSixelRegion: Failed to encode sixel", "error", err)
 			return
 		}
 
@@ -373,7 +373,7 @@ func (gsm *GraphvizSectorMap) UpdateCurrentSectorWithInfo(sectorInfo api.SectorI
 		gsm.currentHashKey = ""              // Clear current hash key
 		gsm.sectorLevels = make(map[int]int) // Clear sector levels for fresh tracking
 
-		debug.Info("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed, triggering redraw", "old_sector", oldSector, "new_sector", sectorInfo.Number)
+		log.Info("GraphvizSectorMap: UpdateCurrentSectorWithInfo - Current sector changed, triggering redraw", "old_sector", oldSector, "new_sector", sectorInfo.Number)
 
 		// Hide the region while regenerating to prevent overlap
 		if gsm.sixelLayer != nil {
@@ -420,7 +420,7 @@ func (gsm *GraphvizSectorMap) scheduleRedrawWithDebounce(sectorNumber int, sourc
 			}
 		} else {
 			// If we can't generate hash, fall back to always redrawing
-			debug.Info("GraphvizSectorMap: Failed to generate DOT hash, scheduling debounced redraw", "source", source, "sector", sectorNumber, "error", err)
+			log.Info("GraphvizSectorMap: Failed to generate DOT hash, scheduling debounced redraw", "source", source, "sector", sectorNumber, "error", err)
 			needsImmediate = true
 			gsm.currentHashKey = "" // Clear current hash key to force regeneration
 		}

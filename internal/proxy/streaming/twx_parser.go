@@ -6,7 +6,7 @@ import (
 	"time"
 	"twist/internal/ansi"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 )
 
@@ -253,7 +253,7 @@ type TWXParser struct {
 	lastChar rune
 
 	// Database integration
-	database database.Database
+	getDatabaseFunc func() database.Database
 
 	// TUI API integration
 	tuiAPI api.TuiAPI
@@ -267,8 +267,23 @@ type TWXParser struct {
 	scriptInterpreter IScriptInterpreter
 }
 
-// NewTWXParser creates a new TWX-style parser with database and TUI API
-func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
+// GetDatabase returns the database instance, panicking if it's nil
+func (p *TWXParser) GetDatabase() database.Database {
+	if p.getDatabaseFunc == nil {
+		log.Error("CRITICAL: getDatabaseFunc is nil in TWXParser", "parser", p)
+		panic("getDatabaseFunc is nil - proxy initialization failed")
+	}
+	db := p.getDatabaseFunc()
+	if db == nil {
+		log.Error("CRITICAL: Database returned nil from getDatabaseFunc", "func", p.getDatabaseFunc)
+		panic("Database is nil - game detector should have set this up")
+	}
+	log.Debug("Database retrieved successfully", "db", db)
+	return db
+}
+
+// NewTWXParser creates a new TWX-style parser with database accessor and TUI API
+func NewTWXParser(getDatabaseFunc func() database.Database, tuiAPI api.TuiAPI) *TWXParser {
 	parser := &TWXParser{
 		currentLine:            "",
 		currentANSILine:        "",
@@ -285,8 +300,8 @@ func NewTWXParser(db database.Database, tuiAPI api.TuiAPI) *TWXParser {
 		position:               0,
 		lastChar:               0,
 		maxHistorySize:         1000,
-		database:               db,     // Required database
-		tuiAPI:                 tuiAPI, // Optional TUI API
+		getDatabaseFunc:        getDatabaseFunc, // Database accessor
+		tuiAPI:                 tuiAPI,          // Optional TUI API
 		// Version detection fields
 		twgsType:  0,
 		twgsVer:   "",
@@ -490,7 +505,7 @@ func (p *TWXParser) Finalize() {
 
 	// Complete any pending info display
 	if p.infoDisplay.Active {
-		debug.Info("INFO_PARSER: Finalize() completing active info display")
+		log.Info("INFO_PARSER: Finalize() completing active info display")
 		p.completeInfoDisplay()
 	}
 
@@ -581,7 +596,7 @@ func (p *TWXParser) processLine(line string) {
 	// Fire TextLineEvent as in Pascal TWX ProcessLine (mirrors Pascal TWXInterpreter.TextLineEvent)
 	textLineTriggerFired, err := p.FireTextLineEvent(line, false)
 	if err != nil {
-		debug.Error("Error firing TextLineEvent", "error", err, "line", line)
+		log.Error("Error firing TextLineEvent", "error", err, "line", line)
 	}
 
 	// If a TextLineTrigger fired, skip Text event processing (waitfor) - matches TWX behavior
@@ -644,7 +659,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 	if p.probeMode || len(p.probeDiscoveredSectors) > 0 {
 		p.probeMode = false
 		p.probeDiscoveredSectors = make(map[int]bool) // Clear all probe-discovered sectors
-		debug.Info("PROBE: Cleared all probe state (command prompt) - back to normal player mode")
+		log.Info("PROBE: Cleared all probe state (command prompt) - back to normal player mode")
 	}
 
 	// Save current sector if not done already
@@ -672,7 +687,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				// Ensure the current sector exists in the database
 				sectorTracker := NewSectorTracker(sectorNum)
 				p.errorRecoveryHandler("ensureCurrentSectorExists", func() error {
-					return sectorTracker.Execute(p.database.GetDB())
+					return sectorTracker.Execute(p.GetDatabase().GetDB())
 				})
 
 				// Update current sector using straight-sql tracker
@@ -681,15 +696,15 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				}
 				p.playerStatsTracker.SetCurrentSector(sectorNum)
 				p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
-					return p.playerStatsTracker.Execute(p.database.GetDB())
+					return p.playerStatsTracker.Execute(p.GetDatabase().GetDB())
 				})
 
 				// Fire OnCurrentSectorChanged event for the player's actual current sector
 				// This ensures the TUI is notified when the player returns to their actual location
 				if p.tuiAPI != nil {
-					freshSectorInfo, err := p.database.GetSectorInfo(sectorNum)
+					freshSectorInfo, err := p.GetDatabase().GetSectorInfo(sectorNum)
 					if err == nil {
-						debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
+						log.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
 						p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
 					}
 				}
@@ -710,15 +725,15 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				// Ensure the current sector exists in the database
 				sectorTracker := NewSectorTracker(sectorNum)
 				p.errorRecoveryHandler("ensureCurrentSectorExists", func() error {
-					return sectorTracker.Execute(p.database.GetDB())
+					return sectorTracker.Execute(p.GetDatabase().GetDB())
 				})
 
 				// Fire OnCurrentSectorChanged event for the player's actual current sector
 				// This ensures the TUI is notified when the player returns to their actual location
 				if p.tuiAPI != nil {
-					freshSectorInfo, err := p.database.GetSectorInfo(sectorNum)
+					freshSectorInfo, err := p.GetDatabase().GetSectorInfo(sectorNum)
 					if err == nil {
-						debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
+						log.Info("TWX_PARSER: Firing OnCurrentSectorChanged for player's current sector from command prompt", "sector", sectorNum)
 						p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
 					}
 				}
@@ -729,7 +744,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 				}
 				p.playerStatsTracker.SetCurrentSector(sectorNum)
 				p.errorRecoveryHandler("savePlayerStatsToDatabase", func() error {
-					return p.playerStatsTracker.Execute(p.database.GetDB())
+					return p.playerStatsTracker.Execute(p.GetDatabase().GetDB())
 				})
 			}
 		}
@@ -739,7 +754,7 @@ func (p *TWXParser) handleCommandPrompt(line string) {
 }
 
 func (p *TWXParser) handleComputerPrompt(line string) {
-	debug.Info("COMPUTER: handleComputerPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
+	log.Info("COMPUTER: handleComputerPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayNone
 	p.lastWarp = 0
 
@@ -756,13 +771,13 @@ func (p *TWXParser) handleComputerPrompt(line string) {
 }
 
 func (p *TWXParser) handleProbePrompt(line string) {
-	debug.Info("PROBE: handleProbePrompt called", "line", line)
+	log.Info("PROBE: handleProbePrompt called", "line", line)
 
 	// Check if this is "Probe entering sector :" to extract target sector
 	if strings.Contains(line, "Probe entering sector :") {
 		// Set probe mode to prevent TUI sector change events for probe-discovered sectors
 		p.probeMode = true
-		debug.Info("PROBE: Set probe mode to true")
+		log.Info("PROBE: Set probe mode to true")
 		// Handle concatenated lines - extract just the probe part
 		probeStart := strings.Index(line, "Probe entering sector :")
 		if probeStart >= 0 {
@@ -770,32 +785,32 @@ func (p *TWXParser) handleProbePrompt(line string) {
 
 			// Extract sector number from "Probe entering sector : 510"
 			parts := strings.Fields(probeLine)
-			debug.Info("PROBE: parsed parts", "parts", parts, "length", len(parts))
+			log.Info("PROBE: parsed parts", "parts", parts, "length", len(parts))
 			if len(parts) >= 5 {
 				targetSectorStr := parts[4]
-				debug.Info("PROBE: extracted target sector string", "target_sector_str", targetSectorStr)
+				log.Info("PROBE: extracted target sector string", "target_sector_str", targetSectorStr)
 				if targetSector := p.parseIntSafe(targetSectorStr); targetSector > 0 {
-					debug.Info("PROBE: parsed target sector", "target_sector", targetSector, "last_warp", p.lastWarp)
+					log.Info("PROBE: parsed target sector", "target_sector", targetSector, "last_warp", p.lastWarp)
 
 					// Mark this sector as discovered by probe to suppress TUI events
 					p.probeDiscoveredSectors[targetSector] = true
-					debug.Info("PROBE: Marked sector as probe-discovered", "sector", targetSector)
+					log.Info("PROBE: Marked sector as probe-discovered", "sector", targetSector)
 
 					// If we have a previous sector (lastWarp), create a one-way warp connection
 					if p.lastWarp > 0 && p.lastWarp != targetSector {
-						debug.Info("PROBE: Creating warp", "from_sector", p.lastWarp, "to_sector", targetSector)
+						log.Info("PROBE: Creating warp", "from_sector", p.lastWarp, "to_sector", targetSector)
 						p.addProbeWarp(p.lastWarp, targetSector)
 					} else {
-						debug.Info("PROBE: Not creating warp", "last_warp", p.lastWarp, "target_sector", targetSector)
+						log.Info("PROBE: Not creating warp", "last_warp", p.lastWarp, "target_sector", targetSector)
 					}
 					// Update lastWarp to current target sector for next probe movement
 					p.lastWarp = targetSector
-					debug.Info("PROBE: Updated lastWarp", "new_last_warp", p.lastWarp)
+					log.Info("PROBE: Updated lastWarp", "new_last_warp", p.lastWarp)
 				} else {
-					debug.Info("PROBE: Failed to parse targetSectorStr as int", "target_sector_str", targetSectorStr)
+					log.Info("PROBE: Failed to parse targetSectorStr as int", "target_sector_str", targetSectorStr)
 				}
 			} else {
-				debug.Info("PROBE: Not enough parts in probeLine", "probe_line", probeLine)
+				log.Info("PROBE: Not enough parts in probeLine", "probe_line", probeLine)
 			}
 		}
 	}
@@ -806,7 +821,7 @@ func (p *TWXParser) handleProbePrompt(line string) {
 		p.probeMode = false
 		// Don't clear probeDiscoveredSectors here - we want to continue suppressing TUI events
 		// for those sectors until the player actually visits them
-		debug.Info("PROBE: Set probe mode to false (probe self-destructed)")
+		log.Info("PROBE: Set probe mode to false (probe self-destructed)")
 	}
 
 	if !p.sectorSaved {
@@ -831,23 +846,23 @@ func (p *TWXParser) handleCIMPrompt(line string) {
 
 	// Pascal: // begin CIM download
 	// Pascal: FCurrentDisplay := dCIM;
-	debug.Info("CIM: handleCIMPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
+	log.Info("CIM: handleCIMPrompt called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayCIM
 	p.lastWarp = 0
 }
 
 func (p *TWXParser) handleSectorStart(line string) {
-	debug.Info("SECTOR: handleSectorStart called", "line", line, "last_warp", p.lastWarp)
+	log.Info("SECTOR: handleSectorStart called", "line", line, "last_warp", p.lastWarp)
 
 	// Extract sector number first to determine if this is a new sector
 	// Format: "Sector  : 1234 in The Sphere"
 	parts := strings.Fields(line)
 	if len(parts) >= 3 {
 		if sectorNum := p.parseIntSafe(parts[2]); sectorNum > 0 {
-			debug.Info("SECTOR: Parsing sector", "sector", sectorNum, "current_sector", p.currentSectorIndex, "last_warp", p.lastWarp)
+			log.Info("SECTOR: Parsing sector", "sector", sectorNum, "current_sector", p.currentSectorIndex, "last_warp", p.lastWarp)
 			// Only complete previous sector if this is a different sector
 			if p.currentSectorIndex != sectorNum && !p.sectorSaved {
-				debug.Info("SECTOR: Completing previous sector", "previous_sector", p.currentSectorIndex)
+				log.Info("SECTOR: Completing previous sector", "previous_sector", p.currentSectorIndex)
 				p.sectorCompleted()
 			}
 
@@ -855,20 +870,21 @@ func (p *TWXParser) handleSectorStart(line string) {
 			// This ensures that data from previous visits doesn't carry over
 			// (including port data that might persist from previous visits)
 			p.sectorSaved = false // Reset for any sector visit
-			debug.Info("SECTOR: About to reset current sector", "last_warp", p.lastWarp)
+			log.Info("SECTOR: About to reset current sector", "last_warp", p.lastWarp)
 			p.resetCurrentSector()
-			debug.Info("SECTOR: After reset current sector", "last_warp", p.lastWarp)
+			log.Info("SECTOR: After reset current sector", "last_warp", p.lastWarp)
 			p.currentSectorIndex = sectorNum
 
 			// Phase 2: Initialize straight-sql trackers for new sector
 			if p.sectorTracker != nil && p.sectorTracker.HasUpdates() {
-				debug.Info("SECTOR: Discarding incomplete sector tracker - new sector detected")
+				log.Info("SECTOR: Discarding incomplete sector tracker - new sector detected")
 			}
 			if p.sectorCollections != nil && p.sectorCollections.HasData() {
-				debug.Info("SECTOR: Discarding incomplete sector collections - new sector detected")
+				log.Info("SECTOR: Discarding incomplete sector collections - new sector detected")
 			}
 
 			// Start new discovered field session
+			log.Info("SECTOR_TRACKER_LIFECYCLE: Creating new sectorTracker", "sector", sectorNum, "previous_tracker_nil", p.sectorTracker == nil)
 			p.sectorTracker = NewSectorTracker(sectorNum)
 			p.sectorCollections = NewSectorCollections(sectorNum)
 			p.portTracker = NewPortTracker(sectorNum)
@@ -890,7 +906,7 @@ func (p *TWXParser) handlePortDocking(line string) {
 }
 
 func (p *TWXParser) handlePortReport(line string) {
-	debug.Info("PORT: handlePortReport called", "line", line)
+	log.Info("PORT: handlePortReport called", "line", line)
 
 	// Set display mode to Port Commerce Report
 	p.currentDisplay = DisplayPortCR
@@ -899,14 +915,14 @@ func (p *TWXParser) handlePortReport(line string) {
 	// Create or recreate portTracker for this port trading session
 	if p.portTracker == nil {
 		p.portTracker = NewPortTracker(p.currentSectorIndex)
-		debug.Info("PORT: Created new portTracker for port trading session", "sector", p.currentSectorIndex)
+		log.Info("PORT: Created new portTracker for port trading session", "sector", p.currentSectorIndex)
 	}
 
 	// Extract port name from "Commerce report for PORT_NAME:"
 	colonPos := strings.Index(line, ":")
 	if colonPos > 20 {
 		portName := strings.TrimSpace(line[20:colonPos])
-		debug.Info("PORT: Extracted port name", "port_name", portName)
+		log.Info("PORT: Extracted port name", "port_name", portName)
 
 		// Initialize port data for current sector
 		p.initializePortData(portName)
@@ -939,7 +955,7 @@ func (p *TWXParser) handleDensityStart(line string) {
 }
 
 func (p *TWXParser) handleWarpLaneStart(line string) {
-	debug.Info("WARP: handleWarpLaneStart called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
+	log.Info("WARP: handleWarpLaneStart called, resetting lastWarp to 0", "previous_lastWarp", p.lastWarp)
 	p.currentDisplay = DisplayWarpLane
 	p.lastWarp = 0
 }
@@ -1283,7 +1299,7 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 	}
 
 	// Store warp data to database (mirrors Pascal TWXDatabase.SaveSector)
-	sector, err := p.database.LoadSector(sectorNum)
+	sector, err := p.GetDatabase().LoadSector(sectorNum)
 	if err != nil {
 		// Create new sector if it doesn't exist
 		sector = database.NULLSector()
@@ -1306,7 +1322,7 @@ func (p *TWXParser) processWarpCIMLine(line string) {
 	sector.UpDate = time.Now()
 
 	// Save updated sector
-	if err := p.database.SaveSector(sector, sectorNum); err != nil {
+	if err := p.GetDatabase().SaveSector(sector, sectorNum); err != nil {
 		return
 	}
 
@@ -1409,18 +1425,14 @@ func (p *TWXParser) determineCIMBuyStatus(originalLine string, paramNum int) boo
 // ensureSectorExistsAndSavePort ensures a sector exists in the database before saving port data
 // This handles the common pattern where port data requires a sector to exist first (foreign key constraint)
 func (p *TWXParser) ensureSectorExistsAndSavePort(port database.TPort, sectorNum int) error {
-	if p.database == nil {
-		return fmt.Errorf("database not available")
-	}
-
-	debug.Info("PORT: ensureSectorExistsAndSavePort called", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
+	log.Info("PORT: ensureSectorExistsAndSavePort called", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
 
 	// Save port data
-	if err := p.database.SavePort(port, sectorNum); err != nil {
+	if err := p.GetDatabase().SavePort(port, sectorNum); err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
 	}
 
-	debug.Info("PORT: Successfully saved port data", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
+	log.Info("PORT: Successfully saved port data", "sector", sectorNum, "port_name", port.Name, "class", port.ClassIndex)
 
 	// Fire any necessary events (consistent with other database operations)
 	// This ensures proper notification flow like other database saves
@@ -1429,12 +1441,8 @@ func (p *TWXParser) ensureSectorExistsAndSavePort(port database.TPort, sectorNum
 
 // ensureSectorExistsAndSavePortWithVisited marks CIM root sector as visited and saves port data
 func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort, sectorNum int) error {
-	if p.database == nil {
-		return fmt.Errorf("database not available")
-	}
-
 	// Always ensure sector exists first (required for foreign key constraint)
-	sector, err := p.database.LoadSector(sectorNum)
+	sector, err := p.GetDatabase().LoadSector(sectorNum)
 	if err != nil {
 		// Create minimal sector entry
 		sector = database.NULLSector()
@@ -1452,12 +1460,12 @@ func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort
 	sector.UpDate = time.Now()
 
 	// Always save/update sector to ensure it exists in current transaction context
-	if err := p.database.SaveSector(sector, sectorNum); err != nil {
+	if err := p.GetDatabase().SaveSector(sector, sectorNum); err != nil {
 		return fmt.Errorf("failed to save sector %d: %w", sectorNum, err)
 	}
 
 	// Save port data
-	if err := p.database.SavePort(port, sectorNum); err != nil {
+	if err := p.GetDatabase().SavePort(port, sectorNum); err != nil {
 		return fmt.Errorf("failed to save port for sector %d: %w", sectorNum, err)
 	}
 
@@ -1469,12 +1477,12 @@ func (p *TWXParser) ensureSectorExistsAndSavePortWithVisited(port database.TPort
 // clearPortData removes port data from the database for a sector that has no port
 // This is called when we visit a sector and confirm it has no port
 func (p *TWXParser) clearPortData(sectorIndex int) error {
-	if p.database == nil {
+	if p.getDatabaseFunc() == nil {
 		return fmt.Errorf("database not available")
 	}
 
 	// Delete port data from the ports table
-	if err := p.database.DeletePort(sectorIndex); err != nil {
+	if err := p.GetDatabase().DeletePort(sectorIndex); err != nil {
 		return fmt.Errorf("failed to delete port data for sector %d: %w", sectorIndex, err)
 	}
 
@@ -1524,10 +1532,6 @@ func (p *TWXParser) processDensityLine(line string) {
 		return
 	}
 
-	if p.database == nil {
-		return
-	}
-
 	// Pascal implementation (lines 1346-1375):
 	// X := Line;
 	// StripChar(X, '(');
@@ -1543,7 +1547,7 @@ func (p *TWXParser) processDensityLine(line string) {
 	}
 
 	// Pascal: Sect := TWXDatabase.LoadSector(I);
-	sector, err := p.database.LoadSector(sectorNum)
+	sector, err := p.GetDatabase().LoadSector(sectorNum)
 	if err != nil {
 		sector = database.NULLSector()
 	}
@@ -1578,7 +1582,7 @@ func (p *TWXParser) processDensityLine(line string) {
 	}
 
 	// Pascal: TWXDatabase.SaveSector(Sect, I, nil, nil, nil);
-	if err := p.database.SaveSector(sector, sectorNum); err != nil {
+	if err := p.GetDatabase().SaveSector(sector, sectorNum); err != nil {
 		panic(fmt.Sprintf("Critical database error in processDensityLine SaveSector for sector %d: %v", sectorNum, err))
 	}
 }
@@ -1590,7 +1594,7 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 		return
 	}
 
-	if p.database == nil {
+	if p.getDatabaseFunc() == nil {
 		return
 	}
 
@@ -1610,6 +1614,7 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 	// Initialize tracker for this sector
 	var densityTracker *SectorTracker
 	if p.sectorTracker == nil || p.currentSectorIndex != sectorNum {
+		log.Info("SECTOR_TRACKER_LIFECYCLE: Creating sectorTracker in density parsing", "sector", sectorNum, "previous_sector", p.currentSectorIndex, "tracker_was_nil", p.sectorTracker == nil)
 		p.currentSectorIndex = sectorNum
 		p.sectorTracker = NewSectorTracker(sectorNum)
 		p.sectorCollections = NewSectorCollections(sectorNum)
@@ -1664,7 +1669,7 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 	} else {
 		// Different sector - set exploration status based on density scan discovery
 		// Check current exploration status first to preserve higher statuses
-		currentSector, err := p.database.LoadSector(sectorNum)
+		currentSector, err := p.GetDatabase().LoadSector(sectorNum)
 		var currentExplored database.TSectorExploredType
 		if err == nil {
 			currentExplored = currentSector.Explored
@@ -1677,15 +1682,15 @@ func (p *TWXParser) processDensityLineTracker(line string) {
 		}
 	}
 
-	debug.Info("DENSITY: Parsed density scan", "sector", sectorNum, "density", densityStr, "navhaz", navhazStr, "anomaly", anomalyParam)
+	log.Info("DENSITY: Parsed density scan", "sector", sectorNum, "density", densityStr, "navhaz", navhazStr, "anomaly", anomalyParam)
 
 	// Execute density tracker immediately (standalone updates)
 	if densityTracker != nil && densityTracker.HasUpdates() {
-		err := densityTracker.Execute(p.database.GetDB())
+		err := densityTracker.Execute(p.GetDatabase().GetDB())
 		if err != nil {
-			debug.Info("DENSITY: Failed to update sector fields", "error", err)
+			log.Info("DENSITY: Failed to update sector fields", "error", err)
 		} else {
-			debug.Info("DENSITY: Successfully updated sector with density scan data", "sector", sectorNum)
+			log.Info("DENSITY: Successfully updated sector with density scan data", "sector", sectorNum)
 		}
 	}
 }
@@ -1790,14 +1795,10 @@ func (p *TWXParser) parseFighterQuantity(quantityStr string) int {
 // resetFighterDatabase resets all fighter data (mirrors TWX Pascal ResetFigDatabase)
 func (p *TWXParser) resetFighterDatabase() {
 
-	if p.database == nil {
-		return
-	}
-
 	// Enhanced Pascal-compliant fighter database reset
 	if err := p.resetFighterDatabasePascalCompliant(); err != nil {
 		// Fallback to simple database reset
-		if err := p.database.ResetPersonalCorpFighters(); err != nil {
+		if err := p.GetDatabase().ResetPersonalCorpFighters(); err != nil {
 			// Error occurred
 		} else {
 			// Success
@@ -1812,7 +1813,7 @@ func (p *TWXParser) resetFighterDatabasePascalCompliant() error {
 	defer p.recoverFromPanic("resetFighterDatabasePascalCompliant")
 
 	// Pascal: for i:= 11 to TWXDatabase.DBHeader.Sectors do
-	totalSectors := p.database.GetSectors()
+	totalSectors := p.GetDatabase().GetSectors()
 	if totalSectors <= 10 {
 		return nil
 	}
@@ -1831,7 +1832,7 @@ func (p *TWXParser) resetFighterDatabasePascalCompliant() error {
 		}
 
 		// Pascal: Sect := TWXDatabase.LoadSector(i);
-		sector, err := p.database.LoadSector(i)
+		sector, err := p.GetDatabase().LoadSector(i)
 		if err != nil {
 			continue
 		}
@@ -1847,7 +1848,7 @@ func (p *TWXParser) resetFighterDatabasePascalCompliant() error {
 			sector.Figs.FigType = 3 // ftNone
 
 			// Pascal: TWXDatabase.SaveSector(Sect, i);
-			if err := p.database.SaveSector(sector, i); err != nil {
+			if err := p.GetDatabase().SaveSector(sector, i); err != nil {
 				continue
 			}
 
@@ -1863,7 +1864,7 @@ func (p *TWXParser) findStardockSector() int {
 	// Try checking sectors 1-20 as a reasonable range instead of relying on GetSectors()
 	// which might not be updated during testing
 	for i := 1; i <= 20; i++ {
-		sector, err := p.database.LoadSector(i)
+		sector, err := p.GetDatabase().LoadSector(i)
 		if err != nil {
 			continue
 		}
@@ -1936,12 +1937,12 @@ func (p *TWXParser) handleStardockDetection(line string) {
 
 // setupStardockSector sets up the Stardock sector with Pascal-compliant data
 func (p *TWXParser) setupStardockSector(sectorNum int) {
-	if p.database == nil {
+	if p.getDatabaseFunc() == nil {
 		return
 	}
 
 	// Pascal logic: setup Federation beacon and constellation, port class 9
-	sector, err := p.database.LoadSector(sectorNum)
+	sector, err := p.GetDatabase().LoadSector(sectorNum)
 	if err != nil {
 		// Create new sector if it doesn't exist
 		sector = database.NULLSector()
@@ -1960,7 +1961,7 @@ func (p *TWXParser) setupStardockSector(sectorNum int) {
 	sector.UpDate = time.Now()
 
 	// Save the sector first
-	if err := p.database.SaveSector(sector, sectorNum); err != nil {
+	if err := p.GetDatabase().SaveSector(sector, sectorNum); err != nil {
 		return
 	}
 
@@ -1977,30 +1978,26 @@ func (p *TWXParser) setupStardockSector(sectorNum int) {
 	}
 
 	// Save port data directly (sector already exists)
-	if err := p.database.SavePort(port, sectorNum); err != nil {
+	if err := p.GetDatabase().SavePort(port, sectorNum); err != nil {
 		return
 	}
 }
 
 // setStardockSector stores the Stardock sector number in configuration
 func (p *TWXParser) setStardockSector(sectorNum int) {
-	if p.database == nil {
-		return
-	}
-
 	// Store as script variable (Pascal stores in INI file, we'll use script variables)
-	if err := p.database.SaveScriptVariable("$STARDOCK", sectorNum); err != nil {
+	if err := p.GetDatabase().SaveScriptVariable("$STARDOCK", sectorNum); err != nil {
 	} else {
 	}
 }
 
 // getStardockSector retrieves the Stardock sector number from configuration
 func (p *TWXParser) getStardockSector() int {
-	if p.database == nil {
+	if p.getDatabaseFunc() == nil {
 		return 0
 	}
 
-	value, err := p.database.LoadScriptVariable("$STARDOCK")
+	value, err := p.GetDatabase().LoadScriptVariable("$STARDOCK")
 	if err != nil {
 		return 0 // Unknown
 	}
@@ -2033,13 +2030,22 @@ func (p *TWXParser) getStardockSector() int {
 // This prevents data overwrites and improves performance with targeted SQL updates.
 func (p *TWXParser) sectorCompleted() {
 	defer p.recoverFromPanic("sectorCompleted")
-	debug.Info("PROBE: sectorCompleted called", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "sector_saved", p.sectorSaved)
+	log.Info("PROBE: sectorCompleted called", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "sector_saved", p.sectorSaved)
 
 	// Skip if already completed to avoid duplicate TUI API calls
 	if p.sectorSaved {
-		debug.Info("PROBE: Skipping sectorCompleted - already saved", "sector", p.currentSectorIndex)
+		log.Info("PROBE: Skipping sectorCompleted - already saved", "sector", p.currentSectorIndex)
 		return
 	}
+
+	// Skip invalid sector numbers (0 means no sector has been parsed yet)
+	if p.currentSectorIndex <= 0 {
+		log.Info("PROBE: Skipping sectorCompleted - invalid sector number", "sector", p.currentSectorIndex)
+		return
+	}
+
+	// Set immediately to prevent race conditions
+	p.sectorSaved = true
 
 	// Finalize any pending trader without ship details
 	if p.sectorPosition == SectorPosTraders && p.currentTrader.Name != "" {
@@ -2057,45 +2063,69 @@ func (p *TWXParser) sectorCompleted() {
 	// Phase 4.5: Validation removed with intermediate objects
 
 	// Phase 2: Execute trackers for straight-sql approach
+	log.Info("SECTOR_TRACKER_LIFECYCLE: About to check sectorTracker", "sector", p.currentSectorIndex, "tracker_nil", p.sectorTracker == nil)
 	if p.sectorTracker != nil {
+		log.Info("SECTOR_TRACKER_LIFECYCLE: sectorTracker is not nil, proceeding", "sector", p.currentSectorIndex)
 		// Set exploration status based on context (before executing)
 		if p.probeMode {
-			p.sectorTracker.SetExplored(int(database.EtCalc)) // Mark as probe data
-			debug.Info("SECTOR: Setting exploration to EtCalc", "exploration_type", int(database.EtCalc), "sector", p.currentSectorIndex)
+			log.Info("SECTOR_TRACKER_LIFECYCLE: About to SetExplored (EtCalc)", "sector", p.currentSectorIndex, "tracker_nil_check", p.sectorTracker == nil)
+			if p.sectorTracker != nil {
+				p.sectorTracker.SetExplored(int(database.EtCalc)) // Mark as probe data
+				log.Info("SECTOR: Setting exploration to EtCalc", "exploration_type", int(database.EtCalc), "sector", p.currentSectorIndex)
+			} else {
+				log.Error("SECTOR_TRACKER_LIFECYCLE: sectorTracker became nil during EtCalc!", "sector", p.currentSectorIndex)
+			}
 		} else {
-			p.sectorTracker.SetExplored(int(database.EtHolo)) // Mark current sector as visited by player
-			debug.Info("SECTOR: Setting exploration to EtHolo", "exploration_type", int(database.EtHolo), "sector", p.currentSectorIndex)
-		}
-
-		if p.sectorTracker.HasUpdates() {
-			err := p.sectorTracker.Execute(p.database.GetDB())
-			if err != nil {
-				debug.Info("SECTOR_PARSER: Failed to update sector fields", "error", err)
+			log.Info("SECTOR_TRACKER_LIFECYCLE: About to SetExplored (EtHolo)", "sector", p.currentSectorIndex, "tracker_nil_check", p.sectorTracker == nil)
+			if p.sectorTracker != nil {
+				p.sectorTracker.SetExplored(int(database.EtHolo)) // Mark current sector as visited by player
+				log.Info("SECTOR: Setting exploration to EtHolo", "exploration_type", int(database.EtHolo), "sector", p.currentSectorIndex)
+			} else {
+				log.Error("SECTOR_TRACKER_LIFECYCLE: sectorTracker became nil during EtHolo!", "sector", p.currentSectorIndex)
 			}
 		}
+
+		log.Info("SECTOR_TRACKER_LIFECYCLE: About to check HasUpdates", "sector", p.currentSectorIndex, "tracker_nil_check", p.sectorTracker == nil)
+		if p.sectorTracker != nil && p.sectorTracker.HasUpdates() {
+			log.Info("SECTOR_TRACKER_LIFECYCLE: About to Execute", "sector", p.currentSectorIndex)
+			db := p.GetDatabase().GetDB()
+			log.Info("SECTOR_TRACKER_LIFECYCLE: Database connection", "sector", p.currentSectorIndex, "db_nil", db == nil)
+			if db == nil {
+				log.Error("SECTOR_TRACKER_LIFECYCLE: Database connection is nil!", "sector", p.currentSectorIndex)
+			} else {
+				err := p.sectorTracker.Execute(db)
+				if err != nil {
+					log.Info("SECTOR_PARSER: Failed to update sector fields", "error", err)
+				}
+			}
+		} else if p.sectorTracker == nil {
+			log.Error("SECTOR_TRACKER_LIFECYCLE: sectorTracker became nil before HasUpdates!", "sector", p.currentSectorIndex)
+		}
+	} else {
+		log.Warn("SECTOR_TRACKER_LIFECYCLE: sectorTracker is nil at start of execution", "sector", p.currentSectorIndex)
 	}
 
 	if p.sectorCollections != nil && p.sectorCollections.HasData() {
-		err := p.sectorCollections.Execute(p.database.GetDB())
+		err := p.sectorCollections.Execute(p.GetDatabase().GetDB())
 		if err != nil {
-			debug.Info("SECTOR_PARSER: Failed to update sector collections", "error", err)
+			log.Info("SECTOR_PARSER: Failed to update sector collections", "error", err)
 		}
 	}
 
 	// Phase 3: Execute port tracker for straight-sql approach
 	if p.portTracker != nil && p.portTracker.HasUpdates() {
-		err := p.portTracker.Execute(p.database.GetDB())
+		err := p.portTracker.Execute(p.GetDatabase().GetDB())
 		if err != nil {
-			debug.Info("PORT_PARSER: Failed to update port fields", "error", err)
+			log.Info("PORT_PARSER: Failed to update port fields", "error", err)
 		} else {
 			// Phase 3: Fire OnPortUpdated API event with fresh database read
 			if p.tuiAPI != nil {
-				portInfo, err := p.database.GetPortInfo(p.currentSectorIndex)
+				portInfo, err := p.GetDatabase().GetPortInfo(p.currentSectorIndex)
 				if err == nil && portInfo != nil {
-					debug.Info("PORT_PARSER: Firing OnPortUpdated", "sector", p.currentSectorIndex, "port_name", portInfo.Name, "class", portInfo.Class)
+					log.Info("PORT_PARSER: Firing OnPortUpdated", "sector", p.currentSectorIndex, "port_name", portInfo.Name, "class", portInfo.Class)
 					p.tuiAPI.OnPortUpdated(*portInfo)
 				} else {
-					debug.Info("PORT_PARSER: Failed to read fresh port info for API event", "error", err)
+					log.Info("PORT_PARSER: Failed to read fresh port info for API event", "error", err)
 				}
 			}
 		}
@@ -2113,15 +2143,15 @@ func (p *TWXParser) sectorCompleted() {
 	shouldSuppressEvent := p.probeMode || isProbeDiscovered
 	if p.tuiAPI != nil && !shouldSuppressEvent {
 		// Phase 2: Use fresh database read for basic API event
-		freshSectorInfo, err := p.database.GetSectorInfo(p.currentSectorIndex)
+		freshSectorInfo, err := p.GetDatabase().GetSectorInfo(p.currentSectorIndex)
 		if err == nil {
-			debug.Info("TWX_PARSER: Firing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", freshSectorInfo.Number, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
+			log.Info("TWX_PARSER: Firing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", freshSectorInfo.Number, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
 			p.tuiAPI.OnCurrentSectorChanged(freshSectorInfo)
 		} else {
-			debug.Info("TWX_PARSER: Failed to read fresh sector info for API event", "error", err)
+			log.Info("TWX_PARSER: Failed to read fresh sector info for API event", "error", err)
 		}
 	} else if p.tuiAPI != nil {
-		debug.Info("TWX_PARSER: Suppressing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
+		log.Info("TWX_PARSER: Suppressing OnCurrentSectorChanged [SOURCE: sectorCompleted]", "sector", p.currentSectorIndex, "probe_mode", p.probeMode, "probe_discovered", isProbeDiscovered)
 	}
 
 	// Phase 4.5: Fire sector events to event bus with fresh data from database
@@ -2134,7 +2164,7 @@ func (p *TWXParser) sectorCompleted() {
 			Source: "TWXParser",
 		}
 		p.eventBus.Fire(event)
-		debug.Info("TWX_PARSER: Fired EventSectorComplete to event bus", "sector", p.currentSectorIndex)
+		log.Info("TWX_PARSER: Fired EventSectorComplete to event bus", "sector", p.currentSectorIndex)
 	}
 
 	// Phase 4.5: Fire sector events to observers
@@ -2147,22 +2177,21 @@ func (p *TWXParser) sectorCompleted() {
 			Source: "TWXParser",
 		}
 		p.Notify(event)
-		debug.Info("TWX_PARSER: Fired EventSectorComplete to observers", "sector", p.currentSectorIndex)
+		log.Info("TWX_PARSER: Fired EventSectorComplete to observers", "sector", p.currentSectorIndex)
 	}
 
 	// Phase 2: Reset trackers for next parsing session
+	log.Info("SECTOR_TRACKER_LIFECYCLE: Setting trackers to nil", "sector", p.currentSectorIndex, "tracker_was_nil", p.sectorTracker == nil)
 	p.sectorTracker = nil
 	p.sectorCollections = nil
 	p.portTracker = nil
-
-	p.sectorSaved = true
 }
 
 // parseIntSafe is now implemented in parser_utils.go
 
 // Reset resets the parser state
 func (p *TWXParser) Reset() {
-	debug.Info("RESET: Full parser reset called", "previous_lastWarp", p.lastWarp)
+	log.Info("RESET: Full parser reset called", "previous_lastWarp", p.lastWarp)
 	p.currentLine = ""
 	p.currentANSILine = ""
 	p.rawANSILine = ""
@@ -2177,7 +2206,7 @@ func (p *TWXParser) Reset() {
 	p.position = 0
 	p.lastChar = 0
 	p.currentTrader = TraderInfo{} // Reset current trader
-	debug.Info("RESET: Full parser reset completed", "current_lastWarp", p.lastWarp)
+	log.Info("RESET: Full parser reset completed", "current_lastWarp", p.lastWarp)
 }
 
 // GetCurrentSector returns the current sector index
@@ -2192,7 +2221,7 @@ func (p *TWXParser) GetDisplayState() DisplayType {
 
 // GetPlayerStats returns the current player statistics from database (straight-sql pattern)
 func (p *TWXParser) GetPlayerStats() (*api.PlayerStatsInfo, error) {
-	stats, err := p.database.GetPlayerStatsInfo()
+	stats, err := p.GetDatabase().GetPlayerStatsInfo()
 	return &stats, err
 }
 
@@ -2213,7 +2242,7 @@ func (p *TWXParser) GetTW2002Version() string {
 
 // GetCurrentTurns returns current turns from database (straight-sql pattern)
 func (p *TWXParser) GetCurrentTurns() int {
-	if playerInfo, err := p.database.GetPlayerStatsInfo(); err == nil {
+	if playerInfo, err := p.GetDatabase().GetPlayerStatsInfo(); err == nil {
 		return playerInfo.Turns
 	}
 	return 0
@@ -2221,7 +2250,7 @@ func (p *TWXParser) GetCurrentTurns() int {
 
 // GetCurrentCredits returns current credits from database (straight-sql pattern)
 func (p *TWXParser) GetCurrentCredits() int {
-	if playerInfo, err := p.database.GetPlayerStatsInfo(); err == nil {
+	if playerInfo, err := p.GetDatabase().GetPlayerStatsInfo(); err == nil {
 		return playerInfo.Credits
 	}
 	return 0
@@ -2229,7 +2258,7 @@ func (p *TWXParser) GetCurrentCredits() int {
 
 // GetCurrentFighters returns current fighters from database (straight-sql pattern)
 func (p *TWXParser) GetCurrentFighters() int {
-	if playerInfo, err := p.database.GetPlayerStatsInfo(); err == nil {
+	if playerInfo, err := p.GetDatabase().GetPlayerStatsInfo(); err == nil {
 		return playerInfo.Fighters
 	}
 	return 0
@@ -2369,10 +2398,6 @@ func (p *TWXParser) sortWarps(warps []int) {
 
 // updateReverseWarpConnections updates reverse warp connections for pathfinding
 func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
-	if p.database == nil {
-		return
-	}
-
 	// For each destination sector, ensure it has a reverse warp back to this sector
 	// This mirrors the Pascal AddWarp logic for maintaining bidirectional connectivity
 	for _, toSector := range warps {
@@ -2384,14 +2409,14 @@ func (p *TWXParser) updateReverseWarpConnections(fromSector int, warps []int) {
 
 // addProbeWarp adds a one-way warp connection discovered by probe movement
 func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
-	debug.Info("PROBE WARP: addProbeWarp called", "from_sector", fromSector, "to_sector", toSector)
+	log.Info("PROBE WARP: addProbeWarp called", "from_sector", fromSector, "to_sector", toSector)
 
 	// Phase 4.5: Probe warps saved via sector tracker
 	// Create a sector tracker for the fromSector and add the warp
 	fromTracker := NewSectorTracker(fromSector)
 
 	// Load existing warps from database to preserve them
-	if sectorInfo, err := p.database.LoadSector(fromSector); err == nil {
+	if sectorInfo, err := p.GetDatabase().LoadSector(fromSector); err == nil {
 		// Set existing warps plus the new one
 		existingWarps := sectorInfo.Warp
 
@@ -2402,7 +2427,7 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 				break
 			} else if existingWarps[i] == toSector {
 				// Warp already exists, no need to add it again
-				debug.Info("PROBE WARP: Warp already exists", "from_sector", fromSector, "to_sector", toSector)
+				log.Info("PROBE WARP: Warp already exists", "from_sector", fromSector, "to_sector", toSector)
 				return
 			}
 		}
@@ -2415,18 +2440,18 @@ func (p *TWXParser) addProbeWarp(fromSector, toSector int) {
 	}
 
 	// Execute the tracker to save the warp
-	err := fromTracker.Execute(p.database.GetDB())
+	err := fromTracker.Execute(p.GetDatabase().GetDB())
 	if err != nil {
-		debug.Info("PROBE WARP: Failed to save probe warp", "from_sector", fromSector, "to_sector", toSector, "error", err)
+		log.Info("PROBE WARP: Failed to save probe warp", "from_sector", fromSector, "to_sector", toSector, "error", err)
 		return
 	}
-	debug.Info("PROBE WARP: Successfully saved probe warp", "from_sector", fromSector, "to_sector", toSector)
+	log.Info("PROBE WARP: Successfully saved probe warp", "from_sector", fromSector, "to_sector", toSector)
 }
 
 // addReverseWarp adds a reverse warp connection (mirrors Pascal AddWarp method)
 func (p *TWXParser) addReverseWarp(toSector, fromSector int) {
 	// Load the destination sector
-	sector, err := p.database.LoadSector(toSector)
+	sector, err := p.GetDatabase().LoadSector(toSector)
 	if err != nil {
 		return
 	}
@@ -2461,7 +2486,7 @@ func (p *TWXParser) addReverseWarp(toSector, fromSector int) {
 		}
 
 		// Save updated sector
-		if err := p.database.SaveSector(sector, toSector); err != nil {
+		if err := p.GetDatabase().SaveSector(sector, toSector); err != nil {
 		} else {
 		}
 	}
@@ -2558,16 +2583,6 @@ func (p *TWXParser) UpdateCurrentLine(line string) {
 	}
 }
 
-// GetDatabase returns the database interface
-func (p *TWXParser) GetDatabase() database.Database {
-	return p.database
-}
-
-// SetDatabase sets the database interface
-func (p *TWXParser) SetDatabase(db database.Database) {
-	p.database = db
-}
-
 // ProcessOutBound processes outbound data and returns whether to continue sending
 func (p *TWXParser) ProcessOutBound(data string) bool {
 
@@ -2575,7 +2590,7 @@ func (p *TWXParser) ProcessOutBound(data string) bool {
 	p.FireTextEvent(data, true)
 	_, err := p.FireTextLineEvent(data, true)
 	if err != nil {
-		debug.Error("Error firing outbound TextLineEvent", "error", err, "data", data)
+		log.Error("Error firing outbound TextLineEvent", "error", err, "data", data)
 	}
 
 	// Fire outbound event to event bus
@@ -2621,7 +2636,7 @@ func (p *TWXParser) Notify(event Event) {
 		func() {
 			defer func() {
 				if r := recover(); r != nil {
-					debug.Error("PANIC recovered in observer update", "function", "notifyObservers", "error", r)
+					log.Error("PANIC recovered in observer update", "function", "notifyObservers", "error", r)
 				}
 			}()
 			observer.Update(p, event)

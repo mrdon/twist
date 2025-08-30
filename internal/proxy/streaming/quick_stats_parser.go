@@ -2,7 +2,7 @@ package streaming
 
 import (
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // QuickStatsDisplay represents the state of quick stats parsing
@@ -35,7 +35,7 @@ func (p *TWXParser) startQuickStatsSession() {
 
 	// Reset incomplete tracker from previous session
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		debug.Info("QUICK_STATS: Discarding incomplete player stats tracker - new quick stats detected")
+		log.Info("QUICK_STATS: Discarding incomplete player stats tracker - new quick stats detected")
 	}
 
 	// Start new discovered field session
@@ -55,19 +55,19 @@ func (p *TWXParser) completeQuickStatsSession() {
 
 	// Execute SQL update with ONLY discovered fields
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		err := p.playerStatsTracker.Execute(p.database.GetDB())
+		err := p.playerStatsTracker.Execute(p.GetDatabase().GetDB())
 		if err != nil {
-			debug.Info("QUICK_STATS: Failed to update player stats", "error", err)
+			log.Info("QUICK_STATS: Failed to update player stats", "error", err)
 			return
 		}
 
 		// Read complete, fresh data from database for API event
 		if p.tuiAPI != nil {
-			fullPlayerStats, err := p.database.GetPlayerStatsInfo()
+			fullPlayerStats, err := p.GetDatabase().GetPlayerStatsInfo()
 			if err == nil {
 				p.firePlayerStatsEventDirect(fullPlayerStats)
 			} else {
-				debug.Info("QUICK_STATS: Failed to read player stats info for API event", "error", err)
+				log.Info("QUICK_STATS: Failed to read player stats info for API event", "error", err)
 			}
 		}
 

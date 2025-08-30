@@ -2,7 +2,7 @@ package menus
 
 import (
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // HelpMenu handles Help menu actions
@@ -36,7 +36,7 @@ func (h *HelpMenu) GetMenuItems() []twistComponents.MenuItem {
 func (h *HelpMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in HelpMenu.HandleMenuAction", "error", r)
+			log.Error("PANIC in HelpMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -48,7 +48,7 @@ func (h *HelpMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "User Manual":
 		return h.handleUserManual(app)
 	default:
-		debug.Info("HelpMenu: Unknown action", "action", action)
+		log.Info("HelpMenu: Unknown action", "action", action)
 		return nil
 	}
 }

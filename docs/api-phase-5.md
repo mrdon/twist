@@ -191,7 +191,7 @@ func TestTUIImportRestrictions(t *testing.T) {
         "twist/internal/ansi",          // ANSI processing (until shared)
         "twist/internal/terminal",      // Terminal utilities (until shared)
         "twist/internal/components",    // UI components (until shared)
-        "twist/internal/debug",         // Debug utilities (until shared)
+        "twist/internal/log",         // Debug utilities (until shared)
         "github.com/",                  // Third-party packages
         "golang.org/",                  // Standard library extensions
     }

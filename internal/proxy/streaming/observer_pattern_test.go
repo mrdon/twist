@@ -38,7 +38,7 @@ func NewTestObserver(id string) *TestObserver {
 func TestObserverPatternBasic(t *testing.T) {
 	// Setup
 	db := database.NewDatabase()
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	observer1 := NewTestObserver("observer1")
 	observer2 := NewTestObserver("observer2")
@@ -81,7 +81,7 @@ func TestObserverPatternBasic(t *testing.T) {
 func TestObserverDetach(t *testing.T) {
 	// Setup
 	db := database.NewDatabase()
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	observer1 := NewTestObserver("observer1")
 	observer2 := NewTestObserver("observer2")
@@ -252,7 +252,7 @@ func TestScriptInterpreterEvents(t *testing.T) {
 func TestModExtractorInterface(t *testing.T) {
 	// Test that TWXParser implements IModExtractor interface
 	db := database.NewDatabase()
-	var parser IModExtractor = NewTWXParser(db, nil)
+	var parser IModExtractor = NewTWXParser(func() database.Database { return db }, nil)
 
 	// Test interface methods
 	currentSector := parser.GetCurrentSector()
@@ -293,7 +293,7 @@ func TestIntegrationParsingWithEvents(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	// Create test observer
 	observer := NewTestObserver("integration_test")

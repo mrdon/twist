@@ -2,7 +2,7 @@ package menus
 
 import (
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // TerminalMenu handles Terminal menu actions
@@ -27,7 +27,7 @@ func (t *TerminalMenu) GetMenuItems() []twistComponents.MenuItem {
 func (t *TerminalMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in TerminalMenu.HandleMenuAction", "error", r)
+			log.Error("PANIC in TerminalMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -41,7 +41,7 @@ func (t *TerminalMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Copy Selection":
 		return t.handleCopySelection(app)
 	default:
-		debug.Info("TerminalMenu: Unknown action", "action", action)
+		log.Info("TerminalMenu: Unknown action", "action", action)
 		return nil
 	}
 }
@@ -49,7 +49,7 @@ func (t *TerminalMenu) HandleMenuAction(action string, app AppInterface) error {
 // handleClear clears the terminal content
 func (t *TerminalMenu) handleClear(app AppInterface) error {
 	app.ClearTerminal()
-	debug.Info("TerminalMenu: Cleared terminal")
+	log.Info("TerminalMenu: Cleared terminal")
 	return nil
 }
 

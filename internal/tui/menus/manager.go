@@ -3,7 +3,7 @@ package menus
 import (
 	"twist/internal/api"
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // MenuHandler interface that all menu implementations must satisfy
@@ -70,7 +70,7 @@ func NewMenuManager() *MenuManager {
 func (mm *MenuManager) HandleMenuAction(menuName, action string, app AppInterface) error {
 	handler := mm.registry.GetMenuHandler(menuName)
 	if handler == nil {
-		debug.Info("MenuManager: No handler found for menu", "menu", menuName)
+		log.Info("MenuManager: No handler found for menu", "menu", menuName)
 		return nil // Don't error, just ignore unhandled menus
 	}
 
@@ -79,7 +79,7 @@ func (mm *MenuManager) HandleMenuAction(menuName, action string, app AppInterfac
 	for _, enabledItem := range enabledItems {
 		if enabledItem.MenuItem.Label == action {
 			if !enabledItem.Enabled {
-				debug.Info("MenuManager: Action is disabled for menu", "action", action, "menu", menuName)
+				log.Info("MenuManager: Action is disabled for menu", "action", action, "menu", menuName)
 				return nil // Don't execute disabled actions
 			}
 			break
@@ -164,30 +164,30 @@ func (mm *MenuManager) GetAllShortcuts() map[string]string {
 func (mm *MenuManager) ActionCreatesModal(menuName, action string) bool {
 	// First check if the menu item has CreatesModal set to true
 	items := mm.GetMenuItems(menuName)
-	debug.Info("ActionCreatesModal: Checking menu/action against items", "menu", menuName, "action", action, "count", len(items))
+	log.Info("ActionCreatesModal: Checking menu/action against items", "menu", menuName, "action", action, "count", len(items))
 	for _, item := range items {
-		debug.Info("ActionCreatesModal: Item", "label", item.Label, "creates_modal", item.CreatesModal)
+		log.Info("ActionCreatesModal: Item", "label", item.Label, "creates_modal", item.CreatesModal)
 		if item.Label == action {
-			debug.Info("ActionCreatesModal: Found matching item", "creates_modal", item.CreatesModal)
+			log.Info("ActionCreatesModal: Found matching item", "creates_modal", item.CreatesModal)
 			return item.CreatesModal
 		}
 	}
-	debug.Info("ActionCreatesModal: No matching item found, checking legacy handler")
+	log.Info("ActionCreatesModal: No matching item found, checking legacy handler")
 
 	// Fallback: check legacy ModalAwareMenuHandler interface for compatibility
 	handler := mm.registry.GetMenuHandler(menuName)
 	if handler == nil {
-		debug.Info("ActionCreatesModal: No handler found")
+		log.Info("ActionCreatesModal: No handler found")
 		return false
 	}
 
 	if modalAware, ok := handler.(ModalAwareMenuHandler); ok {
 		result := modalAware.ActionCreatesModal(action)
-		debug.Info("ActionCreatesModal: Legacy handler returned", "result", result)
+		log.Info("ActionCreatesModal: Legacy handler returned", "result", result)
 		return result
 	}
 
-	debug.Info("ActionCreatesModal: No legacy handler, returning false")
+	log.Info("ActionCreatesModal: No legacy handler, returning false")
 	// Default: assume actions don't create modals unless explicitly declared
 	return false
 }

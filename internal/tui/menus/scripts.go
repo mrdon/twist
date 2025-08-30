@@ -5,7 +5,7 @@ import (
 	"strings"
 	"twist/internal/api"
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/tui/components"
 )
 
@@ -30,11 +30,11 @@ func (s *ScriptsMenu) GetMenuItems() []twistComponents.MenuItem {
 func (s *ScriptsMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in ScriptsMenu.HandleMenuAction", "error", r)
+			log.Error("PANIC in ScriptsMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
-	debug.Info("ScriptsMenu.HandleMenuAction: Received action", "action", action)
+	log.Info("ScriptsMenu.HandleMenuAction: Received action", "action", action)
 
 	switch action {
 	case "List":
@@ -44,7 +44,7 @@ func (s *ScriptsMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Stop All Scripts":
 		return s.handleStopAllScripts(app)
 	default:
-		debug.Info("ScriptsMenu: Unknown action", "action", action)
+		log.Info("ScriptsMenu: Unknown action", "action", action)
 		return nil
 	}
 }
@@ -53,15 +53,15 @@ func (s *ScriptsMenu) HandleMenuAction(action string, app AppInterface) error {
 func (s *ScriptsMenu) handleList(app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleList", "error", r)
+			log.Error("PANIC in handleList", "error", r)
 		}
 	}()
 
-	debug.Info("ScriptsMenu.handleList: Starting")
+	log.Info("ScriptsMenu.handleList: Starting")
 
 	proxyAPI := app.GetProxyAPI()
 	if proxyAPI == nil {
-		debug.Info("ScriptsMenu.handleList: ProxyAPI is nil, showing not connected modal")
+		log.Info("ScriptsMenu.handleList: ProxyAPI is nil, showing not connected modal")
 		app.ShowModal("Scripts List",
 			"Not connected to proxy. Please connect first.",
 			[]string{"OK"},
@@ -72,10 +72,10 @@ func (s *ScriptsMenu) handleList(app AppInterface) error {
 	}
 
 	// Get script list from proxy
-	debug.Info("ScriptsMenu.handleList: ProxyAPI available, getting script list")
+	log.Info("ScriptsMenu.handleList: ProxyAPI available, getting script list")
 	scripts, err := proxyAPI.GetScriptList()
 	if err != nil {
-		debug.Info("ScriptsMenu.handleList: Error getting script list", "error", err)
+		log.Info("ScriptsMenu.handleList: Error getting script list", "error", err)
 		app.ShowModal("Scripts List Error",
 			fmt.Sprintf("Error getting script list: %v", err),
 			[]string{"OK"},
@@ -86,7 +86,7 @@ func (s *ScriptsMenu) handleList(app AppInterface) error {
 	}
 
 	// Build script list text - let modal auto-size to content
-	debug.Info("ScriptsMenu.handleList: Got scripts, building list", "count", len(scripts))
+	log.Info("ScriptsMenu.handleList: Got scripts, building list", "count", len(scripts))
 	var listText strings.Builder
 	if len(scripts) == 0 {
 		listText.WriteString("No scripts loaded.\n\n")
@@ -98,8 +98,8 @@ func (s *ScriptsMenu) handleList(app AppInterface) error {
 		listText.WriteString(tableText)
 	}
 
-	debug.Info("ScriptsMenu.handleList: Showing modal with scripts list")
-	debug.Info("ScriptsMenu.handleList: Modal text content", "content", listText.String())
+	log.Info("ScriptsMenu.handleList: Showing modal with scripts list")
+	log.Info("ScriptsMenu.handleList: Modal text content", "content", listText.String())
 	app.ShowModal("Scripts List", listText.String(), []string{"Close"},
 		func(buttonIndex int, buttonLabel string) {
 			app.CloseModal()
@@ -191,15 +191,15 @@ func (s *ScriptsMenu) buildReasonableTable(scripts []api.ScriptInfo) string {
 func (s *ScriptsMenu) handleStopAllScripts(app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleStopAllScripts", "error", r)
+			log.Error("PANIC in handleStopAllScripts", "error", r)
 		}
 	}()
 
-	debug.Info("ScriptsMenu.handleStopAllScripts: Starting")
+	log.Info("ScriptsMenu.handleStopAllScripts: Starting")
 
 	proxyAPI := app.GetProxyAPI()
 	if proxyAPI == nil {
-		debug.Info("ScriptsMenu.handleStopAllScripts: ProxyAPI is nil, showing not connected modal")
+		log.Info("ScriptsMenu.handleStopAllScripts: ProxyAPI is nil, showing not connected modal")
 		app.ShowModal("Stop All Scripts",
 			"Not connected to proxy. Please connect first.",
 			[]string{"OK"},
@@ -210,10 +210,10 @@ func (s *ScriptsMenu) handleStopAllScripts(app AppInterface) error {
 	}
 
 	// Stop all scripts via proxy API
-	debug.Info("ScriptsMenu.handleStopAllScripts: ProxyAPI available, stopping all scripts")
+	log.Info("ScriptsMenu.handleStopAllScripts: ProxyAPI available, stopping all scripts")
 	err := proxyAPI.StopAllScripts()
 	if err != nil {
-		debug.Info("ScriptsMenu.handleStopAllScripts: Error stopping scripts", "error", err)
+		log.Info("ScriptsMenu.handleStopAllScripts: Error stopping scripts", "error", err)
 		app.ShowModal("Stop All Scripts",
 			fmt.Sprintf("Error stopping scripts: %v", err),
 			[]string{"OK"},
@@ -224,7 +224,7 @@ func (s *ScriptsMenu) handleStopAllScripts(app AppInterface) error {
 	}
 
 	// StopAllScripts returns immediately and does work async
-	debug.Info("ScriptsMenu.handleStopAllScripts: API call successful, showing stopping message")
+	log.Info("ScriptsMenu.handleStopAllScripts: API call successful, showing stopping message")
 	app.ShowModal("Stop All Scripts",
 		"Stopping all scripts...",
 		[]string{"OK"},

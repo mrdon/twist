@@ -13,7 +13,7 @@ func TestComprehensiveStateMachine(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Display State Transitions", func(t *testing.T) {
 		// Test state transitions match Pascal FCurrentDisplay logic
@@ -277,7 +277,7 @@ func TestStateMachineWorkflow(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Complete Sector Scan Workflow", func(t *testing.T) {
 		// Simulate complete sector scanning session

@@ -9,7 +9,7 @@ import (
 	"sync/atomic"
 
 	"twist/internal/ansi"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/scripting/include"
 	"twist/internal/proxy/scripting/parser"
@@ -644,7 +644,7 @@ func (e *Engine) parseScriptWithBasePath(source, basePath string) (*parser.ASTNo
 		if i >= 10 { // Show first 10 tokens
 			break
 		}
-		debug.Info("Token", "index", i, "token", token)
+		log.Info("Token", "index", i, "token", token)
 	}
 
 	// Step 4: Parse
@@ -785,7 +785,7 @@ func (e *Engine) GetAllVariables() map[string]*types.Value {
 func (e *Engine) onScriptTerminated(scriptID string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in onScriptTerminated", "error", r)
+			log.Error("PANIC in onScriptTerminated", "error", r)
 		}
 	}()
 

@@ -3,7 +3,7 @@ package scripting
 import (
 	"fmt"
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/interfaces"
 	"twist/internal/proxy/scripting/constants"
@@ -26,24 +26,26 @@ type TerminalInterface interface {
 type GameAdapter struct {
 	db              database.Database
 	systemConstants *constants.SystemConstants
-	proxy           ProxyInterface
+	sendInput       func(string) // Function to send input (no circular dependency)
+	sendOutput      func(string) // Function to send output (no circular dependency)
 	terminal        TerminalInterface
 	menuManager     interface{} // Terminal menu manager
 }
 
 // NewGameAdapter creates a new game adapter
 func NewGameAdapter(db database.Database) *GameAdapter {
-	debug.Info("NewGameAdapter: creating adapter", "db", db)
+	log.Info("NewGameAdapter: creating adapter", "db", db)
 	adapter := &GameAdapter{db: db}
 	// Initialize system constants with self-reference for game interface
 	adapter.systemConstants = constants.NewSystemConstants(adapter)
-	debug.Info("NewGameAdapter: created adapter", "db", adapter.db)
+	log.Info("NewGameAdapter: created adapter", "db", adapter.db)
 	return adapter
 }
 
-// SetProxy sets the proxy interface for sending commands
-func (g *GameAdapter) SetProxy(proxy ProxyInterface) {
-	g.proxy = proxy
+// SetProxyFunctions sets the proxy functions for sending commands (no circular dependency)
+func (g *GameAdapter) SetProxyFunctions(sendInput func(string), sendOutput func(string)) {
+	g.sendInput = sendInput
+	g.sendOutput = sendOutput
 }
 
 // SetTerminal sets the terminal interface for getting output
@@ -63,7 +65,7 @@ func (g *GameAdapter) GetMenuManager() interface{} {
 
 // SetDatabase updates the database reference
 func (g *GameAdapter) SetDatabase(db database.Database) {
-	debug.Info("GameAdapter.SetDatabase: changing database", "from", g.db, "to", db)
+	log.Info("GameAdapter.SetDatabase: changing database", "from", g.db, "to", db)
 	g.db = db
 }
 
@@ -190,19 +192,19 @@ func (g *GameAdapter) GetCurrentPrompt() string {
 
 // SendCommand implements GameInterface
 func (g *GameAdapter) SendCommand(cmd string) error {
-	if g.proxy == nil {
-		return fmt.Errorf("proxy not available")
+	if g.sendInput == nil {
+		return fmt.Errorf("sendInput function not available")
 	}
-	g.proxy.SendInput(cmd)
+	g.sendInput(cmd)
 	return nil
 }
 
 // SendDirectOutput sends output directly to terminal without routing through input system
 func (g *GameAdapter) SendDirectOutput(text string) error {
-	if g.proxy == nil {
-		return fmt.Errorf("proxy not available")
+	if g.sendOutput == nil {
+		return fmt.Errorf("sendOutput function not available")
 	}
-	g.proxy.SendOutput(text)
+	g.sendOutput(text)
 	return nil
 }
 
@@ -312,7 +314,7 @@ type ScriptManager struct {
 
 // NewScriptManager creates a new script manager
 func NewScriptManager(db database.Database) *ScriptManager {
-	debug.Info("NewScriptManager: creating", "db", db)
+	log.Info("NewScriptManager: creating", "db", db)
 	gameAdapter := NewGameAdapter(db)
 	engine := NewEngine(gameAdapter)
 
@@ -321,7 +323,7 @@ func NewScriptManager(db database.Database) *ScriptManager {
 		db:          db,
 		gameAdapter: gameAdapter,
 	}
-	debug.Info("NewScriptManager: created", "sm.db", sm.db, "gameAdapter.db", gameAdapter.db)
+	log.Info("NewScriptManager: created", "sm.db", sm.db, "gameAdapter.db", gameAdapter.db)
 	return sm
 }
 
@@ -342,17 +344,17 @@ func NewScriptManagerWithProvider(dbProvider DatabaseProvider) *ScriptManager {
 
 // getCurrentDatabase returns the current database, either from direct reference or provider
 func (sm *ScriptManager) getCurrentDatabase() database.Database {
-	debug.Info("getCurrentDatabase", "sm.db", sm.db, "sm.dbProvider", sm.dbProvider)
+	log.Info("getCurrentDatabase", "sm.db", sm.db, "sm.dbProvider", sm.dbProvider)
 	if sm.db != nil {
-		debug.Info("getCurrentDatabase: returning sm.db", "db", sm.db)
+		log.Info("getCurrentDatabase: returning sm.db", "db", sm.db)
 		return sm.db
 	}
 	if sm.dbProvider != nil {
 		providerDB := sm.dbProvider.GetDatabase()
-		debug.Info("getCurrentDatabase: provider returned db", "db", providerDB)
+		log.Info("getCurrentDatabase: provider returned db", "db", providerDB)
 		return providerDB
 	}
-	debug.Info("getCurrentDatabase: returning nil")
+	log.Info("getCurrentDatabase: returning nil")
 	return nil
 }
 
@@ -365,16 +367,16 @@ func (sm *ScriptManager) UpdateDatabase() {
 
 // SetDatabase updates the script manager's database reference directly
 func (sm *ScriptManager) SetDatabase(db database.Database) {
-	debug.Info("ScriptManager.SetDatabase: updating database", "from", sm.db, "to", db)
+	log.Info("ScriptManager.SetDatabase: updating database", "from", sm.db, "to", db)
 	sm.db = db
 	// Also update the game adapter immediately
 	sm.gameAdapter.SetDatabase(db)
 }
 
 // SetupConnections wires the proxy and terminal to the game adapter and sets up engine handlers
-func (sm *ScriptManager) SetupConnections(proxy ProxyInterface, terminal TerminalInterface) {
-	// Wire the proxy and terminal to the game adapter
-	sm.gameAdapter.SetProxy(proxy)
+func (sm *ScriptManager) SetupConnections(sendInput func(string), sendOutput func(string), terminal TerminalInterface) {
+	// Wire the functions to the game adapter (no circular dependency)
+	sm.gameAdapter.SetProxyFunctions(sendInput, sendOutput)
 	sm.gameAdapter.SetTerminal(terminal)
 
 	// Update the game adapter with current database

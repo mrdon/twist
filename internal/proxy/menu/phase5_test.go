@@ -5,11 +5,9 @@ import (
 )
 
 func TestPhase5ScriptMenuFunctionality(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -51,7 +49,7 @@ func TestPhase5ScriptMenuFunctionality(t *testing.T) {
 }
 
 func TestPhase5ScriptMenuValues(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	// Add a script menu
 	err := manager.AddScriptMenu("ValueMenu", "Value Menu", "MAIN", "value_ref", "", "test_script", 'V', false)
@@ -77,7 +75,7 @@ func TestPhase5ScriptMenuValues(t *testing.T) {
 }
 
 func TestPhase5ScriptMenuHelp(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	// Add a script menu
 	err := manager.AddScriptMenu("HelpMenu", "Help Menu", "MAIN", "help_ref", "", "test_script", 'H', false)
@@ -104,7 +102,7 @@ func TestPhase5ScriptMenuHelp(t *testing.T) {
 }
 
 func TestPhase5ScriptMenuOptions(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	// Add a script menu
 	err := manager.AddScriptMenu("OptionsMenu", "Options Menu", "MAIN", "options_ref", "", "test_script", 'O', false)
@@ -131,7 +129,7 @@ func TestPhase5ScriptMenuOptions(t *testing.T) {
 }
 
 func TestPhase5ScriptMenuCleanup(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	// Add multiple script menus with same owner
 	err := manager.AddScriptMenu("Menu1", "Menu 1", "MAIN", "ref1", "", "script_123", 'A', false)
@@ -179,11 +177,9 @@ func TestPhase5ScriptMenuCleanup(t *testing.T) {
 }
 
 func TestPhase5ScriptMenuOpenClose(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -217,7 +213,7 @@ func TestPhase5ScriptMenuOpenClose(t *testing.T) {
 }
 
 func TestPhase5MenuKeyConfiguration(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	// Test default menu key
 	if manager.GetMenuKey() != '$' {
@@ -244,11 +240,9 @@ func TestPhase5MenuKeyConfiguration(t *testing.T) {
 }
 
 func TestPhase5TwoStageInputCollection(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 

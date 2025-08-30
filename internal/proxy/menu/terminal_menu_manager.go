@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/input"
 	"twist/internal/proxy/interfaces"
@@ -24,8 +24,11 @@ type TerminalMenuManager struct {
 	// This is the only field that needs protection since it's set by another goroutine
 	injectDataFunc atomic.Value // stores func([]byte)
 
-	// Reference to proxy for accessing ScriptManager and Database
-	proxyInterface ProxyInterface
+	// Functions for accessing proxy functionality (no circular dependency)
+	getScriptManager   func() ScriptManagerInterface
+	getDatabase        func() interface{}
+	sendInput          func(string)
+	sendDirectToServer func(string)
 
 	// Script-created menus (separate from built-in menus)
 	scriptMenus      map[string]*ScriptMenuData
@@ -72,21 +75,34 @@ type ScriptManagerInterface interface {
 	ResumeScriptWithInput(scriptID, input string) error
 }
 
-func NewTerminalMenuManager() *TerminalMenuManager {
+func NewTerminalMenuManager(
+	injectDataFunc func([]byte),
+	getScriptManager func() ScriptManagerInterface,
+	getDatabase func() interface{},
+	sendInput func(string),
+	sendDirectToServer func(string),
+) *TerminalMenuManager {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in NewTerminalMenuManager", "error", r)
+			log.Error("PANIC in NewTerminalMenuManager", "error", r)
 		}
 	}()
 
 	tmm := &TerminalMenuManager{
-		activeMenus:      make(map[string]*TerminalMenuItem),
-		scriptMenus:      make(map[string]*ScriptMenuData),
-		scriptMenuValues: make(map[string]string),
-		menuKey:          '$',
-		isActive:         0, // atomic false
-		lastBurst:        "",
+		activeMenus:        make(map[string]*TerminalMenuItem),
+		scriptMenus:        make(map[string]*ScriptMenuData),
+		scriptMenuValues:   make(map[string]string),
+		menuKey:            '$',
+		isActive:           0, // atomic false
+		lastBurst:          "",
+		getScriptManager:   getScriptManager,
+		getDatabase:        getDatabase,
+		sendInput:          sendInput,
+		sendDirectToServer: sendDirectToServer,
 	}
+
+	// Store the inject data function
+	tmm.injectDataFunc.Store(injectDataFunc)
 
 	// Initialize input collector with output function
 	tmm.inputCollector = input.NewInputCollector(tmm.sendOutput)
@@ -132,18 +148,10 @@ func (tmm *TerminalMenuManager) setupInputHandlers() {
 	})
 }
 
-func (tmm *TerminalMenuManager) SetInjectDataFunc(injectFunc func([]byte)) {
-	tmm.injectDataFunc.Store(injectFunc)
-}
-
-func (tmm *TerminalMenuManager) SetProxyInterface(proxy ProxyInterface) {
-	tmm.proxyInterface = proxy
-}
-
 func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in ProcessMenuKey", "error", r)
+			log.Error("PANIC in ProcessMenuKey", "error", r)
 		}
 	}()
 
@@ -158,7 +166,7 @@ func (tmm *TerminalMenuManager) ProcessMenuKey(data string) bool {
 func (tmm *TerminalMenuManager) MenuText(input string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in MenuText", "error", r)
+			log.Error("PANIC in MenuText", "error", r)
 		}
 	}()
 
@@ -169,15 +177,15 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	input = strings.TrimSpace(input)
 
 	// Debug logging to see what's happening
-	debug.Info("MenuText called", "input", input, "inputCollectionMode", tmm.inputCollector.IsCollecting())
+	log.Info("MenuText called", "input", input, "inputCollectionMode", tmm.inputCollector.IsCollecting())
 
 	// DISABLED: Script input handling is done at the proxy level for proper character buffering
 	// The proxy.go handles script input with proper buffering, menu system handles menu operations
 	/* DISABLED - conflicts with proxy script input handling
 	// PRIORITY CHECK: If any script is waiting for input, route to script input handling
 	// This prevents script input from being misrouted to menu input collectors
-	if tmm.proxyInterface != nil {
-		scriptManager := tmm.proxyInterface.GetScriptManager()
+	if tmm.sendDirectToServer != nil {
+		scriptManager := tmm.getScriptManager()
 		if scriptManager != nil {
 			scriptID, scriptName := scriptManager.HasScriptWaitingForInput()
 			if scriptID != "" {
@@ -196,7 +204,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 	// Handle two-stage input collection mode using the input collector
 	// This only handles MENU input collection (like script loading, menu operations)
 	if tmm.inputCollector.IsCollecting() {
-		debug.Info("Handling menu input collection", "input", input)
+		log.Info("Handling menu input collection", "input", input)
 		return tmm.inputCollector.HandleInput(input)
 	}
 
@@ -236,7 +244,7 @@ func (tmm *TerminalMenuManager) MenuText(input string) error {
 func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in ActivateMainMenu", "error", r)
+			log.Error("PANIC in ActivateMainMenu", "error", r)
 		}
 	}()
 
@@ -256,7 +264,7 @@ func (tmm *TerminalMenuManager) ActivateMainMenu() error {
 func (tmm *TerminalMenuManager) selectMenuItem(item *TerminalMenuItem) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in selectMenuItem", "error", r)
+			log.Error("PANIC in selectMenuItem", "error", r)
 		}
 	}()
 
@@ -285,7 +293,7 @@ func (tmm *TerminalMenuManager) selectMenuItem(item *TerminalMenuItem) error {
 func (tmm *TerminalMenuManager) displayCurrentMenu() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in displayCurrentMenu", "error", r)
+			log.Error("PANIC in displayCurrentMenu", "error", r)
 		}
 	}()
 
@@ -326,7 +334,7 @@ func (tmm *TerminalMenuManager) displayCurrentMenu() {
 func (tmm *TerminalMenuManager) closeCurrentMenu() {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in closeCurrentMenu", "error", r)
+			log.Error("PANIC in closeCurrentMenu", "error", r)
 		}
 	}()
 
@@ -354,7 +362,7 @@ func (tmm *TerminalMenuManager) IsActive() bool {
 func (tmm *TerminalMenuManager) AddCustomMenu(name string, parent *TerminalMenuItem) *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in AddCustomMenu", "error", r)
+			log.Error("PANIC in AddCustomMenu", "error", r)
 		}
 	}()
 
@@ -375,7 +383,7 @@ func (tmm *TerminalMenuManager) GetMenu(name string) *TerminalMenuItem {
 func (tmm *TerminalMenuManager) RemoveMenu(name string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in RemoveMenu", "error", r)
+			log.Error("PANIC in RemoveMenu", "error", r)
 		}
 	}()
 
@@ -398,7 +406,7 @@ func (tmm *TerminalMenuManager) GetMenuKey() rune {
 func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in createTWXMainMenu", "error", r)
+			log.Error("PANIC in createTWXMainMenu", "error", r)
 		}
 	}()
 
@@ -435,7 +443,7 @@ func (tmm *TerminalMenuManager) createTWXMainMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleBurstCommands", "error", r)
+			log.Error("PANIC in handleBurstCommands", "error", r)
 		}
 	}()
 
@@ -450,17 +458,17 @@ func (tmm *TerminalMenuManager) handleBurstCommands(item *TerminalMenuItem, para
 func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleLoadScript", "error", r)
+			log.Error("PANIC in handleLoadScript", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -479,17 +487,17 @@ func (tmm *TerminalMenuManager) handleLoadScript(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleTerminateScript", "error", r)
+			log.Error("PANIC in handleTerminateScript", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -513,7 +521,7 @@ func (tmm *TerminalMenuManager) handleTerminateScript(item *TerminalMenuItem, pa
 func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptMenu", "error", r)
+			log.Error("PANIC in handleScriptMenu", "error", r)
 		}
 	}()
 
@@ -528,7 +536,7 @@ func (tmm *TerminalMenuManager) handleScriptMenu(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleDataMenu", "error", r)
+			log.Error("PANIC in handleDataMenu", "error", r)
 		}
 	}()
 
@@ -543,7 +551,7 @@ func (tmm *TerminalMenuManager) handleDataMenu(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handlePortMenu", "error", r)
+			log.Error("PANIC in handlePortMenu", "error", r)
 		}
 	}()
 
@@ -558,7 +566,7 @@ func (tmm *TerminalMenuManager) handlePortMenu(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in createTWXScriptMenu", "error", r)
+			log.Error("PANIC in createTWXScriptMenu", "error", r)
 		}
 	}()
 
@@ -600,7 +608,7 @@ func (tmm *TerminalMenuManager) createTWXScriptMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in createTWXDataMenu", "error", r)
+			log.Error("PANIC in createTWXDataMenu", "error", r)
 		}
 	}()
 
@@ -647,7 +655,7 @@ func (tmm *TerminalMenuManager) createTWXDataMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in createTWXPortMenu", "error", r)
+			log.Error("PANIC in createTWXPortMenu", "error", r)
 		}
 	}()
 
@@ -679,7 +687,7 @@ func (tmm *TerminalMenuManager) createTWXPortMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in createTWXBurstMenu", "error", r)
+			log.Error("PANIC in createTWXBurstMenu", "error", r)
 		}
 	}()
 
@@ -707,17 +715,17 @@ func (tmm *TerminalMenuManager) createTWXBurstMenu() *TerminalMenuItem {
 func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptLoad", "error", r)
+			log.Error("PANIC in handleScriptLoad", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -748,17 +756,17 @@ func (tmm *TerminalMenuManager) handleScriptLoad(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptTerminate", "error", r)
+			log.Error("PANIC in handleScriptTerminate", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -780,7 +788,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminate(item *TerminalMenuItem, pa
 func (tmm *TerminalMenuManager) handleScriptPause(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptPause", "error", r)
+			log.Error("PANIC in handleScriptPause", "error", r)
 		}
 	}()
 
@@ -792,7 +800,7 @@ func (tmm *TerminalMenuManager) handleScriptPause(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleScriptResume(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptResume", "error", r)
+			log.Error("PANIC in handleScriptResume", "error", r)
 		}
 	}()
 
@@ -804,17 +812,17 @@ func (tmm *TerminalMenuManager) handleScriptResume(item *TerminalMenuItem, param
 func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptDebug", "error", r)
+			log.Error("PANIC in handleScriptDebug", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -876,17 +884,17 @@ func (tmm *TerminalMenuManager) handleScriptDebug(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleVariableDump", "error", r)
+			log.Error("PANIC in handleVariableDump", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getScriptManager == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -905,17 +913,17 @@ func (tmm *TerminalMenuManager) handleVariableDump(item *TerminalMenuItem, param
 func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleSectorDisplay", "error", r)
+			log.Error("PANIC in handleSectorDisplay", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getDatabase == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
@@ -946,7 +954,7 @@ func (tmm *TerminalMenuManager) handleSectorDisplay(item *TerminalMenuItem, para
 func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleTraderList", "error", r)
+			log.Error("PANIC in handleTraderList", "error", r)
 		}
 	}()
 
@@ -958,17 +966,17 @@ func (tmm *TerminalMenuManager) handleTraderList(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handlePortList", "error", r)
+			log.Error("PANIC in handlePortList", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getDatabase == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
@@ -1019,7 +1027,7 @@ func (tmm *TerminalMenuManager) handlePortList(item *TerminalMenuItem, params []
 func (tmm *TerminalMenuManager) handleRoutePlot(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleRoutePlot", "error", r)
+			log.Error("PANIC in handleRoutePlot", "error", r)
 		}
 	}()
 
@@ -1031,7 +1039,7 @@ func (tmm *TerminalMenuManager) handleRoutePlot(item *TerminalMenuItem, params [
 func (tmm *TerminalMenuManager) handleBubbleInfo(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleBubbleInfo", "error", r)
+			log.Error("PANIC in handleBubbleInfo", "error", r)
 		}
 	}()
 
@@ -1054,7 +1062,7 @@ func min(a, b int) int {
 func (tmm *TerminalMenuManager) AddScriptMenu(name, description, parent, reference, prompt, scriptOwner string, hotkey rune, closeMenu bool) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in AddScriptMenu", "error", r)
+			log.Error("PANIC in AddScriptMenu", "error", r)
 		}
 	}()
 
@@ -1107,7 +1115,7 @@ func (tmm *TerminalMenuManager) AddScriptMenu(name, description, parent, referen
 func (tmm *TerminalMenuManager) OpenScriptMenu(menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in OpenScriptMenu", "error", r)
+			log.Error("PANIC in OpenScriptMenu", "error", r)
 		}
 	}()
 
@@ -1128,7 +1136,7 @@ func (tmm *TerminalMenuManager) OpenScriptMenu(menuName string) error {
 func (tmm *TerminalMenuManager) CloseScriptMenu(menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in CloseScriptMenu", "error", r)
+			log.Error("PANIC in CloseScriptMenu", "error", r)
 		}
 	}()
 
@@ -1190,7 +1198,7 @@ func (tmm *TerminalMenuManager) SetScriptMenuOptions(menuName, options string) e
 func (tmm *TerminalMenuManager) RemoveScriptMenusByOwner(scriptID string) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in RemoveScriptMenusByOwner", "error", r)
+			log.Error("PANIC in RemoveScriptMenusByOwner", "error", r)
 		}
 	}()
 
@@ -1235,7 +1243,7 @@ func (tmm *TerminalMenuManager) removeScriptMenu(menuName string) {
 func (tmm *TerminalMenuManager) handleScriptMenuItem(item *TerminalMenuItem, params []string, menuName string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleScriptMenuItem", "error", r)
+			log.Error("PANIC in handleScriptMenuItem", "error", r)
 		}
 	}()
 
@@ -1284,7 +1292,7 @@ func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -1326,7 +1334,7 @@ func (tmm *TerminalMenuManager) handleScriptLoadInput(filename string) error {
 func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) error {
 	scriptName = strings.TrimSpace(scriptName)
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
 		return nil
@@ -1364,7 +1372,7 @@ func (tmm *TerminalMenuManager) handleScriptTerminateInput(scriptName string) er
 func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleSendBurst", "error", r)
+			log.Error("PANIC in handleSendBurst", "error", r)
 		}
 	}()
 
@@ -1382,7 +1390,7 @@ func (tmm *TerminalMenuManager) handleSendBurst(item *TerminalMenuItem, params [
 func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleRepeatBurst", "error", r)
+			log.Error("PANIC in handleRepeatBurst", "error", r)
 		}
 	}()
 
@@ -1396,7 +1404,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 
 	// Send the burst command (replace * with newline)
 	burstText := strings.ReplaceAll(tmm.lastBurst, "*", "\r\n")
-	if tmm.proxyInterface != nil {
+	if tmm.sendDirectToServer != nil {
 		// Send through the proxy interface
 		// We need to access the proxy's SendInput method
 		// For now, we'll use a simple approach by injecting the data
@@ -1418,7 +1426,7 @@ func (tmm *TerminalMenuManager) handleRepeatBurst(item *TerminalMenuItem, params
 func (tmm *TerminalMenuManager) handleEditBurst(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleEditBurst", "error", r)
+			log.Error("PANIC in handleEditBurst", "error", r)
 		}
 	}()
 
@@ -1488,8 +1496,8 @@ func (tmm *TerminalMenuManager) handleBurstEditInput(burstText string) error {
 
 // sendBurstToServer sends burst text to the server through the proxy
 func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
-	if tmm.proxyInterface == nil {
-		debug.Info("Cannot send burst - no proxy interface")
+	if tmm.sendDirectToServer == nil {
+		log.Info("Cannot send burst - no proxy interface")
 		return
 	}
 
@@ -1498,8 +1506,8 @@ func (tmm *TerminalMenuManager) sendBurstToServer(text string) {
 	for _, cmd := range commands {
 		if strings.TrimSpace(cmd) != "" {
 			// Send each command directly to server bypassing menu system
-			tmm.proxyInterface.SendDirectToServer(strings.TrimSpace(cmd) + "\r\n")
-			debug.Info("Burst command sent directly to server", "command", strings.TrimSpace(cmd))
+			tmm.sendDirectToServer(strings.TrimSpace(cmd) + "\r\n")
+			log.Info("Burst command sent directly to server", "command", strings.TrimSpace(cmd))
 		}
 	}
 }
@@ -1521,7 +1529,7 @@ func (tmm *TerminalMenuManager) handleSectorDisplayInput(sectorStr string) error
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
 		tmm.displayCurrentMenu()
@@ -1690,7 +1698,7 @@ func (tmm *TerminalMenuManager) displaySectorInTWXFormat(sector database.TSector
 
 // displayPortInformation displays port information for a sector
 func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, sectorIndex int) {
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		return
 	}
@@ -1737,17 +1745,17 @@ func (tmm *TerminalMenuManager) displayPortInformation(output *strings.Builder, 
 func (tmm *TerminalMenuManager) handleShowPort(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleShowPort", "error", r)
+			log.Error("PANIC in handleShowPort", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getDatabase == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
@@ -1834,7 +1842,7 @@ func (tmm *TerminalMenuManager) handlePortDisplayInput(sectorStr string) error {
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Database not available"))
 		tmm.displayCurrentMenu()
@@ -1965,17 +1973,17 @@ func (tmm *TerminalMenuManager) handlePlotCourse(item *TerminalMenuItem, params 
 func (tmm *TerminalMenuManager) handleShowSpecialPorts(item *TerminalMenuItem, params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in handleShowSpecialPorts", "error", r)
+			log.Error("PANIC in handleShowSpecialPorts", "error", r)
 		}
 	}()
 
-	if tmm.proxyInterface == nil {
-		tmm.sendOutput(display.FormatErrorMessage("Error: No proxy interface available"))
+	if tmm.getDatabase == nil {
+		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	dbInterface := tmm.proxyInterface.GetDatabase()
+	dbInterface := tmm.getDatabase()
 	if dbInterface == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Error: Database not available"))
 		tmm.displayCurrentMenu()
@@ -2029,13 +2037,13 @@ func (tmm *TerminalMenuManager) handleListUpgradedPorts(item *TerminalMenuItem, 
 
 // handleVariableDumpInput handles input collection for variable dump
 func (tmm *TerminalMenuManager) handleVariableDumpInput(pattern string) error {
-	if tmm.proxyInterface == nil {
+	if tmm.sendDirectToServer == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
 		tmm.displayCurrentMenu()
 		return nil
 	}
 
-	scriptManager := tmm.proxyInterface.GetScriptManager()
+	scriptManager := tmm.getScriptManager()
 	if scriptManager == nil {
 		tmm.sendOutput(display.FormatErrorMessage("Script manager not available"))
 		tmm.displayCurrentMenu()
@@ -2125,7 +2133,7 @@ func (tmm *TerminalMenuManager) GetMenuManager() *TerminalMenuManager {
 func (tmm *TerminalMenuManager) StartScriptInputCollection(prompt string, callback func(string)) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in StartScriptInputCollection", "error", r)
+			log.Error("PANIC in StartScriptInputCollection", "error", r)
 		}
 	}()
 

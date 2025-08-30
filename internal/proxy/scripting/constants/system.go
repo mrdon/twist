@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"twist/internal/ansi"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -37,9 +37,9 @@ func (sc *SystemConstants) GetConstant(name string) (*types.Value, bool) {
 	// Log CURRENTLINE access for debugging
 	if name == "CURRENTLINE" {
 		if exists {
-			debug.Info("CURRENTLINE ACCESSED: returning value", "value", value.String)
+			log.Info("CURRENTLINE ACCESSED: returning value", "value", value.String)
 		} else {
-			debug.Info("CURRENTLINE ACCESSED: not found in constants")
+			log.Info("CURRENTLINE ACCESSED: not found in constants")
 		}
 	}
 
@@ -330,7 +330,7 @@ func (sc *SystemConstants) UpdateCurrentLine(text string) {
 	strippedText := ansi.StripString(text)
 	sc.constants["CURRENTLINE"] = types.NewStringValue(strippedText)
 
-	debug.Info("CURRENTLINE UPDATED", "systemConstants", sc, "original", text, "stripped", strippedText)
+	log.Info("CURRENTLINE UPDATED", "systemConstants", sc, "original", text, "stripped", strippedText)
 
 	// Update raw packet if needed
 	sc.constants["RAWPACKET"] = types.NewStringValue(text)

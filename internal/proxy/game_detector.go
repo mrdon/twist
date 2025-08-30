@@ -7,7 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 	"twist/internal/ansi"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 	"twist/internal/proxy/scripting"
 )
@@ -720,16 +720,16 @@ func (l *GameDetector) handleToken(token Token) {
 		})
 		// Load database after state update
 		currentState := l.state.Load()
-		debug.Info("GameDetector: state after update, checking if should load database", "state", currentState.currentState)
+		log.Info("GameDetector: state after update, checking if should load database", "state", currentState.currentState)
 		if currentState.currentState == StateGameActive {
-			debug.Info("GameDetector: state is StateGameActive, calling loadGameDatabase()")
+			log.Info("GameDetector: state is StateGameActive, calling loadGameDatabase()")
 			if err := l.loadGameDatabase(); err != nil {
-				debug.Info("GameDetector: loadGameDatabase() failed", "error", err)
+				log.Info("GameDetector: loadGameDatabase() failed", "error", err)
 			} else {
-				debug.Info("GameDetector: loadGameDatabase() completed successfully")
+				log.Info("GameDetector: loadGameDatabase() completed successfully")
 			}
 		} else {
-			debug.Info("GameDetector: not loading database", "state", currentState.currentState)
+			log.Info("GameDetector: not loading database", "state", currentState.currentState)
 		}
 
 	case TokenGameExit:
@@ -902,7 +902,7 @@ func (l *GameDetector) loadGameDatabase() error {
 	currentState := l.state.Load()
 	dbName := l.createDatabaseName(currentState.selectedGame)
 
-	debug.Info("GAME DETECTOR: Loading database", "dbName", dbName, "selectedGame", currentState.selectedGame)
+	log.Info("GAME DETECTOR: Loading database", "dbName", dbName, "selectedGame", currentState.selectedGame)
 
 	db := database.NewDatabase()
 
@@ -912,7 +912,7 @@ func (l *GameDetector) loadGameDatabase() error {
 		}
 	}
 
-	debug.Info("GAME DETECTOR: Successfully loaded database", "dbName", dbName)
+	log.Info("GAME DETECTOR: Successfully loaded database", "dbName", dbName)
 
 	scriptManager := scripting.NewScriptManager(db)
 
@@ -928,16 +928,16 @@ func (l *GameDetector) loadGameDatabase() error {
 	}
 
 	if l.onDatabaseLoaded != nil {
-		debug.Info("GameDetector: triggering onDatabaseLoaded callback", "db", db)
+		log.Info("GameDetector: triggering onDatabaseLoaded callback", "db", db)
 		go func() {
 			if err := l.onDatabaseLoaded(db, scriptManager); err != nil {
-				debug.Info("GameDetector: onDatabaseLoaded callback error", "error", err)
+				log.Info("GameDetector: onDatabaseLoaded callback error", "error", err)
 			} else {
-				debug.Info("GameDetector: onDatabaseLoaded callback completed successfully")
+				log.Info("GameDetector: onDatabaseLoaded callback completed successfully")
 			}
 		}()
 	} else {
-		debug.Info("GameDetector: no onDatabaseLoaded callback set")
+		log.Info("GameDetector: no onDatabaseLoaded callback set")
 	}
 
 	return nil

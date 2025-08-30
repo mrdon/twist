@@ -4,7 +4,7 @@ import (
 	"errors"
 	"time"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // ProxyApiImpl implements ProxyAPI as a thin orchestration layer
@@ -13,14 +13,22 @@ type ProxyApiImpl struct {
 	tuiAPI api.TuiAPI // TuiAPI reference for callbacks
 }
 
-// SetProxy sets the proxy instance (for factory package)
-func (p *ProxyApiImpl) SetProxy(proxy *Proxy) {
-	p.proxy = proxy
-}
+// NewProxyApiImpl creates a new ProxyApiImpl with required non-nullable instances
+func NewProxyApiImpl(proxy *Proxy, tuiAPI api.TuiAPI) *ProxyApiImpl {
+	if proxy == nil {
+		log.Error("ProxyApiImpl creation failed", "error", "proxy cannot be nil")
+		panic("proxy cannot be nil")
+	}
+	if tuiAPI == nil {
+		log.Error("ProxyApiImpl creation failed", "error", "tuiAPI cannot be nil")
+		panic("tuiAPI cannot be nil")
+	}
 
-// SetTuiAPI sets the TuiAPI instance (for factory package)
-func (p *ProxyApiImpl) SetTuiAPI(tuiAPI api.TuiAPI) {
-	p.tuiAPI = tuiAPI
+	log.Info("Creating ProxyApiImpl", "proxy", "valid", "tuiAPI", "valid")
+	return &ProxyApiImpl{
+		proxy:  proxy,
+		tuiAPI: tuiAPI,
+	}
 }
 
 // StartMonitoring starts connection monitoring (for factory package)
@@ -59,7 +67,7 @@ func (p *ProxyApiImpl) SendData(data []byte) error {
 	}
 
 	// Log raw data chunks for debugging
-	debug.LogDataChunk(">>", data)
+	log.LogDataChunk(">>", data)
 
 	p.proxy.SendInput(string(data))
 	return nil
@@ -166,30 +174,7 @@ func (p *ProxyApiImpl) GetScriptStatus() api.ScriptStatusInfo {
 
 // convertScriptStatus converts proxy script manager status to API format
 func (p *ProxyApiImpl) convertScriptStatus() api.ScriptStatusInfo {
-	statusMap := p.proxy.GetScriptStatus()
-
-	// Extract counts from existing GetStatus() return value
-	activeCount := 0
-	totalCount := 0
-
-	if total, ok := statusMap["total_scripts"].(int); ok {
-		totalCount = total
-	}
-	if running, ok := statusMap["running_scripts"].(int); ok {
-		activeCount = running
-	}
-
-	// Get script names - will need to be extended when proxy supports this
-	scriptNames := []string{}
-	if names, ok := statusMap["script_names"].([]string); ok {
-		scriptNames = names
-	}
-
-	return api.ScriptStatusInfo{
-		ActiveCount: activeCount,
-		TotalCount:  totalCount,
-		ScriptNames: scriptNames,
-	}
+	return p.proxy.GetScriptStatus()
 }
 
 // Game State Management Methods - Simple direct delegation (one-liners)
@@ -198,7 +183,7 @@ func (p *ProxyApiImpl) GetCurrentSector() (int, error) {
 	if p.proxy == nil {
 		return 0, errors.New("not connected")
 	}
-	return p.proxy.GetCurrentSector(), nil // Simple delegation
+	return p.proxy.GetCurrentSector() // Direct delegation
 }
 
 func (p *ProxyApiImpl) GetSectorInfo(sectorNum int) (api.SectorInfo, error) {
@@ -226,7 +211,10 @@ func (p *ProxyApiImpl) GetPlayerInfo() (api.PlayerInfo, error) {
 		return api.PlayerInfo{}, errors.New("not connected")
 	}
 	// Phase 5: Create PlayerInfo directly (no converter needed)
-	currentSector := p.proxy.GetCurrentSector()
+	currentSector, err := p.proxy.GetCurrentSector()
+	if err != nil {
+		return api.PlayerInfo{}, err
+	}
 	playerName := p.proxy.GetPlayerName()
 
 	return api.PlayerInfo{

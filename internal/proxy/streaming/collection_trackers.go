@@ -2,7 +2,7 @@ package streaming
 
 import (
 	"database/sql"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // SectorCollections manages all collection trackers for a sector
@@ -138,7 +138,7 @@ func (s *ShipsCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Info("COLLECTIONS: Updated ships for sector", "count", len(s.ships), "sector", s.sectorIndex)
+	log.Info("COLLECTIONS: Updated ships for sector", "count", len(s.ships), "sector", s.sectorIndex)
 	return nil
 }
 
@@ -210,7 +210,7 @@ func (t *TradersCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Info("COLLECTIONS: Updated traders for sector", "count", len(t.traders), "sector", t.sectorIndex)
+	log.Info("COLLECTIONS: Updated traders for sector", "count", len(t.traders), "sector", t.sectorIndex)
 	return nil
 }
 
@@ -284,6 +284,6 @@ func (p *PlanetsCollectionTracker) Execute(db *sql.DB) error {
 		return err
 	}
 
-	debug.Info("COLLECTIONS: Updated planets for sector", "count", len(p.planets), "sector", p.sectorIndex)
+	log.Info("COLLECTIONS: Updated planets for sector", "count", len(p.planets), "sector", p.sectorIndex)
 	return nil
 }

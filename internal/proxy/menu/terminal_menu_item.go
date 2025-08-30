@@ -1,7 +1,7 @@
 package menu
 
 import (
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 type TerminalMenuHandler func(*TerminalMenuItem, []string) error
@@ -23,7 +23,7 @@ type TerminalMenuItem struct {
 func NewTerminalMenuItem(name, description string, hotkey rune) *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in NewTerminalMenuItem", "error", r)
+			log.Error("PANIC in NewTerminalMenuItem", "error", r)
 		}
 	}()
 
@@ -39,12 +39,12 @@ func NewTerminalMenuItem(name, description string, hotkey rune) *TerminalMenuIte
 func (item *TerminalMenuItem) AddChild(child *TerminalMenuItem) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in AddChild", "error", r)
+			log.Error("PANIC in AddChild", "error", r)
 		}
 	}()
 
 	if child == nil {
-		debug.Info("Warning: Attempted to add nil child to menu item", "itemName", item.Name)
+		log.Info("Warning: Attempted to add nil child to menu item", "itemName", item.Name)
 		return
 	}
 
@@ -55,7 +55,7 @@ func (item *TerminalMenuItem) AddChild(child *TerminalMenuItem) {
 func (item *TerminalMenuItem) RemoveChild(child *TerminalMenuItem) bool {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in RemoveChild", "error", r)
+			log.Error("PANIC in RemoveChild", "error", r)
 		}
 	}()
 
@@ -90,7 +90,7 @@ func (item *TerminalMenuItem) FindChildByName(name string) *TerminalMenuItem {
 func (item *TerminalMenuItem) GetPath() string {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in GetPath", "error", r)
+			log.Error("PANIC in GetPath", "error", r)
 		}
 	}()
 
@@ -111,12 +111,12 @@ func (item *TerminalMenuItem) HasChildren() bool {
 func (item *TerminalMenuItem) Execute(params []string) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in Execute", "error", r)
+			log.Error("PANIC in Execute", "error", r)
 		}
 	}()
 
 	if item.Handler == nil {
-		debug.Info("No handler defined for menu item", "itemName", item.Name)
+		log.Info("No handler defined for menu item", "itemName", item.Name)
 		return nil
 	}
 
@@ -126,7 +126,7 @@ func (item *TerminalMenuItem) Execute(params []string) error {
 func (item *TerminalMenuItem) Clone() *TerminalMenuItem {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in Clone", "error", r)
+			log.Error("PANIC in Clone", "error", r)
 		}
 	}()
 

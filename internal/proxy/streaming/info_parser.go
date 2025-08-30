@@ -2,7 +2,7 @@ package streaming
 
 import (
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // InfoDisplay represents the state of info display parsing
@@ -50,7 +50,7 @@ func (p *TWXParser) handleInfoDisplayStart(line string) {
 
 	// Reset incomplete tracker from previous session
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		debug.Info("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
+		log.Info("INFO_PARSER: Discarding incomplete player stats tracker - new info display detected")
 	}
 
 	// Start new discovered field session
@@ -82,19 +82,19 @@ func (p *TWXParser) completeInfoDisplay() {
 
 	// Execute SQL update with ONLY discovered fields
 	if p.playerStatsTracker != nil && p.playerStatsTracker.HasUpdates() {
-		err := p.playerStatsTracker.Execute(p.database.GetDB())
+		err := p.playerStatsTracker.Execute(p.GetDatabase().GetDB())
 		if err != nil {
-			debug.Info("INFO_PARSER: Failed to update player stats", "error", err)
+			log.Info("INFO_PARSER: Failed to update player stats", "error", err)
 			return
 		}
 
 		// Read complete, fresh data from database for API event
 		if p.tuiAPI != nil {
-			fullPlayerStats, err := p.database.GetPlayerStatsInfo()
+			fullPlayerStats, err := p.GetDatabase().GetPlayerStatsInfo()
 			if err == nil {
 				p.firePlayerStatsEventDirect(fullPlayerStats)
 			} else {
-				debug.Info("INFO_PARSER: Failed to read player stats info for API event", "error", err)
+				log.Info("INFO_PARSER: Failed to read player stats info for API event", "error", err)
 			}
 		}
 

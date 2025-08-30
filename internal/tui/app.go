@@ -5,7 +5,7 @@ import (
 	"time"
 	coreapi "twist/internal/api"
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/terminal"
 	"twist/internal/theme"
 	"twist/internal/tui/api"
@@ -272,7 +272,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Error("PANIC recovered in loading animation", "function", "ShowLoadingAnimation", "error", r)
+				log.Error("PANIC recovered in loading animation", "function", "ShowLoadingAnimation", "error", r)
 			}
 		}()
 
@@ -363,7 +363,7 @@ func (ta *TwistApp) animatePanels(show bool) {
 				ta.panelComponent.LoadRealData()
 			})
 		} else {
-			debug.Info("Panel visibility", "show", show, "panel_component_exists", ta.panelComponent != nil, "connected", ta.proxyClient.IsConnected())
+			log.Info("Panel visibility", "show", show, "panel_component_exists", ta.panelComponent != nil, "connected", ta.proxyClient.IsConnected())
 		}
 	}()
 }
@@ -527,7 +527,7 @@ func (ta *TwistApp) HandleConnectionStatusChanged(status coreapi.ConnectionStatu
 		// Add panic recovery to prevent crashes during callback
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Error("PANIC recovered in connection status callback", "function", "HandleConnectionStatus", "error", r)
+				log.Error("PANIC recovered in connection status callback", "function", "HandleConnectionStatus", "error", r)
 			}
 		}()
 
@@ -578,7 +578,7 @@ func (ta *TwistApp) HandleConnectionError(err error) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Error("PANIC recovered in connection error callback", "function", "HandleConnectionError", "error", r)
+				log.Error("PANIC recovered in connection error callback", "function", "HandleConnectionError", "error", r)
 			}
 		}()
 
@@ -606,7 +606,7 @@ func (ta *TwistApp) HandleTerminalData(data []byte) {
 	// Add error recovery to catch any panics in terminal processing
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC recovered in terminal data handling", "function", "HandleTerminalData", "error", r)
+			log.Error("PANIC recovered in terminal data handling", "function", "HandleTerminalData", "error", r)
 		}
 	}()
 
@@ -646,7 +646,7 @@ func (ta *TwistApp) HandleDatabaseStateChanged(info coreapi.DatabaseStateInfo) {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				debug.Error("PANIC recovered in database state change callback", "function", "HandleDatabaseStateChanged", "error", r)
+				log.Error("PANIC recovered in database state change callback", "function", "HandleDatabaseStateChanged", "error", r)
 			}
 		}()
 
@@ -686,7 +686,7 @@ func (ta *TwistApp) HandlePortUpdated(portInfo coreapi.PortInfo) {
 		// Port updates don't affect map visualization (which only cares about warps)
 		// Skip calling UpdateSectorData to avoid triggering unnecessary map redraws
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			debug.Info("TwistApp: Handling port update - skipping map update (port info doesn't affect warp display)", "sector", portInfo.SectorID)
+			log.Info("TwistApp: Handling port update - skipping map update (port info doesn't affect warp display)", "sector", portInfo.SectorID)
 			// TODO: If we need to update port information in other components, do it here
 			// without calling UpdateSectorData which triggers map redraws
 		}
@@ -718,7 +718,7 @@ func (ta *TwistApp) HandleSectorUpdated(sectorInfo coreapi.SectorInfo) {
 	ta.app.QueueUpdateDraw(func() {
 		// Update sector data in maps without changing current sector focus
 		if ta.panelComponent != nil && ta.proxyClient.IsConnected() {
-			debug.Info("TwistApp: Handling sector data update", "sector", sectorInfo.Number)
+			log.Info("TwistApp: Handling sector data update", "sector", sectorInfo.Number)
 			ta.panelComponent.UpdateSectorData(sectorInfo)
 		}
 	})
@@ -830,7 +830,7 @@ func (ta *TwistApp) startUpdateWorker() {
 
 // handleGlobalKeys handles global key events
 func (ta *TwistApp) handleGlobalKeys(event *tcell.EventKey) *tcell.EventKey {
-	debug.Info("handleGlobalKeys", "key", event.Key(), "rune", event.Rune(), "modal_visible", ta.modalVisible)
+	log.Info("handleGlobalKeys", "key", event.Key(), "rune", event.Rune(), "modal_visible", ta.modalVisible)
 
 	// Ctrl+C - exit the application (check multiple ways)
 	if event.Key() == tcell.KeyCtrlC {
@@ -926,7 +926,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 			if enabledItem.MenuItem.Label == selected {
 				if !enabledItem.Enabled {
 					// Item is disabled, don't execute action or close menu
-					debug.Info("Ignoring selection of disabled menu item", "item", selected)
+					log.Info("Ignoring selection of disabled menu item", "item", selected)
 					return
 				}
 				break
@@ -936,7 +936,7 @@ func (ta *TwistApp) showDropdownMenu(menuName string, options []string, callback
 		// Handle the menu action through the menu manager
 		err := ta.menuManager.HandleMenuAction(menuName, selected, ta)
 		if err != nil {
-			debug.Info("Error handling menu action", "menu", menuName, "action", selected, "error", err)
+			log.Info("Error handling menu action", "menu", menuName, "action", selected, "error", err)
 		}
 
 		// Check if this action creates a modal - if so, don't close the dropdown modal
@@ -1129,7 +1129,7 @@ func (ta *TwistApp) GetTerminalWidth() int {
 func (ta *TwistApp) ShowInputDialog(pageName string, dialog interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in ShowInputDialog", "error", r)
+			log.Error("PANIC in ShowInputDialog", "error", r)
 		}
 	}()
 
@@ -1153,9 +1153,9 @@ func (ta *TwistApp) ShowInputDialog(pageName string, dialog interface{}) {
 
 		ta.pages.AddPage(pageName, d.GetView(), true, true)
 		ta.app.SetFocus(d.GetForm())
-		debug.Info("ShowInputDialog: Successfully displayed dialog page", "page", pageName)
+		log.Info("ShowInputDialog: Successfully displayed dialog page", "page", pageName)
 	} else {
-		debug.Info("ShowInputDialog: Dialog does not implement InputDialog interface", "page", pageName)
+		log.Info("ShowInputDialog: Dialog does not implement InputDialog interface", "page", pageName)
 		// Fallback: close modal state since we couldn't show the dialog
 		ta.modalVisible = false
 		ta.inputHandler.SetModalVisible(false)

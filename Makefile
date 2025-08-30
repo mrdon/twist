@@ -138,7 +138,7 @@ install:
 check: fmt vet test
 	@echo "All checks passed"
 
-# Development build with debug flags
+# Development build with log flags
 build-debug:
 	@echo "Building $(BINARY_NAME) with debug flags..."
 	@mkdir -p $(BUILD_DIR)

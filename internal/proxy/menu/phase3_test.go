@@ -6,11 +6,9 @@ import (
 )
 
 func TestTWXMainMenuCreation(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -76,11 +74,9 @@ func TestTWXMainMenuCreation(t *testing.T) {
 }
 
 func TestTWXMainMenuHandlers(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -91,8 +87,8 @@ func TestTWXMainMenuHandlers(t *testing.T) {
 		description string
 	}{
 		{"B", "TWX Burst Menu", "Navigate to Burst Commands submenu"},
-		{"L", "Error: No proxy interface available", "Load Script from main menu (no proxy)"},
-		{"T", "Error: No proxy interface available", "Terminate Script from main menu (no proxy)"},
+		{"L", "Error: Script manager not available", "Load Script from main menu (no proxy)"},
+		{"T", "Error: Script manager not available", "Terminate Script from main menu (no proxy)"},
 		{"S", "TWX Script Menu", "Navigate to Script submenu"},
 		{"V", "TWX Data Menu", "Navigate to Data submenu"},
 		{"P", "TWX Port Menu", "Port Menu"},
@@ -122,11 +118,9 @@ func TestTWXMainMenuHandlers(t *testing.T) {
 }
 
 func TestTWXMainMenuHelp(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -187,11 +181,9 @@ func TestTWXMainMenuCategories(t *testing.T) {
 }
 
 func TestTWXMainMenuANSIFormatting(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Set up a mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 

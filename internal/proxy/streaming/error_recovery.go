@@ -1,8 +1,9 @@
 package streaming
 
 import (
+	"runtime/debug"
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // ============================================================================
@@ -75,7 +76,8 @@ func (p *TWXParser) validateCredits(credits int) int {
 // recoverFromPanic handles panic recovery with proper logging
 func (p *TWXParser) recoverFromPanic(operation string) {
 	if r := recover(); r != nil {
-		debug.Error("PANIC recovered in TWX parser", "function", "recoverFromPanic", "operation", operation, "error", r)
+		stackTrace := debug.Stack()
+		log.Error("PANIC recovered in TWX parser", "function", "recoverFromPanic", "operation", operation, "error", r, "stack", string(stackTrace))
 		// Reset parser state to prevent cascade failures
 		p.resetParserState()
 	}
@@ -265,7 +267,7 @@ func (p *TWXParser) validateWarpData(warps []int) []int {
 func (p *TWXParser) errorRecoveryHandler(operation string, criticalFunc func() error) {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC recovered in error recovery handler", "function", "errorRecoveryHandler", "operation", operation, "error", r)
+			log.Error("PANIC recovered in error recovery handler", "function", "errorRecoveryHandler", "operation", operation, "error", r)
 			p.resetParserState()
 		}
 	}()

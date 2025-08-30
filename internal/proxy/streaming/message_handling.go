@@ -356,7 +356,7 @@ func (p *TWXParser) addToHistory(msgType MessageType, content, sender string, ch
 		Sender:    message.Sender,
 		Channel:   message.Channel,
 	}
-	if err := p.database.AddMessageToHistory(dbMessage); err != nil {
+	if err := p.GetDatabase().AddMessageToHistory(dbMessage); err != nil {
 		return err
 	}
 

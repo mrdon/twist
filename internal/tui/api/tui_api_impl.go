@@ -2,7 +2,7 @@ package api
 
 import (
 	coreapi "twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // Forward declaration - will be defined when we update app.go
@@ -53,7 +53,7 @@ func (tui *TuiApiImpl) OnConnectionError(err error) {
 
 func (tui *TuiApiImpl) OnData(data []byte) {
 	// Log raw data chunks for debugging
-	debug.LogDataChunk("<", data)
+	log.LogDataChunk("<", data)
 
 	// Copy data and send to processing channel
 	dataCopy := make([]byte, len(data))
@@ -115,7 +115,7 @@ func (tui *TuiApiImpl) processDataLoop() {
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						debug.Error("PANIC recovered in TUI data processing", "function", "run", "error", r)
+						log.Error("PANIC recovered in TUI data processing", "function", "run", "error", r)
 					}
 				}()
 				tui.app.HandleTerminalData(data)

@@ -6,7 +6,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -138,7 +138,7 @@ func (vm *VariableManager) Get(name string) *types.Value {
 				if constantValue, exists := systemConstants.GetConstant(baseName); exists {
 					// Debug logging for CURRENTLINE access
 					if baseName == "CURRENTLINE" {
-						debug.Info("VariableManager.Get: CURRENTLINE accessed", "gameInterface", fmt.Sprintf("%p", vm.gameInterface), "systemConstants", fmt.Sprintf("%p", systemConstants), "value", constantValue.String)
+						log.Info("VariableManager.Get: CURRENTLINE accessed", "gameInterface", fmt.Sprintf("%p", vm.gameInterface), "systemConstants", fmt.Sprintf("%p", systemConstants), "value", constantValue.String)
 					}
 					// Handle array indexing on constants if needed (like LIBPARM[0])
 					if len(indexes) > 0 {

@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -113,7 +113,7 @@ func cmdBranch(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Info("BRANCH command: evaluating condition", "script", scriptName, "line", vm.GetCurrentLine(), "expression", expression, "value", numericValue, "shouldBranch", shouldBranch, "label", label)
+	log.Info("BRANCH command: evaluating condition", "script", scriptName, "line", vm.GetCurrentLine(), "expression", expression, "value", numericValue, "shouldBranch", shouldBranch, "label", label)
 
 	if shouldBranch {
 		return vm.Goto(label)

@@ -3,7 +3,7 @@ package types
 import (
 	"strings"
 	"time"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // TriggerType represents the type of trigger
@@ -115,13 +115,13 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	
+
 	// DEBUG: Log the CURRENTLINE at the exact moment the trigger fires
 	currentLineVar := vm.GetVariable("CURRENTLINE")
 	if currentLineVar != nil {
-		debug.Info("TEXT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value, "CURRENTLINE", currentLineVar.String)
+		log.Info("TEXT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value, "CURRENTLINE", currentLineVar.String)
 	}
-	
+
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
 			return err
@@ -129,7 +129,7 @@ func (t *TextTrigger) Execute(vm VMInterface) error {
 	}
 
 	if t.Label != "" {
-		debug.Info("TEXT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
+		log.Info("TEXT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
 		// In TWX, setTextTrigger ALWAYS jumps to labels, never executes inline code
 		// This is TWX-compatible behavior - label parameter is always a label name
 		return vm.GotoAndExecuteSync(t.Label)
@@ -161,9 +161,9 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	
-	debug.Info("TEXTLINE TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value, "label", t.Label, "response", t.Response)
-	
+
+	log.Info("TEXTLINE TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value, "label", t.Label, "response", t.Response)
+
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
 			return err
@@ -182,8 +182,8 @@ func (t *TextLineTrigger) Execute(vm VMInterface) error {
 				return vm.Echo(message)
 			}
 		}
-		
-		debug.Info("TEXTLINE TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
+
+		log.Info("TEXTLINE TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
 		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
 		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
@@ -213,11 +213,11 @@ func (t *TextOutTrigger) Execute(vm VMInterface) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	
-	debug.Info("TEXTOUT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value)
-	
+
+	log.Info("TEXTOUT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "pattern", t.Value)
+
 	if t.Label != "" {
-		debug.Info("TEXTOUT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
+		log.Info("TEXTOUT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
 		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
 		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
@@ -245,11 +245,11 @@ func (t *DelayTrigger) Execute(vm VMInterface) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	
-	debug.Info("DELAY TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "delay", t.Delay)
-	
+
+	log.Info("DELAY TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "delay", t.Delay)
+
 	if t.Label != "" {
-		debug.Info("DELAY TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
+		log.Info("DELAY TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
 		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
 		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
@@ -275,9 +275,9 @@ func (t *EventTrigger) Execute(vm VMInterface) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	
-	debug.Info("EVENT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "eventName", t.EventName)
-	
+
+	log.Info("EVENT TRIGGER FIRED", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "eventName", t.EventName)
+
 	if t.Response != "" {
 		if err := vm.Send(t.Response); err != nil {
 			return err
@@ -285,7 +285,7 @@ func (t *EventTrigger) Execute(vm VMInterface) error {
 	}
 
 	if t.Label != "" {
-		debug.Info("EVENT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
+		log.Info("EVENT TRIGGER: jumping to label", "script", scriptName, "currentLine", currentLine, "triggerId", t.ID, "jumpTarget", t.Label)
 		// In TWX, triggers cause permanent jumps in execution flow (not temporary detours)
 		// This is different from GOSUB which uses a stack for returns
 		return vm.GotoAndExecuteSync(t.Label)
@@ -354,13 +354,13 @@ type TriggerManagerInterface interface {
 	RemoveTrigger(id string) error
 	RemoveAllTriggers() error
 	GetTrigger(id string) TriggerInterface
-	
+
 	// Trigger processing
 	ProcessText(text string) error
 	ProcessTextLine(line string) (bool, error)
 	ProcessTextOut(text string) error
 	ProcessDelayTriggers() error
-	
+
 	// Trigger queries
 	HasTriggers() bool
 	GetTriggerCount() int

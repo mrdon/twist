@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 
 	_ "modernc.org/sqlite"
 )
@@ -253,7 +253,7 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 	// Log timing for database lock analysis
 	elapsed := time.Since(startTime)
 	if err != nil && strings.Contains(err.Error(), "database is locked") {
-		debug.Info("TIMING: LoadSector failed with database lock", "sector", index, "elapsed", elapsed)
+		log.Info("TIMING: LoadSector failed with database lock", "sector", index, "elapsed", elapsed)
 	}
 
 	if err == sql.ErrNoRows {
@@ -261,11 +261,11 @@ func (d *SQLiteDatabase) LoadSector(index int) (TSector, error) {
 		return NULLSector(), nil
 	} else if err != nil {
 		// Log all database errors for debugging
-		debug.Info("DATABASE ERROR in LoadSector", "sector", index, "error", err)
+		log.Info("DATABASE ERROR in LoadSector", "sector", index, "error", err)
 
 		// Only panic on scanning errors (schema mismatches), not other DB issues
 		if strings.Contains(err.Error(), "Scan error") || strings.Contains(err.Error(), "unsupported Scan") {
-			debug.Error("PANIC TRIGGERED: SQL scan error detected in LoadSector", "sector", index, "error", err)
+			log.Error("PANIC TRIGGERED: SQL scan error detected in LoadSector", "sector", index, "error", err)
 			panic(fmt.Sprintf("FATAL SQL SCAN ERROR in LoadSector(%d): %v - This indicates a database schema/type mismatch that must be fixed immediately", index, err))
 		}
 		return NULLSector(), fmt.Errorf("failed to load sector %d: %w", index, err)
@@ -1007,7 +1007,7 @@ func (d *SQLiteDatabase) GetPlayerStatsInfo() (api.PlayerStatsInfo, error) {
 	if err != nil {
 		if err == sql.ErrNoRows {
 			// Return default values if no player stats record exists yet
-			debug.Info("No player stats record found, returning default values")
+			log.Info("No player stats record found, returning default values")
 			return info, nil
 		}
 		return info, fmt.Errorf("failed to get player stats info: %w", err)

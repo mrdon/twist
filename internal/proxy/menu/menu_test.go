@@ -5,6 +5,28 @@ import (
 	"testing"
 )
 
+// Helper function to create a menu manager with mock functions for testing
+func newTestMenuManager() *TerminalMenuManager {
+	return NewTerminalMenuManager(
+		func([]byte) {},                      // injectDataFunc
+		func() ScriptManagerInterface { return nil }, // getScriptManager
+		func() interface{} { return nil },    // getDatabase
+		func(string) {},                      // sendInput
+		func(string) {},                      // sendDirectToServer
+	)
+}
+
+// Helper function to create a menu manager with custom inject function for testing
+func newTestMenuManagerWithCapture(captureFunc func([]byte)) *TerminalMenuManager {
+	return NewTerminalMenuManager(
+		captureFunc,                          // injectDataFunc
+		func() ScriptManagerInterface { return nil }, // getScriptManager
+		func() interface{} { return nil },    // getDatabase
+		func(string) {},                      // sendInput
+		func(string) {},                      // sendDirectToServer
+	)
+}
+
 func TestNewTerminalMenuItem(t *testing.T) {
 	item := NewTerminalMenuItem("Test Menu", "Test Description", 'T')
 
@@ -196,7 +218,7 @@ func TestTerminalMenuItemHasChildren(t *testing.T) {
 }
 
 func TestNewTerminalMenuManager(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	if manager == nil {
 		t.Fatal("NewTerminalMenuManager returned nil")
@@ -216,11 +238,9 @@ func TestNewTerminalMenuManager(t *testing.T) {
 }
 
 func TestTerminalMenuManagerProcessMenuKey(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Mock inject function to capture output
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -242,11 +262,9 @@ func TestTerminalMenuManagerProcessMenuKey(t *testing.T) {
 }
 
 func TestTerminalMenuManagerMenuText(t *testing.T) {
-	manager := NewTerminalMenuManager()
-
 	// Mock inject function
 	var capturedOutput []string
-	manager.SetInjectDataFunc(func(data []byte) {
+	manager := newTestMenuManagerWithCapture(func(data []byte) {
 		capturedOutput = append(capturedOutput, string(data))
 	})
 
@@ -279,7 +297,7 @@ func TestTerminalMenuManagerMenuText(t *testing.T) {
 }
 
 func TestTerminalMenuManagerAddCustomMenu(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	menu := manager.AddCustomMenu("TestMenu", nil)
 
@@ -298,7 +316,7 @@ func TestTerminalMenuManagerAddCustomMenu(t *testing.T) {
 }
 
 func TestTerminalMenuManagerRemoveMenu(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	menu := manager.AddCustomMenu("TestMenu", nil)
 	if menu == nil {
@@ -314,7 +332,7 @@ func TestTerminalMenuManagerRemoveMenu(t *testing.T) {
 }
 
 func TestTerminalMenuManagerSetMenuKey(t *testing.T) {
-	manager := NewTerminalMenuManager()
+	manager := newTestMenuManager()
 
 	manager.SetMenuKey('#')
 

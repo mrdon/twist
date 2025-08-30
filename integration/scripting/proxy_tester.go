@@ -316,12 +316,18 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 		DisconnectionReady: disconnectionReady,
 	}
 	address := fmt.Sprintf("localhost:%d", port)
-	proxyInstance := factory.Connect(address, trackingTuiAPI, connectOpts)
+	
+	var proxyInstance api.ProxyAPI
+	
+	// Call factory.Connect in goroutine like real app would
+	go func() {
+		proxyInstance = factory.Connect(address, trackingTuiAPI, connectOpts)
+	}()
 
-	// Wait for connection to actually complete
+	// Wait for connection callback (factory will call OnConnectionStatusChanged)
 	select {
 	case <-connectionReady:
-		// Connection successful
+		// Connection successful via callback
 	case <-time.After(2 * time.Second):
 		t.Fatalf("Timeout waiting for proxy connection")
 	}
@@ -348,11 +354,11 @@ func Execute(t *testing.T, serverScript, clientScript string, connectOpts *api.C
 	proxyInstance.Disconnect()
 
 	// Wait for disconnection to actually complete (database closure, etc.)
-	// Increased timeout for parallel/race detector execution
+	// Reduced timeout to make tests fail faster
 	select {
 	case <-disconnectionReady:
 		// Disconnection successful
-	case <-time.After(10 * time.Second):
+	case <-time.After(2 * time.Second):
 		t.Logf("Warning: Timeout waiting for proxy disconnection")
 	}
 

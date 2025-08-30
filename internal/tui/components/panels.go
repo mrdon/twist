@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/theme"
 
 	"github.com/rivo/tview"
@@ -586,24 +586,24 @@ func (pc *PanelComponent) UpdateLeftPanelSize() {
 // loadPlayerStatsFromAPI loads current player stats from the live parser
 func (pc *PanelComponent) loadPlayerStatsFromAPI() {
 	if pc.proxyAPI == nil {
-		debug.Info("loadPlayerStatsFromAPI: proxyAPI is nil")
+		log.Info("loadPlayerStatsFromAPI: proxyAPI is nil")
 		return
 	}
 
 	// Get player stats from API (single source of truth)
 	playerStats, err := pc.proxyAPI.GetPlayerStats()
 	if err != nil {
-		debug.Info("loadPlayerStatsFromAPI: failed to load player stats", "error", err)
+		log.Info("loadPlayerStatsFromAPI: failed to load player stats", "error", err)
 		return
 	}
 
 	if playerStats != nil {
 		// Store and display the stats
 		pc.lastPlayerStats = playerStats
-		debug.Info("loadPlayerStatsFromAPI: successfully loaded stats", "credits", playerStats.Credits, "turns", playerStats.Turns, "sector", playerStats.CurrentSector)
+		log.Info("loadPlayerStatsFromAPI: successfully loaded stats", "credits", playerStats.Credits, "turns", playerStats.Turns, "sector", playerStats.CurrentSector)
 		pc.UpdatePlayerStats(*pc.lastPlayerStats)
 	} else {
-		debug.Info("loadPlayerStatsFromAPI: playerStats is nil")
+		log.Info("loadPlayerStatsFromAPI: playerStats is nil")
 	}
 }
 

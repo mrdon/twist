@@ -8,13 +8,13 @@ Testing:
 * Do not try to run the application - ask the user to run it and report results
 
 Debugging:
-* Always keep the internal/debug package import in all files
-* Use structured logging with debug.Debug(), debug.Info(), debug.Warn(), debug.Error()
-* Use key-value pairs for structured logging: `debug.Info("Processing user input", "user", username, "command", cmd)`
-* Use debug.Debug() for low-level details that can be filtered out in production
-* Use debug.Info() for important application events and flow tracking
-* Use debug.Warn() for potential issues or unusual conditions
-* Use debug.Error() for errors and panic recovery: `defer func() { if r := recover() { debug.Error("PANIC in function", "function", "SomeFunction", "error", r) } }()`
+* Always keep the internal/log package import in all files
+* Use structured logging with log.Debug(), log.Info(), log.Warn(), log.Error()
+* Use key-value pairs for structured logging: `log.Info("Processing user input", "user", username, "command", cmd)`
+* Use log.Debug() for low-level details that can be filtered out in production
+* Use log.Info() for important application events and flow tracking
+* Use log.Warn() for potential issues or unusual conditions
+* Use log.Error() for errors and panic recovery: `defer func() { if r := recover() { log.Error("PANIC in function", "function", "SomeFunction", "error", r) } }()`
 * Logging output: defaults to console (tests, utilities), writes to twist_debug.log when main application runs
 
 UI Development (tview):

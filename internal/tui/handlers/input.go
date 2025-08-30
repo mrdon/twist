@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"twist/internal/debug"
+	"twist/internal/log"
 
 	"github.com/gdamore/tcell/v2"
 	"github.com/rivo/tview"
@@ -201,17 +201,17 @@ func (ih *InputHandler) handleTerminalInput(event *tcell.EventKey) *tcell.EventK
 
 // handleModalInput handles input when a modal is visible
 func (ih *InputHandler) handleModalInput(event *tcell.EventKey) *tcell.EventKey {
-	debug.Info("handleModalInput", "key", event.Key(), "rune", event.Rune(), "modifiers", event.Modifiers())
+	log.Info("handleModalInput", "key", event.Key(), "rune", event.Rune(), "modifiers", event.Modifiers())
 
 	switch event.Key() {
 	case tcell.KeyEscape:
-		debug.Info("handleModalInput: ESC pressed, closing modal")
+		log.Info("handleModalInput: ESC pressed, closing modal")
 		if ih.onCloseModal != nil {
 			ih.onCloseModal()
 		}
 		return nil
 	case tcell.KeyEnter:
-		debug.Info("handleModalInput: ENTER pressed, passing to focused component")
+		log.Info("handleModalInput: ENTER pressed, passing to focused component")
 	}
 
 	// Pass all other events to the focused component (form, modal, etc.)

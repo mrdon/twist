@@ -14,7 +14,7 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Density Scanner Start Detection", func(t *testing.T) {
 		// Test density scanner start (Pascal: Copy(Line, 27, 16) = 'Relative Density')
@@ -201,14 +201,20 @@ func TestEnhancedDensityProcessing(t *testing.T) {
 	})
 
 	t.Run("Database Integration", func(t *testing.T) {
-		// Test without database (should handle gracefully)
-		parserNoDB := &TWXParser{}
-		parserNoDB.currentDisplay = DisplayDensity
+		// Test with proper database setup
+		testDB := database.NewDatabase()
+		if err := testDB.CreateDatabase(":memory:"); err != nil {
+			t.Fatalf("Failed to create test database: %v", err)
+		}
+		defer testDB.CloseDatabase()
 
-		// Should not crash
-		parserNoDB.processDensityLine("Sector ( 1234) ==>           1000  Warps : 3    NavHaz :     0%    Anom : No")
+		parserWithDB := NewTWXParser(func() database.Database { return testDB }, nil)
+		parserWithDB.currentDisplay = DisplayDensity
 
-		t.Log("✓ Graceful handling without database")
+		// Should process successfully
+		parserWithDB.processDensityLine("Sector ( 1234) ==>           1000  Warps : 3    NavHaz :     0%    Anom : No")
+
+		t.Log("✓ Database integration works correctly")
 	})
 
 	t.Run("Invalid Data Handling", func(t *testing.T) {
@@ -239,7 +245,7 @@ func TestDensityParameterParsing(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 	parser.currentDisplay = DisplayDensity
 
 	t.Run("Complex Density Line Parsing", func(t *testing.T) {
@@ -315,7 +321,7 @@ func TestDensityWorkflowIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Complete Density Scan Workflow", func(t *testing.T) {
 		// Simulate complete density scanning session

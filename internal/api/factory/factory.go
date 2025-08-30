@@ -1,69 +1,50 @@
 package factory
 
 import (
-	"errors"
-	"time"
+	"fmt"
+	"net"
+	"strings"
 	"twist/internal/api"
 	"twist/internal/proxy"
 )
 
 // Connect creates a new proxy instance and returns a connected ProxyAPI
 func Connect(address string, tuiAPI api.TuiAPI, options ...*api.ConnectOptions) api.ProxyAPI {
-	// Never return errors - all failures go via callbacks
-	// Even nil tuiAPI or empty address should be handled gracefully via callbacks
+	// Validate input parameters
 	if tuiAPI == nil {
-		// This is a programming error, but handle gracefully
-		return &proxy.ProxyApiImpl{} // Will fail safely when used
+		panic("tuiAPI cannot be nil")
+	}
+	if address == "" {
+		panic("address cannot be empty")
 	}
 
-	// Create ProxyAPI wrapper first
-	impl := &proxy.ProxyApiImpl{}
+	// Parse options
+	var opts *api.ConnectOptions
+	if len(options) > 0 && options[0] != nil {
+		opts = options[0]
+	} else {
+		opts = &api.ConnectOptions{}
+	}
 
-	// Create proxy instance with TuiAPI directly - no adapter needed
-	proxyInstance := proxy.New(tuiAPI)
-	impl.SetProxy(proxyInstance)
-	impl.SetTuiAPI(tuiAPI)
+	// Parse address (default to telnet port if not specified)
+	if !strings.Contains(address, ":") {
+		address = address + ":23"
+	}
 
-	// Notify TUI that connection is starting
-	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnecting, address)
+	// Establish network connection (blocking)
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		// Connection failed - notify TUI and panic
+		tuiAPI.OnConnectionError(fmt.Errorf("failed to connect to %s: %w", address, err))
+		panic(fmt.Errorf("failed to connect to %s: %w", address, err))
+	}
 
-	// Attempt connection asynchronously to avoid blocking with 5-second timeout
-	go func() {
-		// Create a channel for the connection result
-		resultChan := make(chan error, 1)
-
-		// Start connection attempt in another goroutine
-		go func() {
-			var err error
-			if len(options) > 0 {
-				err = proxyInstance.Connect(address, options[0])
-			} else {
-				err = proxyInstance.Connect(address)
-			}
-			resultChan <- err
-		}()
-
-		// Wait for either connection result or timeout
-		select {
-		case err := <-resultChan:
-			if err != nil {
-				// Connection failure -> call TuiAPI error callback
-				tuiAPI.OnConnectionError(err)
-				return
-			}
-
-			// Success -> call TuiAPI success callback
-			tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
-
-			// Start monitoring for network disconnections
-			impl.StartMonitoring()
-
-		case <-time.After(5 * time.Second):
-			// Timeout -> call TuiAPI error callback
-			tuiAPI.OnConnectionError(errors.New("connection timeout after 5 seconds"))
-		}
-	}()
-
-	// Return connected ProxyAPI instance immediately
-	return impl
+	// Create proxy with established connection
+	proxyInstance := proxy.New(conn, address, tuiAPI, opts)
+	
+	// Notify TUI of successful connection
+	tuiAPI.OnConnectionStatusChanged(api.ConnectionStatusConnected, address)
+	
+	// Return connected proxy instance
+	return proxyInstance
 }

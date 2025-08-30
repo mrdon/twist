@@ -3,7 +3,7 @@ package game
 import (
 	"sync"
 	"twist/internal/api"
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/database"
 )
 
@@ -71,7 +71,7 @@ func (sm *StateManager) SetCurrentSector(sectorNum int) {
 			sectorInfo = api.SectorInfo{Number: sectorNum}
 		}
 
-		debug.Info("STATE_MANAGER: Firing OnCurrentSectorChanged [SOURCE: SetCurrentSector]", "sector", sectorNum, "old_sector", oldSector)
+		log.Info("STATE_MANAGER: Firing OnCurrentSectorChanged [SOURCE: SetCurrentSector]", "sector", sectorNum, "old_sector", oldSector)
 		sm.tuiAPI.OnCurrentSectorChanged(sectorInfo)
 	}
 }

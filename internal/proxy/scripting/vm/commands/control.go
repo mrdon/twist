@@ -1,7 +1,7 @@
 package commands
 
 import (
-	"twist/internal/debug"
+	"twist/internal/log"
 	"twist/internal/proxy/scripting/types"
 )
 
@@ -18,7 +18,7 @@ func cmdGoto(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Info("GOTO command: jumping to label", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
+	log.Info("GOTO command: jumping to label", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
 	return vm.Goto(label)
 }
 
@@ -28,7 +28,7 @@ func cmdGosub(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Info("GOSUB command: calling subroutine", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
+	log.Info("GOSUB command: calling subroutine", "script", scriptName, "line", vm.GetCurrentLine(), "label", label)
 	return vm.Gosub(label)
 }
 
@@ -37,6 +37,6 @@ func cmdReturn(vm types.VMInterface, params []*types.CommandParam) error {
 	if script := vm.GetCurrentScript(); script != nil {
 		scriptName = script.GetName()
 	}
-	debug.Info("RETURN command: returning from subroutine", "script", scriptName, "line", vm.GetCurrentLine())
+	log.Info("RETURN command: returning from subroutine", "script", scriptName, "line", vm.GetCurrentLine())
 	return vm.Return()
 }

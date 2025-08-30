@@ -2,7 +2,7 @@ package menus
 
 import (
 	twistComponents "twist/internal/components"
-	"twist/internal/debug"
+	"twist/internal/log"
 )
 
 // SessionMenu handles Session menu actions
@@ -38,7 +38,7 @@ func (s *SessionMenu) GetMenuItems() []twistComponents.MenuItem {
 func (s *SessionMenu) HandleMenuAction(action string, app AppInterface) error {
 	defer func() {
 		if r := recover(); r != nil {
-			debug.Error("PANIC in SessionMenu.HandleMenuAction", "error", r)
+			log.Error("PANIC in SessionMenu.HandleMenuAction", "error", r)
 		}
 	}()
 
@@ -54,7 +54,7 @@ func (s *SessionMenu) HandleMenuAction(action string, app AppInterface) error {
 	case "Quit":
 		return s.handleQuit(app)
 	default:
-		debug.Info("SessionMenu: Unknown action", "action", action)
+		log.Info("SessionMenu: Unknown action", "action", action)
 		return nil
 	}
 }

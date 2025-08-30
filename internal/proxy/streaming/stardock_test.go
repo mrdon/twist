@@ -13,7 +13,7 @@ func TestStardockDetection(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("V Screen Stardock Detection", func(t *testing.T) {
 		// Test the exact Pascal pattern: Copy(Line, 14, 8) = 'StarDock' and Copy(Line, 37, 6) = 'sector'
@@ -70,7 +70,7 @@ func TestStardockDetection(t *testing.T) {
 
 	t.Run("Multiple Stardock Detection Prevention", func(t *testing.T) {
 		// Reset for clean test
-		parser2 := NewTWXParser(db, nil)
+		parser2 := NewTWXParser(func() database.Database { return db }, nil)
 
 		// First detection
 		stardockLine1 := "             StarDock                   sector 1234."
@@ -120,7 +120,7 @@ func TestStardockDetection(t *testing.T) {
 		}
 		defer db2.CloseDatabase()
 
-		parser3 := NewTWXParser(db2, nil)
+		parser3 := NewTWXParser(func() database.Database { return db2 }, nil)
 
 		for _, line := range invalidLines {
 			parser3.ProcessString(line + "\r")
@@ -165,7 +165,7 @@ func TestStardockDetection(t *testing.T) {
 				t.Fatalf("Failed to create test database: %v", err)
 			}
 
-			parserTest := NewTWXParser(dbTest, nil)
+			parserTest := NewTWXParser(func() database.Database { return dbTest }, nil)
 
 			// Process the line
 			parserTest.ProcessString(tc.line + "\r")
@@ -183,18 +183,24 @@ func TestStardockDetection(t *testing.T) {
 	})
 
 	t.Run("Database Integration", func(t *testing.T) {
-		// Test without database (should handle gracefully)
-		parserNoDB := &TWXParser{}
+		// Test with proper database setup
+		testDB := database.NewDatabase()
+		if err := testDB.CreateDatabase(":memory:"); err != nil {
+			t.Fatalf("Failed to create test database: %v", err)
+		}
+		defer testDB.CloseDatabase()
 
-		// Should not crash
-		parserNoDB.handleStardockDetection("             StarDock                   sector 1234.")
+		parserWithDB := NewTWXParser(func() database.Database { return testDB }, nil)
 
-		// Should return 0 for unknown
-		if parserNoDB.getStardockSector() != 0 {
-			t.Errorf("Parser without database should return 0 for Stardock sector")
+		// Should process successfully
+		parserWithDB.handleStardockDetection("             StarDock                   sector 1234.")
+
+		// Should return the detected sector
+		if parserWithDB.getStardockSector() != 1234 {
+			t.Errorf("Expected Stardock sector 1234, got %d", parserWithDB.getStardockSector())
 		}
 
-		t.Log("✓ Graceful handling without database")
+		t.Log("✓ Database integration works correctly")
 	})
 }
 
@@ -206,7 +212,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Configuration Storage and Retrieval", func(t *testing.T) {
 		// Set Stardock sector
@@ -219,7 +225,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 		}
 
 		// Create new parser instance with same database
-		parser2 := NewTWXParser(db, nil)
+		parser2 := NewTWXParser(func() database.Database { return db }, nil)
 
 		// Should retrieve the same value
 		retrieved2 := parser2.getStardockSector()
@@ -238,7 +244,7 @@ func TestStardockConfigurationPersistence(t *testing.T) {
 		}
 		defer db2.CloseDatabase()
 
-		parser3 := NewTWXParser(db2, nil)
+		parser3 := NewTWXParser(func() database.Database { return db2 }, nil)
 
 		// Should return 0 for unknown Stardock
 		unknown := parser3.getStardockSector()

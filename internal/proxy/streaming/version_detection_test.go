@@ -13,7 +13,7 @@ func TestVersionDetection(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("TWGS Version Detection", func(t *testing.T) {
 		// Test TWGS server detection (Pascal: Copy(Line, 1, 14) = 'TradeWars Game')
@@ -240,7 +240,7 @@ func TestVersionDetectionIntegration(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Game Session with Version Detection", func(t *testing.T) {
 		// Simulate a real game session with version detection
@@ -319,7 +319,7 @@ func TestVersionDetectionEdgeCases(t *testing.T) {
 	}
 	defer db.CloseDatabase()
 
-	parser := NewTWXParser(db, nil)
+	parser := NewTWXParser(func() database.Database { return db }, nil)
 
 	t.Run("Case Sensitivity", func(t *testing.T) {
 		// Test that detection is case-sensitive (as per Pascal string comparison)
